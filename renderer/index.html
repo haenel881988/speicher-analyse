@@ -11,49 +11,160 @@
 </head>
 <body>
     <div id="app">
-        <!-- Header -->
-        <header id="app-header">
-            <div class="header-left">
-                <span class="header-logo">Speicher Analyse</span>
-                <span class="header-version">v3.5</span>
-            </div>
-            <div class="header-right">
-                <button class="btn-icon" id="preview-toggle" title="Vorschau-Panel (Ctrl+P)">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
-                </button>
-                <button class="btn-icon" id="theme-toggle" title="Theme wechseln (Ctrl+T)">
-                    <svg id="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
-                    <svg id="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-                </button>
-                <div class="dropdown">
-                    <button class="btn" id="export-btn">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                        Export
+        <!-- Ribbon Navigation -->
+        <div id="ribbon">
+            <!-- Ribbon Tab Bar -->
+            <div class="ribbon-tab-bar">
+                <span class="ribbon-logo">Speicher Analyse</span>
+                <span class="ribbon-version">v4.0</span>
+                <div class="ribbon-tabs">
+                    <button class="ribbon-tab active" data-ribbon="start">Start</button>
+                    <button class="ribbon-tab" data-ribbon="analyse">Analyse</button>
+                    <button class="ribbon-tab" data-ribbon="bereinigung">Bereinigung</button>
+                    <button class="ribbon-tab" data-ribbon="system">System</button>
+                    <button class="ribbon-tab" data-ribbon="einstellungen">Einstellungen</button>
+                </div>
+                <div class="ribbon-tab-bar-right">
+                    <button class="btn-icon btn-icon-sm" id="preview-toggle" title="Vorschau-Panel (Ctrl+P)">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
                     </button>
-                    <div class="dropdown-menu" id="export-menu">
-                        <button class="dropdown-item" id="export-csv-btn">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                            CSV exportieren
-                        </button>
-                        <button class="dropdown-item" id="export-pdf-btn">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-                            PDF exportieren
-                        </button>
-                    </div>
                 </div>
             </div>
-        </header>
+
+            <!-- Ribbon Panels -->
+            <div class="ribbon-panel active" data-ribbon-panel="start">
+                <div class="ribbon-group ribbon-group-scan">
+                    <button class="ribbon-btn-large" id="ribbon-scan-btn" title="Analyse starten">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="ribbon-btn-large-icon"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                        <span>Analyse<br>starten</span>
+                    </button>
+                    <div class="ribbon-group-label">Scan</div>
+                </div>
+                <div class="ribbon-separator"></div>
+                <div class="ribbon-group ribbon-group-drives">
+                    <div class="ribbon-drives" id="ribbon-drives">
+                        <div class="loading-spinner" style="width:20px;height:20px"></div>
+                    </div>
+                    <div class="ribbon-group-label">Laufwerke</div>
+                </div>
+                <div class="ribbon-separator"></div>
+                <div class="ribbon-group">
+                    <div class="ribbon-group-buttons">
+                        <button class="ribbon-btn" data-tab="dashboard">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+                            <span>Übersicht</span>
+                        </button>
+                        <button class="ribbon-btn" data-tab="compare">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 3h5v5"/><path d="M8 3H3v5"/><path d="M12 22V8"/><path d="M21 3l-9 9"/><path d="M3 3l9 9"/></svg>
+                            <span>Vergleich</span>
+                        </button>
+                    </div>
+                    <div class="ribbon-group-label">Übersicht</div>
+                </div>
+                <div class="ribbon-separator"></div>
+                <div class="ribbon-group">
+                    <div class="ribbon-group-buttons">
+                        <button class="ribbon-btn" id="ribbon-export-csv">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                            <span>CSV</span>
+                        </button>
+                        <button class="ribbon-btn" id="ribbon-export-pdf">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                            <span>PDF</span>
+                        </button>
+                    </div>
+                    <div class="ribbon-group-label">Export</div>
+                </div>
+            </div>
+
+            <div class="ribbon-panel" data-ribbon-panel="analyse">
+                <div class="ribbon-group">
+                    <div class="ribbon-group-buttons">
+                        <button class="ribbon-btn" data-tab="tree">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+                            <span>Verzeichnisbaum</span>
+                        </button>
+                        <button class="ribbon-btn" data-tab="treemap">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
+                            <span>Treemap</span>
+                        </button>
+                        <button class="ribbon-btn" data-tab="types">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.21 15.89A10 10 0 118 2.83"/><path d="M22 12A10 10 0 0012 2v10z"/></svg>
+                            <span>Dateitypen</span>
+                        </button>
+                        <button class="ribbon-btn" data-tab="top100">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                            <span>Top 100</span>
+                        </button>
+                    </div>
+                    <div class="ribbon-group-label">Ansichten</div>
+                </div>
+                <div class="ribbon-separator"></div>
+                <div class="ribbon-group">
+                    <div class="ribbon-group-buttons">
+                        <button class="ribbon-btn" data-tab="duplicates">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="2" width="13" height="13" rx="2"/><path d="M4 9a2 2 0 00-2 2v9a2 2 0 002 2h9a2 2 0 002-2"/></svg>
+                            <span>Duplikate</span>
+                        </button>
+                    </div>
+                    <div class="ribbon-group-label">Suche</div>
+                </div>
+            </div>
+
+            <div class="ribbon-panel" data-ribbon-panel="bereinigung">
+                <div class="ribbon-group">
+                    <div class="ribbon-group-buttons">
+                        <button class="ribbon-btn" data-tab="cleanup">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+                            <span>Bereinigung</span>
+                        </button>
+                        <button class="ribbon-btn" data-tab="old-files">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                            <span>Alte Dateien</span>
+                        </button>
+                        <button class="ribbon-btn" data-tab="registry">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                            <span>Registry</span>
+                        </button>
+                    </div>
+                    <div class="ribbon-group-label">Bereinigen</div>
+                </div>
+            </div>
+
+            <div class="ribbon-panel" data-ribbon-panel="system">
+                <div class="ribbon-group">
+                    <div class="ribbon-group-buttons">
+                        <button class="ribbon-btn" data-tab="autostart">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                            <span>Autostart</span>
+                        </button>
+                        <button class="ribbon-btn" data-tab="services">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+                            <span>Dienste</span>
+                        </button>
+                    </div>
+                    <div class="ribbon-group-label">System</div>
+                </div>
+            </div>
+
+            <div class="ribbon-panel" data-ribbon-panel="einstellungen">
+                <div class="ribbon-group">
+                    <div class="ribbon-group-buttons">
+                        <button class="ribbon-btn" id="theme-toggle">
+                            <svg id="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+                            <svg id="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+                            <span>Theme</span>
+                        </button>
+                    </div>
+                    <div class="ribbon-group-label">Darstellung</div>
+                </div>
+            </div>
+        </div>
 
         <!-- Main Layout -->
         <div id="app-layout">
             <!-- Sidebar -->
             <aside id="sidebar">
-                <div class="sidebar-section">
-                    <div class="sidebar-section-title">Laufwerke</div>
-                    <div id="drive-list">
-                        <div class="loading-spinner"></div>
-                    </div>
-                </div>
                 <div id="search-panel">
                     <div class="sidebar-section-title">Suche</div>
                     <div class="search-input-wrap">
@@ -69,39 +180,6 @@
 
             <!-- Content -->
             <main id="content">
-                <!-- Tab Row 1: Analyse -->
-                <nav id="tab-bar" class="tab-bar-row">
-                    <span class="tab-group-label">Analyse</span>
-                    <button class="tab-btn active" data-tab="tree">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
-                        Verzeichnisbaum
-                    </button>
-                    <button class="tab-btn" data-tab="treemap">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
-                        Treemap
-                    </button>
-                    <button class="tab-btn" data-tab="types">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.21 15.89A10 10 0 118 2.83"/><path d="M22 12A10 10 0 0012 2v10z"/></svg>
-                        Dateitypen
-                    </button>
-                    <button class="tab-btn" data-tab="top100">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-                        Top 100
-                    </button>
-                </nav>
-
-                <!-- Tab Row 2: Tools -->
-                <nav id="tab-bar-tools" class="tab-bar-row tab-bar-tools">
-                    <span class="tab-group-label">Tools</span>
-                    <button class="tab-btn" data-tab="dashboard">Übersicht</button>
-                    <button class="tab-btn" data-tab="duplicates">Duplikate</button>
-                    <button class="tab-btn" data-tab="old-files">Alte Dateien</button>
-                    <button class="tab-btn" data-tab="cleanup">Bereinigung</button>
-                    <button class="tab-btn" data-tab="registry">Registry</button>
-                    <button class="tab-btn" data-tab="autostart">Autostart</button>
-                    <button class="tab-btn" data-tab="services">Dienste</button>
-                    <button class="tab-btn" data-tab="compare">Vergleich</button>
-                </nav>
 
                 <div id="tab-content">
                     <!-- Analyse Views -->
@@ -110,7 +188,7 @@
                             <div class="welcome-icon">&#128190;</div>
                             <div class="welcome-title">Speicher Analyse</div>
                             <div class="welcome-text">
-                                Klicke auf ein Laufwerk in der Sidebar, um die Analyse zu starten.
+                                Klicke auf "Analyse starten" oder wähle ein Laufwerk im Ribbon oben.
                                 Rechtsklick auf Dateien und Ordner für Dateioperationen.
                             </div>
                         </div>
