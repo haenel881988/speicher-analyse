@@ -14,6 +14,16 @@ const QA_ICONS = {
 const FOLDER_ICON = '\uD83D\uDCC1';
 const FILE_ICON = '\uD83D\uDCC4';
 
+const TAG_COLORS = {
+    red:    { label: 'Rot',    hex: '#e94560' },
+    orange: { label: 'Orange', hex: '#ff8c42' },
+    yellow: { label: 'Gelb',   hex: '#ffc107' },
+    green:  { label: 'Gr\u00FCn',   hex: '#4ecca3' },
+    blue:   { label: 'Blau',   hex: '#00b4d8' },
+    purple: { label: 'Lila',   hex: '#6c5ce7' },
+    gray:   { label: 'Grau',   hex: '#8b8fa3' },
+};
+
 const TEMP_EXTENSIONS = new Set(['.tmp', '.temp', '.bak', '.old', '.log', '.cache', '.dmp']);
 const TEMP_NAMES = new Set(['thumbs.db', 'desktop.ini', '.ds_store', 'ntuser.dat.log1', 'ntuser.dat.log2']);
 
@@ -41,12 +51,15 @@ const COLUMNS = [
 ];
 
 export class ExplorerView {
-    constructor(container) {
+    constructor(container, options = {}) {
         this.container = container;
+        this.instanceId = options.instanceId || 'default';
+        this.showQuickAccess = options.showQuickAccess !== false;
         this.currentPath = '';
         this.historyBack = [];
         this.historyForward = [];
         this.entries = [];
+        this.filteredEntries = null;
         this.knownFolders = [];
         this.drives = [];
         this.sortCol = 'name';
@@ -57,7 +70,15 @@ export class ExplorerView {
         this.addressMode = 'breadcrumb';
         this.emptyFolderPaths = new Set();
         this.els = {};
+        this.dirTags = {};
         this.onContextMenu = null;
+        this._keydownHandler = (e) => this.handleKeydown(e);
+        this._onNavigate = options.onNavigate || null;
+        this.getScanId = options.getScanId || (() => null);
+        // Omnibar state
+        this._omnibarSearching = false;
+        this._debounceTimer = null;
+        this._deepSearchRunning = false;
     }
 
     async init() {
@@ -72,44 +93,50 @@ export class ExplorerView {
     }
 
     render() {
+        const qaHtml = this.showQuickAccess
+            ? '<div class="explorer-quick-access"></div>'
+            : '';
+
         this.container.innerHTML = `
             <div class="explorer-layout">
-                <div class="explorer-quick-access" id="explorer-qa"></div>
+                ${qaHtml}
                 <div class="explorer-main">
                     <div class="explorer-toolbar">
-                        <button class="explorer-nav-btn" id="explorer-back" title="Zur\u00FCck (Alt+Links)" disabled>
+                        <button class="explorer-nav-btn explorer-btn-back" title="Zur\u00FCck (Alt+Links)" disabled>
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
                         </button>
-                        <button class="explorer-nav-btn" id="explorer-forward" title="Vor (Alt+Rechts)" disabled>
+                        <button class="explorer-nav-btn explorer-btn-forward" title="Vor (Alt+Rechts)" disabled>
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
                         </button>
-                        <button class="explorer-nav-btn" id="explorer-up" title="\u00DCbergeordneter Ordner (Alt+Hoch)">
+                        <button class="explorer-nav-btn explorer-btn-up" title="\u00DCbergeordneter Ordner (Alt+Hoch)">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
                         </button>
-                        <button class="explorer-nav-btn" id="explorer-refresh" title="Aktualisieren (F5)">
+                        <button class="explorer-nav-btn explorer-btn-refresh" title="Aktualisieren (F5)">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
                         </button>
-                        <button class="explorer-nav-btn" id="explorer-empty-folders" title="Leere Ordner finden">
+                        <button class="explorer-nav-btn explorer-btn-empty-folders" title="Leere Ordner finden">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
                         </button>
-                        <div class="explorer-address-bar" id="explorer-address-bar"></div>
+                        <div class="explorer-address-bar"></div>
                     </div>
-                    <div class="explorer-file-list" id="explorer-file-list"></div>
-                    <div class="explorer-status" id="explorer-status"></div>
+                    <div class="explorer-omni-dropdown" style="display:none"></div>
+                    <div class="explorer-file-list"></div>
+                    <div class="explorer-status"></div>
                 </div>
             </div>
         `;
 
         this.els = {
-            qa: this.container.querySelector('#explorer-qa'),
-            backBtn: this.container.querySelector('#explorer-back'),
-            forwardBtn: this.container.querySelector('#explorer-forward'),
-            upBtn: this.container.querySelector('#explorer-up'),
-            refreshBtn: this.container.querySelector('#explorer-refresh'),
-            emptyFoldersBtn: this.container.querySelector('#explorer-empty-folders'),
-            addressBar: this.container.querySelector('#explorer-address-bar'),
-            fileList: this.container.querySelector('#explorer-file-list'),
-            status: this.container.querySelector('#explorer-status'),
+            qa: this.container.querySelector('.explorer-quick-access'),
+            backBtn: this.container.querySelector('.explorer-btn-back'),
+            forwardBtn: this.container.querySelector('.explorer-btn-forward'),
+            upBtn: this.container.querySelector('.explorer-btn-up'),
+            refreshBtn: this.container.querySelector('.explorer-btn-refresh'),
+            emptyFoldersBtn: this.container.querySelector('.explorer-btn-empty-folders'),
+            addressBar: this.container.querySelector('.explorer-address-bar'),
+            fileList: this.container.querySelector('.explorer-file-list'),
+            status: this.container.querySelector('.explorer-status'),
+            omniDropdown: this.container.querySelector('.explorer-omni-dropdown'),
         };
 
         this.els.backBtn.onclick = () => this.goBack();
@@ -119,7 +146,7 @@ export class ExplorerView {
         this.els.emptyFoldersBtn.onclick = () => this.findEmptyFolders();
 
         this.container.tabIndex = 0;
-        this.container.addEventListener('keydown', (e) => this.handleKeydown(e));
+        this.container.addEventListener('keydown', this._keydownHandler);
     }
 
     // ===== Navigation =====
@@ -134,9 +161,11 @@ export class ExplorerView {
         this.selectedPaths.clear();
         this.lastClickedPath = null;
         this.emptyFolderPaths.clear();
+        this.filteredEntries = null;
         this.updateNavButtons();
         this.renderAddressBar();
         this.updateQuickAccessHighlight();
+        if (this._onNavigate) this._onNavigate(dirPath);
 
         this.els.fileList.innerHTML = '<div class="explorer-loading"><div class="loading-spinner"></div></div>';
 
@@ -149,6 +178,10 @@ export class ExplorerView {
         }
 
         this.entries = result.entries;
+        // Load file tags for this directory
+        try {
+            this.dirTags = await window.api.getTagsForDirectory(dirPath);
+        } catch { this.dirTags = {}; }
         this.renderFileList();
         this.renderStatus(result);
     }
@@ -206,7 +239,7 @@ export class ExplorerView {
         const bar = this.els.addressBar;
         const segments = this.currentPath.split('\\').filter(Boolean);
 
-        let html = '<div class="explorer-breadcrumb-bar" id="explorer-bc-bar">';
+        let html = '<div class="explorer-breadcrumb-bar">';
         let buildPath = '';
 
         segments.forEach((seg, i) => {
@@ -223,6 +256,7 @@ export class ExplorerView {
             }
         });
 
+        html += '<span class="explorer-bc-search" title="Suchen (Ctrl+F)">\uD83D\uDD0D</span>';
         html += '</div>';
         bar.innerHTML = html;
 
@@ -233,50 +267,311 @@ export class ExplorerView {
             };
         });
 
-        const bcBar = bar.querySelector('#explorer-bc-bar');
+        // Search icon click → omnibar search mode
+        const searchIcon = bar.querySelector('.explorer-bc-search');
+        if (searchIcon) {
+            searchIcon.onclick = (e) => {
+                e.stopPropagation();
+                this.addressMode = 'input';
+                this.renderAddressInput(true);
+            };
+        }
+
+        const bcBar = bar.querySelector('.explorer-breadcrumb-bar');
         if (bcBar) {
             bcBar.onclick = (e) => {
-                if (e.target === bcBar || e.target.classList.contains('explorer-bc-current')) {
-                    this.addressMode = 'input';
-                    this.renderAddressInput();
-                }
+                // Click on background, current segment, or separator → edit mode
+                if (e.target.classList.contains('explorer-bc-segment')) return; // navigate handled above
+                this.addressMode = 'input';
+                this.renderAddressInput();
             };
         }
     }
 
-    renderAddressInput() {
+    renderAddressInput(startInSearchMode = false) {
         const bar = this.els.addressBar;
-        bar.innerHTML = `<input type="text" class="explorer-address-input" id="explorer-addr-input"
-                           value="${this.escAttr(this.currentPath)}" spellcheck="false">`;
+        const initValue = startInSearchMode ? '' : this.currentPath;
+        bar.innerHTML = `<input type="text" class="explorer-address-input"
+                           value="${this.escAttr(initValue)}"
+                           placeholder="Pfad oder Suche eingeben..."
+                           spellcheck="false">`;
 
-        const input = bar.querySelector('#explorer-addr-input');
+        const input = bar.querySelector('.explorer-address-input');
         input.focus();
-        input.select();
+        if (!startInSearchMode) input.select();
+        this._omnibarSearching = false;
+
+        input.addEventListener('input', () => {
+            const val = input.value.trim();
+            const isSearch = val.length > 0 && !this._isPathLike(val);
+
+            if (isSearch && !this._omnibarSearching) {
+                this._omnibarSearching = true;
+                input.classList.add('omnibar-search-mode');
+            } else if (!isSearch && this._omnibarSearching) {
+                this._omnibarSearching = false;
+                input.classList.remove('omnibar-search-mode');
+                this.filteredEntries = null;
+                this.renderFileList();
+                this._hideOmniDropdown();
+            }
+
+            if (isSearch) {
+                clearTimeout(this._debounceTimer);
+                this._cancelDeepSearch();
+                this._debounceTimer = setTimeout(() => this._omnibarSearch(val), 400);
+            }
+        });
 
         input.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
                 e.preventDefault();
-                const newPath = input.value.trim();
-                if (newPath) {
+                const val = input.value.trim();
+                if (!val) return;
+
+                if (this._omnibarSearching) {
+                    // Enter in search mode → trigger deep search if no index results yet
+                    clearTimeout(this._debounceTimer);
+                    this._omnibarSearch(val);
+                } else {
+                    // Enter in path mode → navigate
                     this.addressMode = 'breadcrumb';
-                    this.navigateTo(newPath);
+                    this._hideOmniDropdown();
+                    this.navigateTo(val);
                 }
             }
             if (e.key === 'Escape') {
+                this._omnibarSearching = false;
+                this.filteredEntries = null;
+                this._hideOmniDropdown();
+                this._cancelDeepSearch();
                 this.addressMode = 'breadcrumb';
                 this.renderAddressBreadcrumb();
+                this.renderFileList();
+                this.renderStatus({ entries: this.entries });
             }
             e.stopPropagation();
         });
 
         input.addEventListener('blur', () => {
             setTimeout(() => {
-                if (this.addressMode === 'input') {
+                if (this.addressMode === 'input' && !this._omnibarSearching) {
                     this.addressMode = 'breadcrumb';
                     this.renderAddressBreadcrumb();
                 }
-            }, 150);
+            }, 200);
         });
+    }
+
+    activateOmnibar() {
+        this.addressMode = 'input';
+        this.renderAddressInput(true);
+    }
+
+    _isPathLike(str) {
+        if (!str) return false;
+        // Drive letter paths: C:\, D:/, etc.
+        if (/^[A-Za-z]:[\\\/]/.test(str)) return true;
+        // UNC paths: \\server\share
+        if (str.startsWith('\\\\')) return true;
+        // Relative but with backslash
+        if (str.includes(':\\')) return true;
+        return false;
+    }
+
+    async _omnibarSearch(query) {
+        // Level 1: Filter current directory entries (always)
+        this.applyFilter(query);
+
+        // Show dropdown with live results
+        this.els.omniDropdown.innerHTML = `
+            <div class="omni-dropdown-header">
+                <span class="omni-dropdown-info">\uD83D\uDD0D Suche nach "${this.esc(query)}"...</span>
+                <button class="omni-dropdown-btn omni-btn-stop" style="display:none">Stopp</button>
+            </div>
+            <div class="omni-dropdown-results">
+                <div class="omni-loading">Durchsuche Laufwerk...</div>
+            </div>`;
+        this.els.omniDropdown.style.display = '';
+
+        this.els.status.innerHTML = `<span style="color:var(--accent)">\uD83D\uDD0D "${this.esc(query)}"</span><span style="color:var(--text-muted)">Escape = beenden</span>`;
+
+        // If scan index available → use it first (instant results)
+        const scanId = this.getScanId();
+        if (scanId) {
+            try {
+                const { results } = await window.api.searchNameIndex(scanId, query, { maxResults: 100 });
+                if (!this._omnibarSearching) return; // user cancelled
+                if (results.length > 0) {
+                    this._renderOmniResults(results, `${results.length} Treffer (Index)`);
+                    return; // Index results are sufficient
+                }
+            } catch { /* fall through to deep search */ }
+        }
+
+        // No index or no index results → auto-start deep search
+        if (this._omnibarSearching) {
+            this._startDeepSearch(query);
+        }
+    }
+
+    _renderOmniResults(results, countText) {
+        const resultsEl = this.els.omniDropdown?.querySelector('.omni-dropdown-results');
+        if (!resultsEl) return;
+
+        // Sort: exact matches first (quality 1.0), then by quality descending
+        results.sort((a, b) => (b.matchQuality || 1) - (a.matchQuality || 1));
+
+        let html = `<div class="omni-results-count">${countText}</div>`;
+        let lastQualityGroup = null;
+        for (const r of results) {
+            const quality = r.matchQuality || 1;
+            const isExact = quality >= 1.0;
+            const isFuzzy = quality < 1.0;
+
+            // Show separator between exact and fuzzy results
+            if (isFuzzy && lastQualityGroup !== 'fuzzy') {
+                html += '<div class="omni-results-separator">\u00C4hnliche Treffer</div>';
+                lastQualityGroup = 'fuzzy';
+            } else if (isExact && lastQualityGroup === null) {
+                lastQualityGroup = 'exact';
+            }
+
+            const dirShort = this._shortenPath(r.dirPath);
+            const icon = r.isDir ? '\uD83D\uDCC1' : '\uD83D\uDCC4';
+            const fuzzyClass = isFuzzy ? ' omni-result-fuzzy' : '';
+            html += `<div class="omni-result-item${fuzzyClass}" data-path="${this.escAttr(r.fullPath || r.path)}" data-dir="${this.escAttr(r.dirPath)}">
+                <span class="omni-result-icon">${icon}</span>
+                <span class="omni-result-name">${this.esc(r.name)}</span>
+                <span class="omni-result-dir" title="${this.escAttr(r.dirPath)}">${this.esc(dirShort)}</span>
+            </div>`;
+        }
+        resultsEl.innerHTML = html;
+        this._wireOmniResults(resultsEl);
+
+        const infoEl = this.els.omniDropdown.querySelector('.omni-dropdown-info');
+        if (infoEl) infoEl.textContent = `\uD83D\uDD0D ${countText}`;
+
+        this.els.status.innerHTML = `<span style="color:var(--accent)">\uD83D\uDD0D ${countText}</span><span style="color:var(--text-muted)">Escape = beenden</span>`;
+    }
+
+    _startDeepSearch(query) {
+        this._cancelDeepSearch();
+        this._deepSearchRunning = true;
+
+        const resultsEl = this.els.omniDropdown?.querySelector('.omni-dropdown-results');
+        if (!resultsEl) return;
+
+        const stopBtn = this.els.omniDropdown.querySelector('.omni-btn-stop');
+        if (stopBtn) {
+            stopBtn.style.display = '';
+            stopBtn.onclick = () => {
+                this._cancelDeepSearch();
+                stopBtn.style.display = 'none';
+            };
+        }
+
+        const collected = [];
+        let hasFuzzySeparator = false;
+        resultsEl.innerHTML = '<div class="omni-results-count">Durchsuche Laufwerk...</div>';
+        this._wireOmniResults(resultsEl);
+
+        window.api.onDeepSearchResult((data) => {
+            if (!this._deepSearchRunning) return;
+            collected.push(data);
+            if (collected.length <= 200) {
+                const dirShort = this._shortenPath(data.dirPath);
+                const icon = data.isDir ? '\uD83D\uDCC1' : '\uD83D\uDCC4';
+                const quality = data.matchQuality || 1;
+                const isFuzzy = quality < 1.0;
+                const fuzzyClass = isFuzzy ? ' omni-result-fuzzy' : '';
+                let insertHtml = '';
+
+                // Add "Ähnliche Treffer" separator before first fuzzy result
+                if (isFuzzy && !hasFuzzySeparator) {
+                    hasFuzzySeparator = true;
+                    insertHtml += '<div class="omni-results-separator">\u00C4hnliche Treffer</div>';
+                }
+
+                insertHtml += `<div class="omni-result-item${fuzzyClass}" data-path="${this.escAttr(data.path)}" data-dir="${this.escAttr(data.dirPath)}">
+                    <span class="omni-result-icon">${icon}</span>
+                    <span class="omni-result-name">${this.esc(data.name)}</span>
+                    <span class="omni-result-dir" title="${this.escAttr(data.dirPath)}">${this.esc(dirShort)}</span>
+                </div>`;
+                const countEl = resultsEl.querySelector('.omni-results-count');
+                if (countEl) {
+                    countEl.textContent = `${collected.length} Treffer`;
+                    countEl.insertAdjacentHTML('afterend', insertHtml);
+                }
+            }
+            this.els.status.innerHTML = `<span style="color:var(--accent)">\uD83D\uDD0D ${collected.length} Treffer</span><span style="color:var(--text-muted)">Escape = beenden</span>`;
+        });
+
+        window.api.onDeepSearchProgress((data) => {
+            if (!this._deepSearchRunning) return;
+            const countEl = resultsEl.querySelector('.omni-results-count');
+            if (countEl) countEl.textContent = `${data.resultCount} Treffer (${data.dirsScanned} Ordner)`;
+        });
+
+        window.api.onDeepSearchComplete((data) => {
+            this._deepSearchRunning = false;
+            if (stopBtn) stopBtn.style.display = 'none';
+
+            // Re-render sorted: exact matches first, then fuzzy, alphabetical within groups
+            collected.sort((a, b) => {
+                const qa = a.matchQuality || 1, qb = b.matchQuality || 1;
+                if (qa !== qb) return qb - qa;
+                return a.name.localeCompare(b.name, 'de');
+            });
+            this._renderOmniResults(collected.slice(0, 200),
+                `${data.resultCount} Treffer in ${data.dirsScanned} Ordnern`);
+        });
+
+        window.api.onDeepSearchError(() => {
+            this._deepSearchRunning = false;
+            if (stopBtn) stopBtn.style.display = 'none';
+        });
+
+        // Always search from drive root (e.g. C:\)
+        const rootPath = this.currentPath.match(/^[A-Za-z]:\\/)?.[0] || this.currentPath;
+        window.api.deepSearchStart(rootPath, query, false);
+    }
+
+    _cancelDeepSearch() {
+        if (this._deepSearchRunning) {
+            window.api.deepSearchCancel();
+            this._deepSearchRunning = false;
+        }
+    }
+
+    _wireOmniResults(container) {
+        container.addEventListener('click', (e) => {
+            const item = e.target.closest('.omni-result-item');
+            if (!item) return;
+            const dirPath = item.dataset.dir;
+            if (dirPath) {
+                this._omnibarSearching = false;
+                this._hideOmniDropdown();
+                this.addressMode = 'breadcrumb';
+                this.filteredEntries = null;
+                this.navigateTo(dirPath);
+            }
+        });
+    }
+
+    _hideOmniDropdown() {
+        if (this.els.omniDropdown) {
+            this.els.omniDropdown.style.display = 'none';
+            this.els.omniDropdown.innerHTML = '';
+        }
+    }
+
+    _shortenPath(p) {
+        if (!p) return '';
+        if (p.length <= 45) return p;
+        const parts = p.split('\\');
+        if (parts.length <= 3) return p;
+        return parts[0] + '\\..\\' + parts.slice(-2).join('\\');
     }
 
     // ===== Quick Access =====
@@ -292,6 +587,7 @@ export class ExplorerView {
     }
 
     renderQuickAccess() {
+        if (!this.els.qa) return;
         let html = '<div class="explorer-qa-section">';
         html += '<div class="explorer-qa-title">Bibliothek</div>';
         for (const folder of this.knownFolders) {
@@ -331,6 +627,7 @@ export class ExplorerView {
     }
 
     updateQuickAccessHighlight() {
+        if (!this.els.qa) return;
         this.els.qa.querySelectorAll('.explorer-qa-item').forEach(el => {
             const p = el.dataset.path;
             const isActive = this.currentPath === p || this.currentPath.startsWith(p + '\\');
@@ -373,11 +670,14 @@ export class ExplorerView {
             const rowClasses = [sizeClass, isTemp ? 'explorer-temp-file' : '', isEmpty ? 'explorer-empty-folder' : ''].filter(Boolean).join(' ');
             const tempBadge = isTemp ? '<span class="explorer-temp-badge">Temp</span>' : '';
             const emptyBadge = isEmpty ? '<span class="explorer-empty-badge">Leer</span>' : '';
+            // File tag color dot
+            const tag = this.dirTags[entry.path];
+            const tagDot = tag ? `<span class="explorer-tag-dot" style="background:${TAG_COLORS[tag.color]?.hex || '#888'}" title="${this.esc(tag.note || tag.color)}"></span>` : '';
 
             bodyHtml += `<tr data-path="${this.escAttr(entry.path)}" data-is-dir="${entry.isDirectory}"
                             data-name="${this.escAttr(entry.name)}" draggable="true" class="${rowClasses}">
                 <td class="explorer-col-icon">${icon}</td>
-                <td class="${nameClass}" title="${this.escAttr(entry.path)}">${this.esc(entry.name)}${tempBadge}${emptyBadge}</td>
+                <td class="${nameClass}" title="${this.escAttr(entry.path)}">${tagDot}${this.esc(entry.name)}${tempBadge}${emptyBadge}</td>
                 <td class="explorer-col-size">${sizeStr}</td>
                 <td class="explorer-col-type">${this.esc(typeStr)}</td>
                 <td class="explorer-col-date">${dateStr}</td>
@@ -385,7 +685,10 @@ export class ExplorerView {
         }
 
         if (sorted.length === 0) {
-            bodyHtml = '<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--text-muted)">Dieser Ordner ist leer</td></tr>';
+            const msg = this.filteredEntries !== null
+                ? 'Keine Treffer f\u00FCr den Suchbegriff'
+                : 'Dieser Ordner ist leer';
+            bodyHtml = `<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--text-muted)">${msg}</td></tr>`;
         }
 
         this.els.fileList.innerHTML = `
@@ -580,7 +883,7 @@ export class ExplorerView {
     }
 
     getSortedEntries() {
-        const entries = [...this.entries];
+        const entries = [...(this.filteredEntries || this.entries)];
         entries.sort((a, b) => {
             if (a.isDirectory && !b.isDirectory) return -1;
             if (!a.isDirectory && b.isDirectory) return 1;
@@ -640,13 +943,13 @@ export class ExplorerView {
 
     loadColumnWidths() {
         try {
-            const saved = localStorage.getItem('explorer-col-widths');
+            const saved = localStorage.getItem(`explorer-col-widths-${this.instanceId}`);
             return saved ? JSON.parse(saved) : {};
         } catch { return {}; }
     }
 
     saveColumnWidths() {
-        localStorage.setItem('explorer-col-widths', JSON.stringify(this.columnWidths));
+        localStorage.setItem(`explorer-col-widths-${this.instanceId}`, JSON.stringify(this.columnWidths));
     }
 
     // ===== Status Bar =====
@@ -700,6 +1003,22 @@ export class ExplorerView {
                 window.api.deletePermanent(paths).then(() => this.refresh());
             } else {
                 window.api.deleteToTrash(paths).then(() => this.refresh());
+            }
+        }
+        else if (e.key === 'f' && e.ctrlKey) {
+            e.preventDefault();
+            this.activateOmnibar();
+        }
+        // Type-to-search: single printable character → activate omnibar with that character
+        else if (!e.ctrlKey && !e.altKey && !e.metaKey && e.key.length === 1) {
+            e.preventDefault();
+            this.addressMode = 'input';
+            this.renderAddressInput(true);
+            // Inject the typed character into the omnibar input
+            const addrInput = this.els.addressBar.querySelector('.explorer-address-input');
+            if (addrInput) {
+                addrInput.value = e.key;
+                addrInput.dispatchEvent(new Event('input'));
             }
         }
     }
@@ -800,5 +1119,64 @@ export class ExplorerView {
     escAttr(text) {
         if (!text) return '';
         return String(text).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    // ===== Multi-Instance Support =====
+
+    dispose() {
+        this._cancelDeepSearch();
+        this.container.removeEventListener('keydown', this._keydownHandler);
+        this.container.innerHTML = '';
+        this.entries = [];
+        this.filteredEntries = null;
+        this.selectedPaths.clear();
+        this.emptyFolderPaths.clear();
+        this.els = {};
+    }
+
+    getState() {
+        const fileList = this.els.fileList;
+        return {
+            currentPath: this.currentPath,
+            sortCol: this.sortCol,
+            sortAsc: this.sortAsc,
+            scrollTop: fileList ? fileList.scrollTop : 0,
+            historyBack: [...this.historyBack],
+            historyForward: [...this.historyForward],
+        };
+    }
+
+    restoreState(state) {
+        if (!state) return;
+        this.sortCol = state.sortCol || 'name';
+        this.sortAsc = state.sortAsc !== undefined ? state.sortAsc : true;
+        this.historyBack = state.historyBack || [];
+        this.historyForward = state.historyForward || [];
+        if (state.scrollTop && this.els.fileList) {
+            requestAnimationFrame(() => {
+                this.els.fileList.scrollTop = state.scrollTop;
+            });
+        }
+    }
+
+    applyFilter(query) {
+        if (!query || !query.trim()) {
+            this.filteredEntries = null;
+            this.renderFileList();
+            return;
+        }
+
+        const q = query.trim();
+        let matcher;
+        if (q.startsWith('/') && q.endsWith('/') && q.length > 2) {
+            try { matcher = new RegExp(q.slice(1, -1), 'i'); }
+            catch { matcher = null; }
+        }
+
+        this.filteredEntries = this.entries.filter(e => {
+            if (matcher) return matcher.test(e.name);
+            return e.name.toLowerCase().includes(q.toLowerCase());
+        });
+        this.renderFileList();
     }
 }

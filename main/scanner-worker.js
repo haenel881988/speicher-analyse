@@ -15,6 +15,7 @@ const tree = new Map();
 const topFiles = []; // min-heap: [{size, path, name, ext, mtime}]
 const extensionStats = new Map();
 const dirFiles = new Map();
+const nameIndex = new Map(); // filename.toLowerCase() → [dirPath1, dirPath2, ...]
 
 // Progress reporting interval
 let lastProgressTime = 0;
@@ -93,6 +94,12 @@ function scanRecursive(dirPath) {
 
                     // Store file for search/duplicates/old-files (no path - reconstruct from Map key + name)
                     filesInDir.push({ size, name: entry.name, ext, mtime: stat.mtimeMs / 1000 });
+
+                    // Name index for hybrid search (Ebene 2)
+                    const nameLower = entry.name.toLowerCase();
+                    let idxPaths = nameIndex.get(nameLower);
+                    if (!idxPaths) { idxPaths = []; nameIndex.set(nameLower, idxPaths); }
+                    idxPaths.push(dirPath);
 
                 } else if (entry.isDirectory()) {
                     // Skip symlinks, junctions
@@ -175,6 +182,7 @@ try {
         topFiles,
         extensionStats: [...extensionStats.entries()],
         dirFiles: [...dirFiles.entries()],
+        nameIndex: [...nameIndex.entries()],
         dirsScanned,
         filesFound,
         totalSize,

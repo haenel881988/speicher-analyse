@@ -1,30 +1,26 @@
 const fs = require('fs');
-const { runCmd } = require('./cmd-utils');
+const { runPS } = require('./cmd-utils');
 
 async function listDrives() {
     const drives = [];
 
     if (process.platform === 'win32') {
         try {
-            const { stdout } = await runCmd(
-                'wmic logicaldisk get Caption,FileSystem,Size,FreeSpace /format:csv',
+            const { stdout } = await runPS(
+                'Get-CimInstance Win32_LogicalDisk | Where-Object {$_.Size -gt 0} | Select-Object DeviceID,FileSystem,FreeSpace,Size | ConvertTo-Json',
                 { timeout: 10000 }
             );
 
-            const lines = stdout.trim().split('\n').filter(l => l.trim());
-            // Skip header line
-            for (let i = 1; i < lines.length; i++) {
-                const parts = lines[i].trim().split(',');
-                // CSV format: Node,Caption,FileSystem,FreeSpace,Size
-                if (parts.length < 5) continue;
+            const parsed = JSON.parse(stdout.trim() || '[]');
+            const disks = Array.isArray(parsed) ? parsed : [parsed];
 
-                const caption = parts[1];
-                const fstype = parts[2] || 'Unknown';
-                const freeSpace = parseInt(parts[3]) || 0;
-                const totalSize = parseInt(parts[4]) || 0;
-
+            for (const disk of disks) {
+                const totalSize = disk.Size || 0;
+                const freeSpace = disk.FreeSpace || 0;
                 if (!totalSize) continue;
 
+                const caption = disk.DeviceID || '';
+                const fstype = disk.FileSystem || 'Unknown';
                 const used = totalSize - freeSpace;
                 const percent = Math.round((used / totalSize) * 1000) / 10;
 

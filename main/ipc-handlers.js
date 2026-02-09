@@ -20,9 +20,12 @@ const updates = require('./updates');
 const explorer = require('./explorer');
 const admin = require('./admin');
 
+const { Worker } = require('worker_threads');
+
 // In-memory scan storage
 const scans = new Map();
 const duplicateFinders = new Map();
+const deepSearchWorkers = new Map();
 
 function register(mainWindow) {
     // === Drives ===
@@ -434,6 +437,69 @@ function register(mainWindow) {
         return explorer.findEmptyFolders(dirPath, maxDepth);
     });
 
+    // === Hybrid Search (Ebene 2 + 3) ===
+    ipcMain.handle('search-name-index', async (_event, scanId, query, options) => {
+        const scanner = scans.get(scanId);
+        if (!scanner) return { results: [], info: { available: false } };
+        return {
+            results: scanner.searchByName(query, options),
+            info: scanner.getNameIndexInfo(),
+        };
+    });
+
+    ipcMain.handle('get-name-index-info', async (_event, scanId) => {
+        const scanner = scans.get(scanId);
+        if (!scanner) return { available: false, fileCount: 0 };
+        return scanner.getNameIndexInfo();
+    });
+
+    ipcMain.handle('deep-search-start', async (_event, rootSearchPath, query, useRegex) => {
+        // Cancel any existing deep search
+        const existing = deepSearchWorkers.get('active');
+        if (existing) {
+            try { existing.terminate(); } catch {}
+            deepSearchWorkers.delete('active');
+        }
+
+        const worker = new Worker(path.join(__dirname, 'deep-search-worker.js'), {
+            workerData: { rootPath: rootSearchPath, query, useRegex, maxResults: 1000 },
+        });
+        deepSearchWorkers.set('active', worker);
+
+        worker.on('message', (msg) => {
+            if (!mainWindow || mainWindow.isDestroyed()) return;
+            if (msg.type === 'result') {
+                mainWindow.webContents.send('deep-search-result', msg.data);
+            } else if (msg.type === 'progress') {
+                mainWindow.webContents.send('deep-search-progress', msg);
+            } else if (msg.type === 'complete') {
+                mainWindow.webContents.send('deep-search-complete', msg);
+                deepSearchWorkers.delete('active');
+            } else if (msg.type === 'error') {
+                mainWindow.webContents.send('deep-search-error', msg);
+                deepSearchWorkers.delete('active');
+            }
+        });
+
+        worker.on('error', (err) => {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('deep-search-error', { error: err.message });
+            }
+            deepSearchWorkers.delete('active');
+        });
+
+        return { started: true };
+    });
+
+    ipcMain.handle('deep-search-cancel', async () => {
+        const worker = deepSearchWorkers.get('active');
+        if (worker) {
+            try { worker.terminate(); } catch {}
+            deepSearchWorkers.delete('active');
+        }
+        return { success: true };
+    });
+
     // === Clipboard (path copy) ===
     ipcMain.handle('copy-to-clipboard', async (_event, text) => {
         const { clipboard } = require('electron');
@@ -463,6 +529,18 @@ function register(mainWindow) {
         });
         child.unref();
         return { success: true };
+    });
+
+    // === System Capabilities ===
+    ipcMain.handle('get-system-capabilities', async () => {
+        const compat = require('./compat');
+        return compat.checkCapabilities();
+    });
+
+    // === Battery ===
+    ipcMain.handle('get-battery-status', async () => {
+        const battery = require('./battery');
+        return battery.getBatteryStatus();
     });
 
     // === Platform ===
@@ -523,8 +601,181 @@ function register(mainWindow) {
         return data;
     });
 
-    // Cleanup on app quit: terminate workers and release memory
+    // === File Tags ===
     const { app } = require('electron');
+
+    ipcMain.handle('get-tag-colors', async () => {
+        const { TAG_COLORS } = require('./file-tags');
+        return TAG_COLORS;
+    });
+
+    ipcMain.handle('set-file-tag', async (_event, filePath, color, note) => {
+        if (!app._tagStore) return { success: false, error: 'Tags nicht initialisiert' };
+        return app._tagStore.setTag(filePath, color, note || '');
+    });
+
+    ipcMain.handle('remove-file-tag', async (_event, filePath) => {
+        if (!app._tagStore) return { success: false, error: 'Tags nicht initialisiert' };
+        return app._tagStore.removeTag(filePath);
+    });
+
+    ipcMain.handle('get-file-tag', async (_event, filePath) => {
+        if (!app._tagStore) return null;
+        return app._tagStore.getTag(filePath);
+    });
+
+    ipcMain.handle('get-tags-for-directory', async (_event, dirPath) => {
+        if (!app._tagStore) return {};
+        return app._tagStore.getTagsInDirectory(dirPath);
+    });
+
+    ipcMain.handle('get-all-tags', async () => {
+        if (!app._tagStore) return [];
+        return app._tagStore.getAllTags();
+    });
+
+    // === Shell Integration (Context Menu) ===
+    ipcMain.handle('register-shell-context-menu', async () => {
+        const { registerContextMenu } = require('./shell-integration');
+        return registerContextMenu();
+    });
+
+    ipcMain.handle('unregister-shell-context-menu', async () => {
+        const { unregisterContextMenu } = require('./shell-integration');
+        return unregisterContextMenu();
+    });
+
+    ipcMain.handle('is-shell-context-menu-registered', async () => {
+        const { isContextMenuRegistered } = require('./shell-integration');
+        return isContextMenuRegistered();
+    });
+
+    // === Terminal ===
+    const terminal = require('./terminal');
+
+    ipcMain.handle('terminal-create', async (_event, cwd) => {
+        const { id, process: ps } = terminal.createSession(cwd);
+
+        ps.stdout.on('data', (data) => {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('terminal-data', { id, data: data.toString('utf8') });
+            }
+        });
+        ps.stderr.on('data', (data) => {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('terminal-data', { id, data: data.toString('utf8') });
+            }
+        });
+        ps.on('exit', (code) => {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('terminal-exit', { id, code });
+            }
+        });
+
+        return { id };
+    });
+
+    ipcMain.handle('terminal-write', async (_event, id, data) => {
+        return terminal.writeToSession(id, data);
+    });
+
+    ipcMain.handle('terminal-destroy', async (_event, id) => {
+        terminal.destroySession(id);
+        return { success: true };
+    });
+
+    // === Privacy Dashboard ===
+    ipcMain.handle('get-privacy-settings', async () => {
+        const privacy = require('./privacy');
+        return privacy.getPrivacySettings();
+    });
+
+    ipcMain.handle('apply-privacy-setting', async (_event, id) => {
+        const privacy = require('./privacy');
+        return privacy.applyPrivacySetting(id);
+    });
+
+    ipcMain.handle('apply-all-privacy', async () => {
+        const privacy = require('./privacy');
+        return privacy.applyAllPrivacy();
+    });
+
+    ipcMain.handle('get-scheduled-tasks-audit', async () => {
+        const privacy = require('./privacy');
+        return privacy.getScheduledTasksAudit();
+    });
+
+    ipcMain.handle('disable-scheduled-task', async (_event, taskPath) => {
+        const privacy = require('./privacy');
+        return privacy.disableScheduledTask(taskPath);
+    });
+
+    // === S.M.A.R.T. Disk Health ===
+    ipcMain.handle('get-disk-health', async () => {
+        const smart = require('./smart');
+        return smart.getDiskHealth();
+    });
+
+    // === Software Audit ===
+    ipcMain.handle('audit-software', async () => {
+        const audit = require('./software-audit');
+        return audit.auditAll();
+    });
+
+    ipcMain.handle('correlate-software', async (_event, program) => {
+        const audit = require('./software-audit');
+        return audit.correlateProgram(program);
+    });
+
+    // === Network Monitor ===
+    ipcMain.handle('get-connections', async () => {
+        const network = require('./network');
+        return network.getConnections();
+    });
+
+    ipcMain.handle('get-bandwidth', async () => {
+        const network = require('./network');
+        return network.getBandwidth();
+    });
+
+    ipcMain.handle('get-firewall-rules', async (_event, direction) => {
+        const network = require('./network');
+        return network.getFirewallRules(direction);
+    });
+
+    ipcMain.handle('block-process', async (_event, processName, processPath) => {
+        const network = require('./network');
+        return network.blockProcess(processName, processPath);
+    });
+
+    ipcMain.handle('unblock-process', async (_event, ruleName) => {
+        const network = require('./network');
+        return network.unblockProcess(ruleName);
+    });
+
+    ipcMain.handle('get-network-summary', async () => {
+        const network = require('./network');
+        return network.getNetworkSummary();
+    });
+
+    // === System Score ===
+    ipcMain.handle('get-system-score', async (_event, results) => {
+        const { calculateSystemScore } = require('./system-score');
+        return calculateSystemScore(results);
+    });
+
+    // === Global Hotkey ===
+    ipcMain.handle('set-global-hotkey', async (_event, accelerator) => {
+        const { registerGlobalHotkey } = require('./global-hotkey');
+        return registerGlobalHotkey(mainWindow, accelerator);
+    });
+
+    ipcMain.handle('get-global-hotkey', async () => {
+        const { getRegisteredHotkey } = require('./global-hotkey');
+        return getRegisteredHotkey();
+    });
+
+    // Cleanup on app quit: terminate workers and release memory
     app.on('before-quit', () => {
         for (const [id, scanner] of scans) {
             if (scanner.worker) {
@@ -536,6 +787,11 @@ function register(mainWindow) {
             try { finder.cancel(); } catch {}
         }
         duplicateFinders.clear();
+        terminal.destroyAllSessions();
+        for (const [, worker] of deepSearchWorkers) {
+            try { worker.terminate(); } catch {}
+        }
+        deepSearchWorkers.clear();
     });
 }
 

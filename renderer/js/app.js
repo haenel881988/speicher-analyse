@@ -3,7 +3,6 @@ import { startScan, fetchDrives, setupScanListeners } from './scanner.js';
 import { TreeView, showToast } from './tree.js';
 import { TreemapView } from './treemap.js';
 import { FileTypeChart } from './charts.js';
-import { SearchPanel } from './search.js';
 import { exportCSV, exportPDF } from './export.js';
 import {
     clipboardCut, clipboardCopy, clipboardPaste,
@@ -21,7 +20,14 @@ import { ServicesView } from './services.js';
 import { BloatwareView } from './bloatware.js';
 import { OptimizerView } from './optimizer.js';
 import { UpdatesView } from './updates.js';
-import { ExplorerView } from './explorer.js';
+import { ExplorerDualPanel } from './explorer-dual-panel.js';
+import { BatchRenameModal } from './batch-rename.js';
+import { SettingsView } from './settings.js';
+import { PrivacyView } from './privacy.js';
+import { SmartView } from './smart.js';
+import { SoftwareAuditView } from './software-audit.js';
+import { NetworkView } from './network.js';
+import { SystemScoreView } from './system-score.js';
 
 // ===== State =====
 const state = {
@@ -30,6 +36,8 @@ const state = {
     currentPath: null,
     activeTab: 'tree',
     scanning: false,
+    capabilities: null,
+    batteryInfo: null,
 };
 
 // Track which tabs have been auto-loaded this session
@@ -40,6 +48,12 @@ const tabLoaded = {
     updates: false,
     duplicates: false,
     optimizer: false,
+    settings: false,
+    privacy: false,
+    smart: false,
+    'software-audit': false,
+    network: false,
+    'system-score': false,
 };
 
 // ===== DOM =====
@@ -67,9 +81,6 @@ const els = {
     iconSun: document.getElementById('icon-sun'),
     exportCsvBtn: document.getElementById('toolbar-export-csv'),
     exportPdfBtn: document.getElementById('toolbar-export-pdf'),
-    searchInput: document.getElementById('search-input'),
-    searchMinSize: document.getElementById('search-min-size'),
-    searchResults: document.getElementById('search-results'),
     propertiesModal: document.getElementById('properties-modal'),
     propertiesClose: document.getElementById('properties-close'),
     previewToggle: document.getElementById('preview-toggle'),
@@ -82,7 +93,6 @@ const els = {
 const treeView = new TreeView(els.treeContainer, els.treeBreadcrumb);
 const treemapView = new TreemapView(els.treemapContainer, els.treemapBreadcrumb, els.treemapTooltip);
 const fileTypeChart = new FileTypeChart(els.donutChart, els.typeTableBody);
-const searchPanel = new SearchPanel(els.searchInput, els.searchMinSize, els.searchResults, handleSearchNavigate);
 const previewPanel = new PreviewPanel(els.previewContent, els.previewTitle, els.previewClose);
 
 // Tool views
@@ -97,14 +107,27 @@ const servicesView = new ServicesView(document.getElementById('view-services'));
 const bloatwareView = new BloatwareView(document.getElementById('view-bloatware'));
 const optimizerView = new OptimizerView(document.getElementById('view-optimizer'));
 const updatesView = new UpdatesView(document.getElementById('view-updates'));
-const explorerView = new ExplorerView(document.getElementById('view-explorer'));
+const dualPanel = new ExplorerDualPanel(document.getElementById('view-explorer'), {
+    onContextMenu: handleContextMenu,
+    getScanId: () => state.currentScanId,
+});
+const batchRenameModal = new BatchRenameModal();
+const settingsView = new SettingsView(document.getElementById('view-settings'));
+const privacyView = new PrivacyView(document.getElementById('view-privacy'));
+const smartView = new SmartView(document.getElementById('view-smart'));
+const softwareAuditView = new SoftwareAuditView(document.getElementById('view-software-audit'));
+const networkView = new NetworkView(document.getElementById('view-network'));
+const systemScoreView = new SystemScoreView(document.getElementById('view-system-score'));
+
+// Refresh explorer after batch rename
+document.addEventListener('batch-rename-complete', () => {
+    dualPanel.getActiveExplorer()?.refresh();
+});
 
 // Wire context menu callbacks
 treeView.onContextMenu = handleContextMenu;
 treemapView.onContextMenu = handleContextMenu;
-searchPanel.onContextMenu = handleContextMenu;
 fileTypeChart.onContextMenu = handleContextMenu;
-explorerView.onContextMenu = handleContextMenu;
 
 // ===== Init =====
 async function init() {
@@ -124,18 +147,28 @@ async function init() {
     await bloatwareView.init();
     await optimizerView.init();
     await updatesView.init();
-    await explorerView.init();
+    await dualPanel.init();
     dashboardView.onNavigate = (tab) => switchToTab(tab);
     await loadDrives();
 
-    // Show admin badge if running with elevated privileges
+    // Check system capabilities
     try {
-        const isAdmin = await window.api.isAdmin();
-        if (isAdmin) {
-            const badge = document.getElementById('admin-badge');
-            if (badge) badge.style.display = '';
+        state.capabilities = await window.api.getSystemCapabilities();
+        if (!state.capabilities.wingetAvailable) {
+            showToast('WinGet nicht verfuegbar - Software-Updates deaktiviert', 'info');
         }
     } catch { /* ignore */ }
+
+    // Show admin badge if running with elevated privileges
+    const isAdmin = state.capabilities?.isAdmin;
+    if (isAdmin) {
+        const badge = document.getElementById('admin-badge');
+        if (badge) badge.style.display = '';
+    }
+
+    // Start battery monitoring
+    await updateBatteryUI();
+    setInterval(updateBatteryUI, 30000);
 
     // Check for restored session data after admin elevation restart (pull-based, no race condition)
     try {
@@ -157,7 +190,6 @@ async function init() {
             els.progressBar.style.width = '100%';
             els.scanProgress.classList.add('active');
 
-            searchPanel.enable(state.currentScanId);
             setStatus('Session wiederhergestellt', true);
             await loadAllViews();
             setStatus('Bereit (Admin-Modus)');
@@ -167,6 +199,28 @@ async function init() {
     } catch (err) {
         console.error('Session restore check failed:', err);
     }
+
+    // Listen for tray actions
+    window.api.onTrayAction((action) => {
+        switch (action) {
+            case 'quick-scan': {
+                const selectedPath = els.toolbarDriveSelect.value;
+                if (selectedPath && !state.scanning) {
+                    startScan(selectedPath, state, els, loadAllViews, setStatus);
+                }
+                break;
+            }
+            case 'check-duplicates':
+                switchToTab('duplicates');
+                break;
+        }
+    });
+
+    // Listen for open-folder from shell integration
+    window.api.onOpenFolder((folderPath) => {
+        switchToTab('explorer');
+        dualPanel.getActiveExplorer()?.navigateTo(folderPath);
+    });
 }
 
 // ===== Sidebar =====
@@ -234,7 +288,20 @@ function renderDrives() {
 }
 
 async function selectDriveByPath(drivePath) {
+    // Battery warning before heavy scan operation
+    if (state.batteryInfo?.onBattery && state.batteryInfo.percentage !== null && state.batteryInfo.percentage < 50) {
+        const result = await window.api.showConfirmDialog({
+            type: 'warning',
+            title: 'Batteriebetrieb',
+            message: `Akku bei ${state.batteryInfo.percentage}%. Scans verbrauchen viel Energie.\n\nTrotzdem fortfahren?`,
+            buttons: ['Abbrechen', 'Fortfahren'],
+            defaultId: 0,
+        });
+        if (result.response !== 1) return;
+    }
+
     state.scanning = true;
+    lowBatteryWarningShown = false;
     state.currentPath = drivePath;
     Object.keys(tabLoaded).forEach(k => tabLoaded[k] = false);
     els.toolbarScanBtn.disabled = true;
@@ -282,7 +349,6 @@ async function onScanComplete(progress) {
     els.progressBar.classList.remove('animating');
 
     state.lastScanProgress = progress;
-    searchPanel.enable(state.currentScanId);
     setStatus('Daten werden geladen...', true);
     await loadAllViews();
     setStatus('Bereit');
@@ -399,6 +465,40 @@ async function autoLoadTab(tabName) {
                 setStatus('Bereit');
             }
             break;
+        case 'settings':
+            tabLoaded.settings = true;
+            await settingsView.load();
+            break;
+        case 'privacy':
+            tabLoaded.privacy = true;
+            setStatus('Datenschutz wird analysiert...', true);
+            await privacyView.init();
+            setStatus('Bereit');
+            break;
+        case 'smart':
+            tabLoaded.smart = true;
+            setStatus('Festplatten werden geprüft...', true);
+            await smartView.init();
+            setStatus('Bereit');
+            break;
+        case 'software-audit':
+            tabLoaded['software-audit'] = true;
+            setStatus('Software wird analysiert...', true);
+            await softwareAuditView.init();
+            setStatus('Bereit');
+            break;
+        case 'network':
+            tabLoaded.network = true;
+            setStatus('Netzwerk wird analysiert...', true);
+            await networkView.init();
+            setStatus('Bereit');
+            break;
+        case 'system-score':
+            tabLoaded['system-score'] = true;
+            setStatus('System-Score wird berechnet...', true);
+            await calculateAndShowSystemScore();
+            setStatus('Bereit');
+            break;
     }
 }
 
@@ -500,7 +600,7 @@ function setupContextMenuActions() {
         const paths = action.selectedPaths || (path ? [path] : []);
         const refresh = () => {
             if (state.activeTab === 'explorer') {
-                explorerView.refresh();
+                dualPanel.getActiveExplorer()?.refresh();
             } else if (state.currentScanId) {
                 treeView.invalidateCache(state.currentPath);
                 treeView.loadRoot();
@@ -515,11 +615,11 @@ function setupContextMenuActions() {
                 window.api.openFile(path);
                 break;
             case 'create-folder':
-                createNewFolder(path || (state.activeTab === 'explorer' ? explorerView.currentPath : state.currentPath), refresh);
+                createNewFolder(path || (state.activeTab === 'explorer' ? (dualPanel.getActiveExplorer()?.currentPath || state.currentPath) : state.currentPath), refresh);
                 break;
             case 'rename':
                 if (state.activeTab === 'explorer' && path) {
-                    explorerView.startInlineRename(path);
+                    dualPanel.getActiveExplorer()?.startInlineRename(path);
                 } else if (path) {
                     treeView.startInlineRename(path);
                 }
@@ -574,9 +674,52 @@ function setupContextMenuActions() {
                 break;
             case 'sort-by':
                 if (state.activeTab === 'explorer' && action.sortCol) {
-                    explorerView.setSortColumn(action.sortCol);
+                    dualPanel.getActiveExplorer()?.setSortColumn(action.sortCol);
                 }
                 break;
+            case 'copy-to-other-panel': {
+                const target = dualPanel.getTargetExplorer();
+                if (target && paths.length > 0) {
+                    window.api.copy(paths, target.currentPath).then(refresh);
+                }
+                break;
+            }
+            case 'move-to-other-panel': {
+                const target = dualPanel.getTargetExplorer();
+                if (target && paths.length > 0) {
+                    window.api.move(paths, target.currentPath).then(refresh);
+                }
+                break;
+            }
+            case 'batch-rename': {
+                const explorer = dualPanel.getActiveExplorer();
+                if (explorer) {
+                    const selected = [...explorer.selectedPaths];
+                    const files = explorer.entries
+                        .filter(e => selected.includes(e.path) && !e.isDirectory)
+                        .map(e => ({ path: e.path, name: e.name }));
+                    if (files.length >= 2) batchRenameModal.open(files);
+                }
+                break;
+            }
+
+            case 'set-tag': {
+                if (path && action.tagColor) {
+                    window.api.setFileTag(path, action.tagColor, '').then(() => {
+                        dualPanel.getActiveExplorer()?.refresh();
+                    });
+                }
+                break;
+            }
+
+            case 'remove-tag': {
+                if (path) {
+                    window.api.removeFileTag(path).then(() => {
+                        dualPanel.getActiveExplorer()?.refresh();
+                    });
+                }
+                break;
+            }
         }
     });
 }
@@ -585,6 +728,31 @@ function setupContextMenuActions() {
 function setupKeyboardShortcuts() {
     document.addEventListener('keydown', (e) => {
         if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+
+        // Global Ctrl+F → switch to Explorer + activate search
+        if (e.ctrlKey && e.key === 'f') {
+            e.preventDefault();
+            if (state.activeTab !== 'explorer') {
+                switchToTab('explorer');
+            }
+            const explorer = dualPanel.getActiveExplorer();
+            if (explorer) explorer.activateOmnibar();
+            return;
+        }
+
+        // Batch-Rename works in explorer tab too (Ctrl+Shift+F2)
+        if (e.key === 'F2' && e.ctrlKey && e.shiftKey && state.activeTab === 'explorer') {
+            e.preventDefault();
+            const explorer = dualPanel.getActiveExplorer();
+            if (explorer && explorer.selectedPaths.size >= 2) {
+                const selected = [...explorer.selectedPaths];
+                const files = explorer.entries
+                    .filter(entry => selected.includes(entry.path) && !entry.isDirectory)
+                    .map(entry => ({ path: entry.path, name: entry.name }));
+                if (files.length >= 2) batchRenameModal.open(files);
+            }
+            return;
+        }
 
         // Explorer tab handles its own keyboard shortcuts
         if (state.activeTab === 'explorer') return;
@@ -684,23 +852,90 @@ function setupPropertiesModal() {
     });
 }
 
-// ===== Search Navigate =====
-function handleSearchNavigate(path, isDir) {
-    if (isDir) {
-        switchToTab('tree');
-        treeView.rootPath = path;
-        treeView.loadRoot();
-    } else if (previewPanel.isVisible()) {
-        previewPanel.show(path);
-    }
-}
-
 // ===== Status Bar =====
 function setStatus(text, loading = false) {
     const statusText = document.getElementById('status-text');
     const statusSpinner = document.getElementById('status-spinner');
     if (statusText) statusText.textContent = text;
     if (statusSpinner) statusSpinner.style.display = loading ? 'inline-block' : 'none';
+}
+
+// ===== Battery Monitoring =====
+let lowBatteryWarningShown = false;
+
+async function updateBatteryUI() {
+    try {
+        const backendStatus = await window.api.getBatteryStatus();
+        let percentage = null;
+        let isCharging = false;
+
+        // Get detailed info from Web Battery API (Chromium)
+        if ('getBattery' in navigator) {
+            const battery = await navigator.getBattery();
+            percentage = Math.round(battery.level * 100);
+            isCharging = battery.charging;
+        }
+
+        state.batteryInfo = {
+            onBattery: backendStatus.onBattery,
+            percentage,
+            isCharging,
+        };
+
+        const badge = document.getElementById('battery-badge');
+        const textEl = document.getElementById('battery-text');
+        if (!badge) return;
+
+        if (state.batteryInfo.onBattery && !isCharging) {
+            badge.style.display = 'inline-flex';
+            textEl.textContent = percentage !== null ? percentage + '%' : 'Akku';
+            badge.classList.toggle('critical', percentage !== null && percentage < 20);
+
+            // One-time low-battery warning during scan
+            if (state.scanning && percentage !== null && percentage < 20 && !lowBatteryWarningShown) {
+                lowBatteryWarningShown = true;
+                showToast('Niedriger Akkustand: ' + percentage + '% - Netzteil anschliessen empfohlen', 'warning');
+            }
+        } else {
+            badge.style.display = 'none';
+        }
+    } catch {
+        // Battery API not available (e.g. desktop PC) - hide badge
+        const badge = document.getElementById('battery-badge');
+        if (badge) badge.style.display = 'none';
+    }
+}
+
+// ===== System Score =====
+async function calculateAndShowSystemScore() {
+    try {
+        const results = {};
+        // Collect scores from already-loaded modules
+        if (privacyView._loaded) results.privacy = { score: privacyView.getScore() };
+        if (smartView._loaded) results.disks = smartView.getDisks();
+        if (softwareAuditView._loaded) results.audit = softwareAuditView.getAuditData();
+        // Run fresh if not loaded yet
+        if (!results.privacy) {
+            try {
+                const settings = await window.api.getPrivacySettings();
+                const priv = settings.filter(s => s.isPrivate).length;
+                results.privacy = { score: settings.length > 0 ? Math.round((priv / settings.length) * 100) : 50 };
+            } catch { results.privacy = { score: 50 }; }
+        }
+        if (!results.disks) {
+            try { results.disks = await window.api.getDiskHealth(); } catch { results.disks = []; }
+        }
+        if (!results.audit) {
+            try {
+                const a = await window.api.auditSoftware();
+                results.audit = { orphanedCount: a.orphanedCount || 0, totalPrograms: a.totalPrograms || 0 };
+            } catch { results.audit = { orphanedCount: 0, totalPrograms: 0 }; }
+        }
+        const scoreData = await window.api.getSystemScore(results);
+        systemScoreView.update(scoreData);
+    } catch (err) {
+        console.error('System score error:', err);
+    }
 }
 
 // ===== Helpers =====

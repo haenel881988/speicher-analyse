@@ -123,6 +123,28 @@ contextBridge.exposeInMainWorld('api', {
     getDriverInfo: () => ipcRenderer.invoke('get-driver-info'),
     getHardwareInfo: () => ipcRenderer.invoke('get-hardware-info'),
 
+    // === Hybrid Search ===
+    searchNameIndex: (scanId, query, options) => ipcRenderer.invoke('search-name-index', scanId, query, options),
+    getNameIndexInfo: (scanId) => ipcRenderer.invoke('get-name-index-info', scanId),
+    deepSearchStart: (rootPath, query, useRegex) => ipcRenderer.invoke('deep-search-start', rootPath, query, useRegex),
+    deepSearchCancel: () => ipcRenderer.invoke('deep-search-cancel'),
+    onDeepSearchResult: (callback) => {
+        ipcRenderer.removeAllListeners('deep-search-result');
+        ipcRenderer.on('deep-search-result', (_e, data) => callback(data));
+    },
+    onDeepSearchProgress: (callback) => {
+        ipcRenderer.removeAllListeners('deep-search-progress');
+        ipcRenderer.on('deep-search-progress', (_e, data) => callback(data));
+    },
+    onDeepSearchComplete: (callback) => {
+        ipcRenderer.removeAllListeners('deep-search-complete');
+        ipcRenderer.on('deep-search-complete', (_e, data) => callback(data));
+    },
+    onDeepSearchError: (callback) => {
+        ipcRenderer.removeAllListeners('deep-search-error');
+        ipcRenderer.on('deep-search-error', (_e, data) => callback(data));
+    },
+
     // === Explorer ===
     listDirectory: (dirPath, maxEntries) => ipcRenderer.invoke('explorer-list-directory', dirPath, maxEntries),
     getKnownFolders: () => ipcRenderer.invoke('explorer-get-known-folders'),
@@ -137,7 +159,76 @@ contextBridge.exposeInMainWorld('api', {
     restartAsAdmin: () => ipcRenderer.invoke('restart-as-admin'),
     getRestoredSession: () => ipcRenderer.invoke('get-restored-session'),
 
+    // === System ===
+    getSystemCapabilities: () => ipcRenderer.invoke('get-system-capabilities'),
+    getBatteryStatus: () => ipcRenderer.invoke('get-battery-status'),
+
     // === Platform ===
     getPlatform: () => ipcRenderer.invoke('get-platform'),
     openExternal: (url) => ipcRenderer.invoke('open-external', url),
+
+    // === File Tags ===
+    getTagColors: () => ipcRenderer.invoke('get-tag-colors'),
+    setFileTag: (filePath, color, note) => ipcRenderer.invoke('set-file-tag', filePath, color, note),
+    removeFileTag: (filePath) => ipcRenderer.invoke('remove-file-tag', filePath),
+    getFileTag: (filePath) => ipcRenderer.invoke('get-file-tag', filePath),
+    getTagsForDirectory: (dirPath) => ipcRenderer.invoke('get-tags-for-directory', dirPath),
+    getAllTags: () => ipcRenderer.invoke('get-all-tags'),
+
+    // === Shell Integration ===
+    registerShellContextMenu: () => ipcRenderer.invoke('register-shell-context-menu'),
+    unregisterShellContextMenu: () => ipcRenderer.invoke('unregister-shell-context-menu'),
+    isShellContextMenuRegistered: () => ipcRenderer.invoke('is-shell-context-menu-registered'),
+
+    // === Global Hotkey ===
+    setGlobalHotkey: (accelerator) => ipcRenderer.invoke('set-global-hotkey', accelerator),
+    getGlobalHotkey: () => ipcRenderer.invoke('get-global-hotkey'),
+
+    // === Terminal ===
+    terminalCreate: (cwd) => ipcRenderer.invoke('terminal-create', cwd),
+    terminalWrite: (id, data) => ipcRenderer.invoke('terminal-write', id, data),
+    terminalDestroy: (id) => ipcRenderer.invoke('terminal-destroy', id),
+    onTerminalData: (callback) => {
+        ipcRenderer.removeAllListeners('terminal-data');
+        ipcRenderer.on('terminal-data', (_e, data) => callback(data));
+    },
+    onTerminalExit: (callback) => {
+        ipcRenderer.removeAllListeners('terminal-exit');
+        ipcRenderer.on('terminal-exit', (_e, data) => callback(data));
+    },
+
+    // === Privacy Dashboard ===
+    getPrivacySettings: () => ipcRenderer.invoke('get-privacy-settings'),
+    applyPrivacySetting: (id) => ipcRenderer.invoke('apply-privacy-setting', id),
+    applyAllPrivacy: () => ipcRenderer.invoke('apply-all-privacy'),
+    getScheduledTasksAudit: () => ipcRenderer.invoke('get-scheduled-tasks-audit'),
+    disableScheduledTask: (taskPath) => ipcRenderer.invoke('disable-scheduled-task', taskPath),
+
+    // === S.M.A.R.T. Disk Health ===
+    getDiskHealth: () => ipcRenderer.invoke('get-disk-health'),
+
+    // === Software Audit ===
+    auditSoftware: () => ipcRenderer.invoke('audit-software'),
+    correlateSoftware: (program) => ipcRenderer.invoke('correlate-software', program),
+
+    // === Network Monitor ===
+    getConnections: () => ipcRenderer.invoke('get-connections'),
+    getBandwidth: () => ipcRenderer.invoke('get-bandwidth'),
+    getFirewallRules: (direction) => ipcRenderer.invoke('get-firewall-rules', direction),
+    blockProcess: (name, path) => ipcRenderer.invoke('block-process', name, path),
+    unblockProcess: (ruleName) => ipcRenderer.invoke('unblock-process', ruleName),
+    getNetworkSummary: () => ipcRenderer.invoke('get-network-summary'),
+
+    // === System Score ===
+    getSystemScore: (results) => ipcRenderer.invoke('get-system-score', results),
+
+    // === Tray Actions (received from main) ===
+    onTrayAction: (callback) => {
+        ipcRenderer.removeAllListeners('tray-action');
+        ipcRenderer.on('tray-action', (_e, action) => callback(action));
+    },
+    onOpenFolder: (callback) => {
+        ipcRenderer.removeAllListeners('open-folder');
+        ipcRenderer.on('open-folder', (_e, folderPath) => callback(folderPath));
+    },
 });

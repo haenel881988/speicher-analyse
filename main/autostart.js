@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { runCmd, runSafe, execFileAsync } = require('./cmd-utils');
+const { runCmd, runPS, execFileAsync } = require('./cmd-utils');
 
 const REGISTRY_LOCATIONS = [
     { key: 'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run', scope: 'Benutzer', type: 'Run' },
@@ -91,34 +91,39 @@ async function getAutoStartEntries() {
         } catch { /* folder not accessible */ }
     }
 
-    // 3. Scheduled Tasks (logon/startup triggers)
+    // 3. Scheduled Tasks (logon/startup triggers) - PowerShell for locale independence
     try {
-        const { stdout } = await runCmd('schtasks /query /fo CSV /v', {
-            timeout: 15000,
-            maxBuffer: 10 * 1024 * 1024,
-        });
-        const lines = stdout.split('\n');
-        for (const line of lines) {
-            if (line.includes('"Bei Anmeldung"') || line.includes('"At log on"') || line.includes('"At startup"') || line.includes('"Beim Start"')) {
-                const cols = parseCSVLine(line);
-                if (cols.length >= 9) {
-                    const taskName = cols[1] || cols[0];
-                    entries.push({
-                        id: `task:${taskName}`,
-                        name: taskName.split('\\').pop(),
-                        command: cols[8] || '',
-                        exePath: null,
-                        location: 'Aufgabenplanung',
-                        locationLabel: 'Aufgabenplanung',
-                        type: 'Task',
-                        source: 'task',
-                        enabled: (cols[3] || '').includes('Bereit') || (cols[3] || '').includes('Ready'),
-                        exists: true,
-                    });
+        const { stdout } = await runPS(`
+            Get-ScheduledTask | Where-Object {
+                $_.Triggers | Where-Object {
+                    $_ -is [CimInstance] -and
+                    ($_.CimClass.CimClassName -eq 'MSFT_TaskLogonTrigger' -or
+                     $_.CimClass.CimClassName -eq 'MSFT_TaskBootTrigger')
                 }
-            }
+            } | Select-Object TaskName, State, TaskPath,
+                @{N='Command'; E={($_.Actions | Select-Object -First 1).Execute}} |
+            ConvertTo-Json -Depth 2
+        `.trim(), { timeout: 15000 });
+
+        const parsed = JSON.parse(stdout.trim() || '[]');
+        const tasks = Array.isArray(parsed) ? parsed : [parsed];
+        for (const task of tasks) {
+            if (!task.TaskName) continue;
+            const taskPath = (task.TaskPath || '') + task.TaskName;
+            entries.push({
+                id: `task:${taskPath}`,
+                name: task.TaskName,
+                command: task.Command || '',
+                exePath: null,
+                location: 'Aufgabenplanung',
+                locationLabel: 'Aufgabenplanung',
+                type: 'Task',
+                source: 'task',
+                enabled: task.State === 'Ready' || task.State === 'Running',
+                exists: true,
+            });
         }
-    } catch { /* schtasks failed */ }
+    } catch { /* Get-ScheduledTask failed */ }
 
     return entries;
 }
@@ -166,7 +171,7 @@ async function toggleAutoStart(entry, enabled) {
         } else if (entry.source === 'task') {
             const taskPath = entry.id.replace('task:', '');
             const action = enabled ? '/enable' : '/disable';
-            await runCmd(`schtasks /change /tn "${taskPath}" ${action}`, { timeout: 5000 });
+            await execFileAsync('schtasks', ['/change', '/tn', taskPath, action], { timeout: 5000, windowsHide: true });
             return { success: true };
         }
         return { success: false, error: 'Nicht unterstützt' };

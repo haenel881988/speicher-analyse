@@ -1,4 +1,4 @@
-const { Menu, BrowserWindow } = require('electron');
+const { Menu, BrowserWindow, app } = require('electron');
 
 function buildAppMenu(mainWindow) {
     const template = [
@@ -84,32 +84,59 @@ function sendAction(mainWindow, action, context) {
     mainWindow.webContents.send('context-menu-action', { action, ...context });
 }
 
+function buildTagSubmenu(ctx, win) {
+    const { TAG_COLORS } = require('./file-tags');
+    const items = [];
+    for (const [key, val] of Object.entries(TAG_COLORS)) {
+        items.push({
+            label: val.label,
+            click: () => sendAction(win, 'set-tag', { ...ctx, tagColor: key }),
+        });
+    }
+    items.push({ type: 'separator' });
+    items.push({
+        label: 'Tag entfernen',
+        click: () => sendAction(win, 'remove-tag', ctx),
+    });
+    return items;
+}
+
 function buildDirectoryMenu(ctx, win) {
-    return [
-        { label: 'Im Explorer öffnen', click: () => sendAction(win, 'show-in-explorer', ctx) },
-        { label: 'Im Terminal öffnen', click: () => sendAction(win, 'open-in-terminal', ctx) },
+    const items = [
+        { label: 'Im Explorer \u00F6ffnen', click: () => sendAction(win, 'show-in-explorer', ctx) },
+        { label: 'Im Terminal \u00F6ffnen', click: () => sendAction(win, 'open-in-terminal', ctx) },
         { type: 'separator' },
         { label: 'Neuer Ordner', click: () => sendAction(win, 'create-folder', ctx) },
         { label: 'Umbenennen', click: () => sendAction(win, 'rename', ctx) },
+        { label: 'Tag', submenu: buildTagSubmenu(ctx, win) },
         { type: 'separator' },
         { label: 'Ausschneiden', click: () => sendAction(win, 'cut', ctx) },
         { label: 'Kopieren', click: () => sendAction(win, 'copy', ctx) },
         { label: 'Pfad kopieren', click: () => sendAction(win, 'copy-path', ctx) },
         { label: 'Einfügen', click: () => sendAction(win, 'paste', ctx) },
-        { type: 'separator' },
-        { label: 'Ordnergröße berechnen', click: () => sendAction(win, 'calculate-folder-size', ctx) },
-        { type: 'separator' },
-        { label: 'Löschen (Papierkorb)', click: () => sendAction(win, 'delete-trash', ctx) },
-        { label: 'Endgültig löschen', click: () => sendAction(win, 'delete-permanent', ctx) },
-        { type: 'separator' },
-        { label: 'Eigenschaften', click: () => sendAction(win, 'properties', ctx) },
     ];
+
+    // Dual-panel operations
+    if (ctx.isDualMode && ctx.targetPath) {
+        items.push({ type: 'separator' });
+        items.push({ label: 'In anderes Panel kopieren', click: () => sendAction(win, 'copy-to-other-panel', ctx) });
+        items.push({ label: 'In anderes Panel verschieben', click: () => sendAction(win, 'move-to-other-panel', ctx) });
+    }
+
+    items.push({ type: 'separator' });
+    items.push({ label: 'Ordnergröße berechnen', click: () => sendAction(win, 'calculate-folder-size', ctx) });
+    items.push({ type: 'separator' });
+    items.push({ label: 'Löschen (Papierkorb)', click: () => sendAction(win, 'delete-trash', ctx) });
+    items.push({ label: 'Endgültig löschen', click: () => sendAction(win, 'delete-permanent', ctx) });
+    items.push({ type: 'separator' });
+    items.push({ label: 'Eigenschaften', click: () => sendAction(win, 'properties', ctx) });
+    return items;
 }
 
 function buildFileMenu(ctx, win) {
     // For "open in terminal", resolve parent directory of the file
     const fileDirCtx = { ...ctx, path: ctx.path ? require('path').dirname(ctx.path) : ctx.path };
-    return [
+    const items = [
         { label: 'Öffnen', click: () => sendAction(win, 'open-file', ctx) },
         { label: 'Öffnen mit...', click: () => sendAction(win, 'open-with', ctx) },
         { label: 'Im Explorer zeigen', click: () => sendAction(win, 'show-in-explorer', ctx) },
@@ -118,13 +145,30 @@ function buildFileMenu(ctx, win) {
         { label: 'Ausschneiden', click: () => sendAction(win, 'cut', ctx) },
         { label: 'Kopieren', click: () => sendAction(win, 'copy', ctx) },
         { label: 'Pfad kopieren', click: () => sendAction(win, 'copy-path', ctx) },
-        { type: 'separator' },
-        { label: 'Umbenennen', click: () => sendAction(win, 'rename', ctx) },
-        { label: 'Löschen (Papierkorb)', click: () => sendAction(win, 'delete-trash', ctx) },
-        { label: 'Endgültig löschen', click: () => sendAction(win, 'delete-permanent', ctx) },
-        { type: 'separator' },
-        { label: 'Eigenschaften', click: () => sendAction(win, 'properties', ctx) },
     ];
+
+    // Dual-panel operations
+    if (ctx.isDualMode && ctx.targetPath) {
+        items.push({ type: 'separator' });
+        items.push({ label: 'In anderes Panel kopieren', click: () => sendAction(win, 'copy-to-other-panel', ctx) });
+        items.push({ label: 'In anderes Panel verschieben', click: () => sendAction(win, 'move-to-other-panel', ctx) });
+    }
+
+    items.push({ type: 'separator' });
+    items.push({ label: 'Umbenennen', click: () => sendAction(win, 'rename', ctx) });
+    items.push({ label: 'Tag', submenu: buildTagSubmenu(ctx, win) });
+
+    // Batch rename when multiple files selected
+    const selCount = ctx.selectedPaths ? ctx.selectedPaths.length : 0;
+    if (selCount >= 2) {
+        items.push({ label: `Batch-Umbenennung (${selCount} Dateien)`, click: () => sendAction(win, 'batch-rename', ctx) });
+    }
+
+    items.push({ label: 'Löschen (Papierkorb)', click: () => sendAction(win, 'delete-trash', ctx) });
+    items.push({ label: 'Endgültig löschen', click: () => sendAction(win, 'delete-permanent', ctx) });
+    items.push({ type: 'separator' });
+    items.push({ label: 'Eigenschaften', click: () => sendAction(win, 'properties', ctx) });
+    return items;
 }
 
 function buildTreemapMenu(ctx, win) {

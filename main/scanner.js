@@ -45,6 +45,7 @@ class DiskScanner {
         this.topFiles = []; // min-heap by size
         this.extensionStats = new Map();
         this.dirFiles = new Map();
+        this.nameIndex = new Map(); // filename.toLowerCase() → [dirPath1, ...]
         this.worker = null;
     }
 
@@ -70,6 +71,7 @@ class DiskScanner {
                 this.topFiles = msg.topFiles;
                 this.extensionStats = new Map(msg.extensionStats);
                 this.dirFiles = new Map(msg.dirFiles);
+                this.nameIndex = new Map(msg.nameIndex);
                 this.dirsScanned = msg.dirsScanned;
                 this.filesFound = msg.filesFound;
                 this.totalSize = msg.totalSize;
@@ -168,6 +170,8 @@ class DiskScanner {
             this.dirFiles.clear();
             this.dirFiles = null;
         }
+        // NOTE: nameIndex is intentionally kept! It's small (~30-50MB for 500K files)
+        // and needed for Hybrid-Suche Ebene 2 after scan.
     }
 
     getFilesByExtension(ext, limit = 500) {
@@ -235,6 +239,65 @@ class DiskScanner {
             }
         }
         return { totalGroups, totalFiles, totalSaveable };
+    }
+
+    searchByName(query, options = {}) {
+        const maxResults = options.maxResults || 500;
+        const results = [];
+        if (!this.nameIndex || this.nameIndex.size === 0) return results;
+
+        const queryLower = query.toLowerCase();
+        const isRegex = query.startsWith('/') && query.endsWith('/') && query.length > 2;
+        let regex = null;
+        if (isRegex) {
+            try { regex = new RegExp(query.slice(1, -1), 'i'); } catch { regex = null; }
+        }
+
+        // Build prefix variants for fuzzy matching (longest first)
+        const minLen = Math.max(3, Math.ceil(queryLower.length * 0.4));
+        const prefixes = [];
+        if (!isRegex) {
+            for (let len = queryLower.length; len >= minLen; len--) {
+                prefixes.push({ prefix: queryLower.substring(0, len), quality: len / queryLower.length });
+            }
+        }
+
+        for (const [nameLower, dirPaths] of this.nameIndex) {
+            let matchQuality = 0;
+            if (regex) {
+                matchQuality = regex.test(nameLower) ? 1.0 : 0;
+            } else {
+                for (const p of prefixes) {
+                    if (nameLower.includes(p.prefix)) {
+                        matchQuality = p.quality;
+                        break;
+                    }
+                }
+            }
+            if (matchQuality === 0) continue;
+
+            for (const dirPath of dirPaths) {
+                results.push({
+                    name: nameLower,
+                    dirPath,
+                    fullPath: path.join(dirPath, nameLower),
+                    matchQuality,
+                });
+                if (results.length >= maxResults) break;
+            }
+            if (results.length >= maxResults) break;
+        }
+        // Sort: exact matches first
+        results.sort((a, b) => b.matchQuality - a.matchQuality);
+        return results;
+    }
+
+    getNameIndexInfo() {
+        return {
+            available: this.nameIndex && this.nameIndex.size > 0,
+            fileCount: this.nameIndex ? this.nameIndex.size : 0,
+            scanTime: this.isComplete ? new Date().toISOString() : null,
+        };
     }
 
     search(query, minSize = 0, maxResults = 200) {

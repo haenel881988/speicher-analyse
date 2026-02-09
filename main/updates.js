@@ -197,7 +197,7 @@ async function getDriverInfo() {
         const { stdout } = await execFileAsync('powershell', [
             '-NoProfile', '-Command',
             PS_UTF8 + `
-            Get-WmiObject Win32_PnPSignedDriver |
+            Get-CimInstance Win32_PnPSignedDriver |
                 Where-Object { $_.DriverDate -and $_.DeviceName } |
                 Select-Object DeviceName, DriverVersion, Manufacturer, DeviceClass, InfName, @{N='DriverDate';E={$_.DriverDate.Substring(0,8)}} |
                 Where-Object { $_.DriverDate -match '^(19[9]\\d|20\\d{2})' } |
@@ -276,8 +276,8 @@ async function getHardwareInfo() {
         const { stdout } = await execFileAsync('powershell', [
             '-NoProfile', '-Command',
             PS_UTF8 + `
-            $cs = Get-WmiObject Win32_ComputerSystem | Select-Object Manufacturer, Model
-            $bios = Get-WmiObject Win32_BIOS | Select-Object SerialNumber
+            $cs = Get-CimInstance Win32_ComputerSystem | Select-Object Manufacturer, Model
+            $bios = Get-CimInstance Win32_BIOS | Select-Object SerialNumber
             @{
                 Manufacturer = $cs.Manufacturer
                 Model = $cs.Model

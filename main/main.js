@@ -6,6 +6,7 @@ process.on('uncaughtException', (err) => {
 });
 
 let mainWindow;
+let isQuitting = false;
 
 function createWindow() {
     mainWindow = new BrowserWindow({
@@ -31,6 +32,14 @@ function createWindow() {
         mainWindow.show();
     });
 
+    // Minimize to tray instead of closing (unless quitting)
+    mainWindow.on('close', (e) => {
+        if (!isQuitting) {
+            e.preventDefault();
+            mainWindow.hide();
+        }
+    });
+
     // Build application menu
     const { buildAppMenu } = require('./menu');
     Menu.setApplicationMenu(buildAppMenu(mainWindow));
@@ -38,9 +47,53 @@ function createWindow() {
     // Register IPC handlers
     const { register } = require('./ipc-handlers');
     register(mainWindow);
+
+    // System Tray
+    try {
+        const { createTray } = require('./tray');
+        createTray(mainWindow);
+    } catch (err) {
+        console.error('Tray init error:', err);
+    }
+
+    // Global Hotkey (Ctrl+Shift+S)
+    try {
+        const { registerGlobalHotkey } = require('./global-hotkey');
+        registerGlobalHotkey(mainWindow);
+    } catch (err) {
+        console.error('Global hotkey init error:', err);
+    }
+
+    // File Tags
+    try {
+        const { FileTagStore } = require('./file-tags');
+        const tagStore = new FileTagStore();
+        tagStore.init();
+        app._tagStore = tagStore;
+    } catch (err) {
+        console.error('File tags init error:', err);
+    }
+
+    // Handle --open-folder argument (from shell integration)
+    const openFolderArg = process.argv.find(a => a.startsWith('--open-folder='));
+    if (openFolderArg) {
+        const folderPath = openFolderArg.split('=')[1];
+        mainWindow.webContents.once('did-finish-load', () => {
+            mainWindow.webContents.send('open-folder', folderPath);
+        });
+    }
 }
 
 app.whenReady().then(createWindow);
+
+app.on('before-quit', () => {
+    isQuitting = true;
+    if (app._tagStore) app._tagStore.flush();
+    const { unregisterGlobalHotkey } = require('./global-hotkey');
+    unregisterGlobalHotkey();
+    const { destroyTray } = require('./tray');
+    destroyTray();
+});
 
 app.on('window-all-closed', () => {
     app.quit();
