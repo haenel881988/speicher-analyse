@@ -1,9 +1,6 @@
-const { execFile } = require('child_process');
-const util = require('util');
 const fs = require('fs');
 const path = require('path');
-
-const execFileAsync = util.promisify(execFile);
+const { runCmd, runSafe } = require('./cmd-utils');
 
 // Safety: NEVER touch these paths
 const BLOCKED_PATHS = [
@@ -24,10 +21,8 @@ function isBlocked(regPath) {
 
 async function regQuery(keyPath) {
     try {
-        const { stdout } = await execFileAsync('reg', ['query', keyPath, '/s'], {
-            encoding: 'utf8',
-            timeout: 30000,
-            windowsHide: true,
+        const { stdout } = await runCmd(`reg query "${keyPath}" /s`, {
+            timeout: 30000, maxBuffer: 10 * 1024 * 1024,
         });
         return stdout;
     } catch (err) {
@@ -38,11 +33,7 @@ async function regQuery(keyPath) {
 
 async function regQueryValues(keyPath) {
     try {
-        const { stdout } = await execFileAsync('reg', ['query', keyPath], {
-            encoding: 'utf8',
-            timeout: 10000,
-            windowsHide: true,
-        });
+        const { stdout } = await runCmd(`reg query "${keyPath}"`, { timeout: 10000 });
         return parseRegValues(stdout);
     } catch {
         return [];
@@ -238,10 +229,8 @@ async function generateBackup(entries) {
             }
         } else {
             try {
-                const { stdout } = await execFileAsync('reg', ['export', entry.key, '/y', 'CON'], {
-                    encoding: 'utf8',
+                const { stdout } = await runCmd(`reg export "${entry.key}" CON /y`, {
                     timeout: 5000,
-                    windowsHide: true,
                 });
                 reg += stdout + '\n';
             } catch {
@@ -277,15 +266,9 @@ async function deleteEntries(entries) {
 
         try {
             if (entry.valueName) {
-                await execFileAsync('reg', ['delete', entry.key, '/v', entry.valueName, '/f'], {
-                    timeout: 5000,
-                    windowsHide: true,
-                });
+                await runCmd(`reg delete "${entry.key}" /v "${entry.valueName}" /f`, { timeout: 5000 });
             } else {
-                await execFileAsync('reg', ['delete', entry.key, '/f'], {
-                    timeout: 5000,
-                    windowsHide: true,
-                });
+                await runCmd(`reg delete "${entry.key}" /f`, { timeout: 5000 });
             }
             results.push({ ...entry, success: true });
         } catch (err) {
@@ -298,10 +281,7 @@ async function deleteEntries(entries) {
 
 async function restoreBackup(regFilePath) {
     try {
-        await execFileAsync('reg', ['import', regFilePath], {
-            timeout: 30000,
-            windowsHide: true,
-        });
+        await runCmd(`reg import "${regFilePath}"`, { timeout: 30000 });
         return { success: true };
     } catch (err) {
         return { success: false, error: err.message };

@@ -87,13 +87,17 @@ function sendAction(mainWindow, action, context) {
 function buildDirectoryMenu(ctx, win) {
     return [
         { label: 'Im Explorer öffnen', click: () => sendAction(win, 'show-in-explorer', ctx) },
+        { label: 'Im Terminal öffnen', click: () => sendAction(win, 'open-in-terminal', ctx) },
         { type: 'separator' },
         { label: 'Neuer Ordner', click: () => sendAction(win, 'create-folder', ctx) },
         { label: 'Umbenennen', click: () => sendAction(win, 'rename', ctx) },
         { type: 'separator' },
         { label: 'Ausschneiden', click: () => sendAction(win, 'cut', ctx) },
         { label: 'Kopieren', click: () => sendAction(win, 'copy', ctx) },
+        { label: 'Pfad kopieren', click: () => sendAction(win, 'copy-path', ctx) },
         { label: 'Einfügen', click: () => sendAction(win, 'paste', ctx) },
+        { type: 'separator' },
+        { label: 'Ordnergröße berechnen', click: () => sendAction(win, 'calculate-folder-size', ctx) },
         { type: 'separator' },
         { label: 'Löschen (Papierkorb)', click: () => sendAction(win, 'delete-trash', ctx) },
         { label: 'Endgültig löschen', click: () => sendAction(win, 'delete-permanent', ctx) },
@@ -103,12 +107,17 @@ function buildDirectoryMenu(ctx, win) {
 }
 
 function buildFileMenu(ctx, win) {
+    // For "open in terminal", resolve parent directory of the file
+    const fileDirCtx = { ...ctx, path: ctx.path ? require('path').dirname(ctx.path) : ctx.path };
     return [
         { label: 'Öffnen', click: () => sendAction(win, 'open-file', ctx) },
+        { label: 'Öffnen mit...', click: () => sendAction(win, 'open-with', ctx) },
         { label: 'Im Explorer zeigen', click: () => sendAction(win, 'show-in-explorer', ctx) },
+        { label: 'Im Terminal öffnen', click: () => sendAction(win, 'open-in-terminal', fileDirCtx) },
         { type: 'separator' },
         { label: 'Ausschneiden', click: () => sendAction(win, 'cut', ctx) },
         { label: 'Kopieren', click: () => sendAction(win, 'copy', ctx) },
+        { label: 'Pfad kopieren', click: () => sendAction(win, 'copy-path', ctx) },
         { type: 'separator' },
         { label: 'Umbenennen', click: () => sendAction(win, 'rename', ctx) },
         { label: 'Löschen (Papierkorb)', click: () => sendAction(win, 'delete-trash', ctx) },
@@ -132,6 +141,18 @@ function buildBackgroundMenu(ctx, win) {
     return [
         { label: 'Neuer Ordner', click: () => sendAction(win, 'create-folder', ctx) },
         { label: 'Einfügen', click: () => sendAction(win, 'paste', ctx) },
+        { type: 'separator' },
+        { label: 'Im Terminal öffnen', click: () => sendAction(win, 'open-in-terminal', ctx) },
+        { type: 'separator' },
+        {
+            label: 'Sortieren nach',
+            submenu: [
+                { label: 'Name', click: () => sendAction(win, 'sort-by', { ...ctx, sortCol: 'name' }) },
+                { label: 'Größe', click: () => sendAction(win, 'sort-by', { ...ctx, sortCol: 'size' }) },
+                { label: 'Typ', click: () => sendAction(win, 'sort-by', { ...ctx, sortCol: 'type' }) },
+                { label: 'Datum', click: () => sendAction(win, 'sort-by', { ...ctx, sortCol: 'modified' }) },
+            ],
+        },
         { type: 'separator' },
         { label: 'Aktualisieren', click: () => sendAction(win, 'refresh', ctx) },
     ];

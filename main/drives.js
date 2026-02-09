@@ -1,18 +1,17 @@
-const { execSync } = require('child_process');
 const fs = require('fs');
+const { runCmd } = require('./cmd-utils');
 
-function listDrives() {
+async function listDrives() {
     const drives = [];
 
     if (process.platform === 'win32') {
         try {
-            // Use wmic to list logical disks
-            const output = execSync(
+            const { stdout } = await runCmd(
                 'wmic logicaldisk get Caption,FileSystem,Size,FreeSpace /format:csv',
-                { encoding: 'utf8', timeout: 5000 }
+                { timeout: 10000 }
             );
 
-            const lines = output.trim().split('\n').filter(l => l.trim());
+            const lines = stdout.trim().split('\n').filter(l => l.trim());
             // Skip header line
             for (let i = 1; i < lines.length; i++) {
                 const parts = lines[i].trim().split(',');
@@ -66,10 +65,10 @@ function listDrives() {
     } else {
         // Linux/Mac fallback
         try {
-            const output = execSync('df -B1 --output=source,fstype,size,used,avail,target 2>/dev/null || df -k', {
-                encoding: 'utf8', timeout: 5000,
+            const { stdout } = await runCmd('df -B1 --output=source,fstype,size,used,avail,target 2>/dev/null || df -k', {
+                timeout: 5000,
             });
-            const lines = output.trim().split('\n');
+            const lines = stdout.trim().split('\n');
             for (let i = 1; i < lines.length; i++) {
                 const parts = lines[i].trim().split(/\s+/);
                 if (parts.length >= 6) {

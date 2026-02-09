@@ -21,6 +21,7 @@ import { ServicesView } from './services.js';
 import { BloatwareView } from './bloatware.js';
 import { OptimizerView } from './optimizer.js';
 import { UpdatesView } from './updates.js';
+import { ExplorerView } from './explorer.js';
 
 // ===== State =====
 const state = {
@@ -96,12 +97,14 @@ const servicesView = new ServicesView(document.getElementById('view-services'));
 const bloatwareView = new BloatwareView(document.getElementById('view-bloatware'));
 const optimizerView = new OptimizerView(document.getElementById('view-optimizer'));
 const updatesView = new UpdatesView(document.getElementById('view-updates'));
+const explorerView = new ExplorerView(document.getElementById('view-explorer'));
 
 // Wire context menu callbacks
 treeView.onContextMenu = handleContextMenu;
 treemapView.onContextMenu = handleContextMenu;
 searchPanel.onContextMenu = handleContextMenu;
 fileTypeChart.onContextMenu = handleContextMenu;
+explorerView.onContextMenu = handleContextMenu;
 
 // ===== Init =====
 async function init() {
@@ -121,13 +124,48 @@ async function init() {
     await bloatwareView.init();
     await optimizerView.init();
     await updatesView.init();
+    await explorerView.init();
     dashboardView.onNavigate = (tab) => switchToTab(tab);
     await loadDrives();
 
-    // Auto-scan C: drive on startup
-    const cDrive = state.drives.find(d => d.mountpoint.toUpperCase().startsWith('C'));
-    if (cDrive) {
-        selectDriveByPath(cDrive.mountpoint);
+    // Show admin badge if running with elevated privileges
+    try {
+        const isAdmin = await window.api.isAdmin();
+        if (isAdmin) {
+            const badge = document.getElementById('admin-badge');
+            if (badge) badge.style.display = '';
+        }
+    } catch { /* ignore */ }
+
+    // Check for restored session data after admin elevation restart (pull-based, no race condition)
+    try {
+        const sessions = await window.api.getRestoredSession();
+        if (sessions && sessions.length > 0) {
+            const progress = sessions[0];
+            state.currentScanId = progress.scan_id;
+            state.currentPath = progress.current_path;
+            state.lastScanProgress = progress;
+
+            // Select drive in dropdown WITHOUT starting a new scan
+            const driveLetter = progress.current_path.substring(0, 3).toUpperCase();
+            const opt = [...els.toolbarDriveSelect.options].find(o => o.value.toUpperCase().startsWith(driveLetter));
+            if (opt) els.toolbarDriveSelect.value = opt.value;
+
+            // Show restored scan info
+            els.progressStats.textContent =
+                `Wiederhergestellt: ${formatNumber(progress.dirs_scanned)} Ordner \u00B7 ${formatNumber(progress.files_found)} Dateien \u00B7 ${formatBytes(progress.total_size)}`;
+            els.progressBar.style.width = '100%';
+            els.scanProgress.classList.add('active');
+
+            searchPanel.enable(state.currentScanId);
+            setStatus('Session wiederhergestellt', true);
+            await loadAllViews();
+            setStatus('Bereit (Admin-Modus)');
+            showToast('Scan-Daten wurden wiederhergestellt');
+            setTimeout(() => els.scanProgress.classList.remove('active'), 3000);
+        }
+    } catch (err) {
+        console.error('Session restore check failed:', err);
     }
 }
 
@@ -461,7 +499,9 @@ function setupContextMenuActions() {
         const path = action.path;
         const paths = action.selectedPaths || (path ? [path] : []);
         const refresh = () => {
-            if (state.currentScanId) {
+            if (state.activeTab === 'explorer') {
+                explorerView.refresh();
+            } else if (state.currentScanId) {
                 treeView.invalidateCache(state.currentPath);
                 treeView.loadRoot();
             }
@@ -475,10 +515,14 @@ function setupContextMenuActions() {
                 window.api.openFile(path);
                 break;
             case 'create-folder':
-                createNewFolder(path || state.currentPath, refresh);
+                createNewFolder(path || (state.activeTab === 'explorer' ? explorerView.currentPath : state.currentPath), refresh);
                 break;
             case 'rename':
-                if (path) treeView.startInlineRename(path);
+                if (state.activeTab === 'explorer' && path) {
+                    explorerView.startInlineRename(path);
+                } else if (path) {
+                    treeView.startInlineRename(path);
+                }
                 break;
             case 'cut':
                 if (paths.length > 0) clipboardCut(paths);
@@ -512,6 +556,27 @@ function setupContextMenuActions() {
                 break;
             case 'new-scan':
                 break;
+            case 'copy-path':
+                if (path) window.api.copyToClipboard(path);
+                break;
+            case 'open-in-terminal':
+                if (path) window.api.openInTerminal(path);
+                break;
+            case 'open-with':
+                if (path) window.api.openWithDialog(path);
+                break;
+            case 'calculate-folder-size':
+                if (path) {
+                    window.api.calculateFolderSize(path).then(result => {
+                        showToast(`${formatBytes(result.totalSize)} (${formatNumber(result.fileCount)} Dateien, ${formatNumber(result.dirCount)} Ordner)`, 'info');
+                    });
+                }
+                break;
+            case 'sort-by':
+                if (state.activeTab === 'explorer' && action.sortCol) {
+                    explorerView.setSortColumn(action.sortCol);
+                }
+                break;
         }
     });
 }
@@ -520,6 +585,9 @@ function setupContextMenuActions() {
 function setupKeyboardShortcuts() {
     document.addEventListener('keydown', (e) => {
         if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+
+        // Explorer tab handles its own keyboard shortcuts
+        if (state.activeTab === 'explorer') return;
 
         const selectedPaths = treeView.getSelectedPaths ? treeView.getSelectedPaths() : [];
         const selected = selectedPaths.length > 0 ? selectedPaths[0] : treeView.getSelectedPath();

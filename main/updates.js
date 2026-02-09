@@ -4,11 +4,14 @@ const { execFile } = require('child_process');
 const { promisify } = require('util');
 const execFileAsync = promisify(execFile);
 
+// UTF-8 prefix for PowerShell commands
+const PS_UTF8 = '[Console]::OutputEncoding = [Text.UTF8Encoding]::UTF8; ';
+
 async function checkWindowsUpdates() {
     try {
         const { stdout } = await execFileAsync('powershell', [
             '-NoProfile', '-Command',
-            `
+            PS_UTF8 + `
             $session = New-Object -ComObject Microsoft.Update.Session
             $searcher = $session.CreateUpdateSearcher()
             try {
@@ -45,7 +48,7 @@ async function getUpdateHistory() {
     try {
         const { stdout } = await execFileAsync('powershell', [
             '-NoProfile', '-Command',
-            `
+            PS_UTF8 + `
             $session = New-Object -ComObject Microsoft.Update.Session
             $searcher = $session.CreateUpdateSearcher()
             $count = $searcher.GetTotalHistoryCount()
@@ -193,7 +196,7 @@ async function getDriverInfo() {
     try {
         const { stdout } = await execFileAsync('powershell', [
             '-NoProfile', '-Command',
-            `
+            PS_UTF8 + `
             Get-WmiObject Win32_PnPSignedDriver |
                 Where-Object { $_.DriverDate -and $_.DeviceName } |
                 Select-Object DeviceName, DriverVersion, Manufacturer, DeviceClass, InfName, @{N='DriverDate';E={$_.DriverDate.Substring(0,8)}} |
@@ -272,7 +275,7 @@ async function getHardwareInfo() {
     try {
         const { stdout } = await execFileAsync('powershell', [
             '-NoProfile', '-Command',
-            `
+            PS_UTF8 + `
             $cs = Get-WmiObject Win32_ComputerSystem | Select-Object Manufacturer, Model
             $bios = Get-WmiObject Win32_BIOS | Select-Object SerialNumber
             @{

@@ -1,9 +1,6 @@
-const { execFile } = require('child_process');
-const util = require('util');
 const fs = require('fs');
 const path = require('path');
-
-const execFileAsync = util.promisify(execFile);
+const { runCmd, runSafe, execFileAsync } = require('./cmd-utils');
 
 const REGISTRY_LOCATIONS = [
     { key: 'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run', scope: 'Benutzer', type: 'Run' },
@@ -96,10 +93,9 @@ async function getAutoStartEntries() {
 
     // 3. Scheduled Tasks (logon/startup triggers)
     try {
-        const { stdout } = await execFileAsync('schtasks', ['/query', '/fo', 'CSV', '/v'], {
-            encoding: 'utf8',
+        const { stdout } = await runCmd('schtasks /query /fo CSV /v', {
             timeout: 15000,
-            windowsHide: true,
+            maxBuffer: 10 * 1024 * 1024,
         });
         const lines = stdout.split('\n');
         for (const line of lines) {
@@ -170,9 +166,7 @@ async function toggleAutoStart(entry, enabled) {
         } else if (entry.source === 'task') {
             const taskPath = entry.id.replace('task:', '');
             const action = enabled ? '/enable' : '/disable';
-            await execFileAsync('schtasks', ['/change', '/tn', taskPath, action], {
-                timeout: 5000, windowsHide: true,
-            });
+            await runCmd(`schtasks /change /tn "${taskPath}" ${action}`, { timeout: 5000 });
             return { success: true };
         }
         return { success: false, error: 'Nicht unterstützt' };

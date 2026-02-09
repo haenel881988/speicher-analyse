@@ -1,7 +1,4 @@
-const { execFile } = require('child_process');
-const util = require('util');
-
-const execFileAsync = util.promisify(execFile);
+const { runSafe, runPS } = require('./cmd-utils');
 
 function mapStartType(val) {
     const map = { 0: 'Boot', 1: 'System', 2: 'Automatic', 3: 'Manual', 4: 'Disabled' };
@@ -14,15 +11,10 @@ function mapStatus(val) {
 }
 
 async function getServices() {
-    const { stdout } = await execFileAsync('powershell', [
-        '-NoProfile', '-Command',
-        'Get-Service | Select-Object Name, DisplayName, Status, StartType | ConvertTo-Json -Compress'
-    ], {
-        encoding: 'utf8',
-        timeout: 30000,
-        windowsHide: true,
-        maxBuffer: 10 * 1024 * 1024,
-    });
+    const { stdout } = await runPS(
+        'Get-Service | Select-Object Name, DisplayName, Status, StartType | ConvertTo-Json -Compress',
+        { timeout: 30000, maxBuffer: 10 * 1024 * 1024 }
+    );
 
     const raw = JSON.parse(stdout);
     const services = Array.isArray(raw) ? raw : [raw];
@@ -37,10 +29,7 @@ async function getServices() {
 async function controlService(serviceName, action) {
     const scAction = action === 'start' ? 'start' : 'stop';
     try {
-        await execFileAsync('sc', [scAction, serviceName], {
-            timeout: 30000,
-            windowsHide: true,
-        });
+        await runSafe('sc', [scAction, serviceName], { timeout: 30000 });
         return { success: true };
     } catch (err) {
         return { success: false, error: err.stderr || err.message || String(err) };
@@ -49,11 +38,12 @@ async function controlService(serviceName, action) {
 
 async function setStartType(serviceName, startType) {
     // Valid values: auto, demand, disabled
+    const valid = ['auto', 'demand', 'disabled', 'delayed-auto'];
+    if (!valid.includes(startType)) {
+        return { success: false, error: `Ungültiger Starttyp: ${startType}` };
+    }
     try {
-        await execFileAsync('sc', ['config', serviceName, `start=${startType}`], {
-            timeout: 10000,
-            windowsHide: true,
-        });
+        await runSafe('sc', ['config', serviceName, `start=${startType}`], { timeout: 10000 });
         return { success: true };
     } catch (err) {
         return { success: false, error: err.stderr || err.message || String(err) };

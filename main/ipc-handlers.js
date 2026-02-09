@@ -17,6 +17,8 @@ const services = require('./services');
 const bloatware = require('./bloatware');
 const optimizer = require('./optimizer');
 const updates = require('./updates');
+const explorer = require('./explorer');
+const admin = require('./admin');
 
 // In-memory scan storage
 const scans = new Map();
@@ -415,6 +417,54 @@ function register(mainWindow) {
         return updates.getHardwareInfo();
     });
 
+    // === Explorer ===
+    ipcMain.handle('explorer-list-directory', async (_event, dirPath, maxEntries) => {
+        return explorer.listDirectory(dirPath, maxEntries);
+    });
+
+    ipcMain.handle('explorer-get-known-folders', async () => {
+        return explorer.getKnownFolders();
+    });
+
+    ipcMain.handle('explorer-calculate-folder-size', async (_event, dirPath) => {
+        return explorer.calculateFolderSize(dirPath);
+    });
+
+    ipcMain.handle('explorer-find-empty-folders', async (_event, dirPath, maxDepth) => {
+        return explorer.findEmptyFolders(dirPath, maxDepth);
+    });
+
+    // === Clipboard (path copy) ===
+    ipcMain.handle('copy-to-clipboard', async (_event, text) => {
+        const { clipboard } = require('electron');
+        clipboard.writeText(text);
+        return { success: true };
+    });
+
+    // === Open in Terminal ===
+    ipcMain.handle('open-in-terminal', async (_event, dirPath) => {
+        const { execFile: spawnExec } = require('child_process');
+        const resolved = path.resolve(dirPath);
+        // Use execFile with array args to prevent injection; unref to not block app quit
+        const child = spawnExec('powershell', ['-NoExit', '-Command', `Set-Location -LiteralPath '${resolved.replace(/'/g, "''")}'`], {
+            cwd: resolved, windowsHide: false, detached: true, stdio: 'ignore',
+        });
+        child.unref();
+        return { success: true };
+    });
+
+    // === Open With dialog ===
+    ipcMain.handle('open-with-dialog', async (_event, filePath) => {
+        const { execFile: spawnExec } = require('child_process');
+        const resolved = path.resolve(filePath);
+        // Use execFile with array args to prevent injection; unref to not block app quit
+        const child = spawnExec('rundll32', ['shell32.dll,OpenAs_RunDLL', resolved], {
+            windowsHide: false, detached: true, stdio: 'ignore',
+        });
+        child.unref();
+        return { success: true };
+    });
+
     // === Platform ===
     ipcMain.handle('get-platform', async () => {
         return process.platform;
@@ -425,6 +475,67 @@ function register(mainWindow) {
         if (url && (url.startsWith('https://') || url.startsWith('http://'))) {
             await shell.openExternal(url);
         }
+    });
+
+    // === Admin Elevation ===
+    ipcMain.handle('is-admin', async () => {
+        return admin.isAdmin();
+    });
+
+    ipcMain.handle('restart-as-admin', async () => {
+        try {
+            await admin.restartAsAdmin(scans);
+            return { success: true };
+        } catch (err) {
+            return { success: false, error: err.message };
+        }
+    });
+
+    // === Restore Elevated Session (pull-based) ===
+    // Load session data eagerly at startup, renderer awaits the promise when ready
+    let restoredSessions = null;
+    const sessionLoadPromise = (async () => {
+        const sessions = await admin.loadElevatedSession();
+        if (sessions && sessions.length > 0) {
+            for (const session of sessions) {
+                const scanner = admin.reconstructScanner(session);
+                scans.set(session.scanId, scanner);
+            }
+            restoredSessions = sessions.map(s => ({
+                scan_id: s.scanId,
+                status: 'complete',
+                current_path: s.rootPath,
+                dirs_scanned: s.dirsScanned,
+                files_found: s.filesFound,
+                total_size: s.totalSize,
+                errors_count: s.errorsCount,
+                elapsed_seconds: 0,
+            }));
+        }
+    })().catch(err => console.error('Session restore failed:', err));
+
+    // Renderer calls this to check for restored session data
+    // Awaits the loading promise to guarantee data is ready (no race condition)
+    ipcMain.handle('get-restored-session', async () => {
+        await sessionLoadPromise;
+        const data = restoredSessions;
+        restoredSessions = null; // one-time read
+        return data;
+    });
+
+    // Cleanup on app quit: terminate workers and release memory
+    const { app } = require('electron');
+    app.on('before-quit', () => {
+        for (const [id, scanner] of scans) {
+            if (scanner.worker) {
+                try { scanner.worker.terminate(); } catch {}
+            }
+        }
+        scans.clear();
+        for (const [id, finder] of duplicateFinders) {
+            try { finder.cancel(); } catch {}
+        }
+        duplicateFinders.clear();
     });
 }
 

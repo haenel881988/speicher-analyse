@@ -89,6 +89,10 @@ class DiskScanner {
             this.status = 'error';
             this.isComplete = true;
             this.currentPath = err.message;
+            if (this.worker) {
+                try { this.worker.terminate(); } catch {}
+                this.worker = null;
+            }
             if (onError) onError(this.getProgress());
         });
     }
@@ -288,6 +292,7 @@ class DiskScanner {
 
 // Simple glob matching (supports * and ?)
 function globMatch(str, pattern) {
+    if (pattern.length > 200) return str.includes(pattern);
     const regex = pattern
         .replace(/[.+^${}()|[\]\\]/g, '\\$&')
         .replace(/\*/g, '.*')

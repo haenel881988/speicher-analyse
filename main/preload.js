@@ -123,6 +123,20 @@ contextBridge.exposeInMainWorld('api', {
     getDriverInfo: () => ipcRenderer.invoke('get-driver-info'),
     getHardwareInfo: () => ipcRenderer.invoke('get-hardware-info'),
 
+    // === Explorer ===
+    listDirectory: (dirPath, maxEntries) => ipcRenderer.invoke('explorer-list-directory', dirPath, maxEntries),
+    getKnownFolders: () => ipcRenderer.invoke('explorer-get-known-folders'),
+    calculateFolderSize: (dirPath) => ipcRenderer.invoke('explorer-calculate-folder-size', dirPath),
+    findEmptyFolders: (dirPath, maxDepth) => ipcRenderer.invoke('explorer-find-empty-folders', dirPath, maxDepth),
+    copyToClipboard: (text) => ipcRenderer.invoke('copy-to-clipboard', text),
+    openInTerminal: (dirPath) => ipcRenderer.invoke('open-in-terminal', dirPath),
+    openWithDialog: (filePath) => ipcRenderer.invoke('open-with-dialog', filePath),
+
+    // === Admin ===
+    isAdmin: () => ipcRenderer.invoke('is-admin'),
+    restartAsAdmin: () => ipcRenderer.invoke('restart-as-admin'),
+    getRestoredSession: () => ipcRenderer.invoke('get-restored-session'),
+
     // === Platform ===
     getPlatform: () => ipcRenderer.invoke('get-platform'),
     openExternal: (url) => ipcRenderer.invoke('open-external', url),

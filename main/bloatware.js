@@ -1,10 +1,8 @@
 'use strict';
 
-const { execFile } = require('child_process');
-const { promisify } = require('util');
 const path = require('path');
 const fs = require('fs');
-const execFileAsync = promisify(execFile);
+const { runCmd, execFileAsync } = require('./cmd-utils');
 
 // Kuratierte Bloatware-Datenbank
 const BLOATWARE_DB = [
@@ -94,9 +92,8 @@ async function getInstalledPrograms() {
 
     for (const regPath of regPaths) {
         try {
-            const { stdout } = await execFileAsync('reg', ['query', regPath, '/s'], {
-                encoding: 'utf8', timeout: 30000, windowsHide: true,
-                maxBuffer: 10 * 1024 * 1024,
+            const { stdout } = await runCmd(`reg query "${regPath}" /s`, {
+                timeout: 30000, maxBuffer: 10 * 1024 * 1024,
             });
             const entries = parseRegistryOutput(stdout, regPath);
             programs.push(...entries);
@@ -220,11 +217,18 @@ async function uninstallProgram(entry) {
             const quoteMatch = command.match(/^"([^"]+)"\s*(.*)/);
             if (quoteMatch) {
                 exe = quoteMatch[1];
-                args = quoteMatch[2] ? quoteMatch[2].split(/\s+/) : [];
+                args = quoteMatch[2] ? quoteMatch[2].split(/\s+/).filter(Boolean) : [];
             } else {
-                const parts = command.split(/\s+/);
-                exe = parts[0];
-                args = parts.slice(1);
+                // Pfad ohne Anführungszeichen: suche nach .exe im String
+                const exeMatch = command.match(/^(.+?\.exe)\s*(.*)/i);
+                if (exeMatch) {
+                    exe = exeMatch[1];
+                    args = exeMatch[2] ? exeMatch[2].split(/\s+/).filter(Boolean) : [];
+                } else {
+                    const parts = command.split(/\s+/);
+                    exe = parts[0];
+                    args = parts.slice(1);
+                }
             }
         }
 

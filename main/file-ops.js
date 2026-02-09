@@ -2,6 +2,20 @@ const fs = require('fs');
 const path = require('path');
 const { shell } = require('electron');
 
+// Protected system paths - never delete these
+const PROTECTED_ROOTS = [
+    'C:\\Windows', 'C:\\Program Files', 'C:\\Program Files (x86)',
+    'C:\\ProgramData', 'C:\\Users\\Default', 'C:\\Recovery',
+    'C:\\$Recycle.Bin', 'C:\\System Volume Information',
+];
+
+function isProtectedPath(p) {
+    const normalized = path.resolve(p).toLowerCase();
+    // Block root drives (e.g. C:\)
+    if (/^[a-z]:\\?$/i.test(normalized)) return true;
+    return PROTECTED_ROOTS.some(root => normalized === root.toLowerCase() || normalized.startsWith(root.toLowerCase() + '\\'));
+}
+
 function friendlyError(err, filePath) {
     const name = path.basename(filePath);
     if (err.code === 'EACCES' || err.code === 'EPERM') {
@@ -39,6 +53,10 @@ async function retryOnBusy(fn, retries = 3, delayMs = 500) {
 async function trashItems(paths) {
     const results = [];
     for (const p of paths) {
+        if (isProtectedPath(p)) {
+            results.push({ path: p, success: false, error: `"${path.basename(p)}" ist ein geschützter Systempfad und kann nicht gelöscht werden.` });
+            continue;
+        }
         try {
             await retryOnBusy(() => shell.trashItem(p));
             results.push({ path: p, success: true });
@@ -52,9 +70,16 @@ async function trashItems(paths) {
 async function deleteItems(paths) {
     const results = [];
     for (const p of paths) {
+        if (isProtectedPath(p)) {
+            results.push({ path: p, success: false, error: `"${path.basename(p)}" ist ein geschützter Systempfad und kann nicht gelöscht werden.` });
+            continue;
+        }
         try {
-            const stat = await fs.promises.stat(p);
-            if (stat.isDirectory()) {
+            const stat = await fs.promises.lstat(p);
+            if (stat.isSymbolicLink()) {
+                // Symlinks: nur den Link entfernen, nicht dem Ziel folgen
+                await retryOnBusy(() => fs.promises.unlink(p));
+            } else if (stat.isDirectory()) {
                 await retryOnBusy(() => fs.promises.rm(p, { recursive: true, force: true }));
             } else {
                 await retryOnBusy(() => fs.promises.unlink(p));
@@ -139,6 +164,12 @@ async function copyWithProgress(src, dest, mainWindow) {
             const readStream = fs.createReadStream(src);
             const writeStream = fs.createWriteStream(dest);
 
+            function cleanup(err) {
+                readStream.destroy();
+                writeStream.destroy();
+                reject(err);
+            }
+
             readStream.on('data', (chunk) => {
                 copied += chunk.length;
                 if (mainWindow && !mainWindow.isDestroyed()) {
@@ -152,8 +183,8 @@ async function copyWithProgress(src, dest, mainWindow) {
                 }
             });
 
-            readStream.on('error', reject);
-            writeStream.on('error', reject);
+            readStream.on('error', cleanup);
+            writeStream.on('error', cleanup);
             writeStream.on('finish', resolve);
             readStream.pipe(writeStream);
         });

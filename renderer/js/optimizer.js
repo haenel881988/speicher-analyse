@@ -140,6 +140,10 @@ export class OptimizerView {
                 btn.classList.add('btn-success-done');
                 btn.style.color = 'var(--success)';
                 btn.style.borderColor = 'var(--success)';
+            } else if (result.requiresAdmin || (result.error && result.error.includes('Administratorrechte'))) {
+                btn.textContent = 'Anwenden';
+                btn.disabled = false;
+                this.offerAdminRestart(result.error);
             } else {
                 btn.textContent = 'Fehler';
                 btn.disabled = false;
@@ -149,6 +153,23 @@ export class OptimizerView {
             btn.textContent = 'Fehler';
             btn.disabled = false;
             showToastMsg(`Fehler: ${err.message}`, 'error');
+        }
+    }
+
+    async offerAdminRestart(errorMsg) {
+        const doRestart = confirm(
+            `${errorMsg}\n\nMöchtest du die App mit Administratorrechten neu starten?\n\nDeine Scan-Daten werden automatisch übernommen.`
+        );
+        if (!doRestart) return;
+
+        showToastMsg('Starte als Administrator neu...', 'info');
+        try {
+            const result = await window.api.restartAsAdmin();
+            if (!result.success) {
+                showToastMsg(`Neustart fehlgeschlagen: ${result.error}`, 'error');
+            }
+        } catch (err) {
+            showToastMsg(`Neustart fehlgeschlagen: ${err.message}`, 'error');
         }
     }
 }

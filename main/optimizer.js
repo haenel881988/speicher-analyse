@@ -1,9 +1,7 @@
 'use strict';
 
-const { execFile } = require('child_process');
-const { promisify } = require('util');
 const os = require('os');
-const execFileAsync = promisify(execFile);
+const { runCmd, runPS, runSafe } = require('./cmd-utils');
 
 async function getOptimizationRecommendations() {
     const recommendations = [];
@@ -168,10 +166,10 @@ async function getOptimizationRecommendations() {
 
 async function getDiskType() {
     try {
-        const { stdout } = await execFileAsync('powershell', [
-            '-NoProfile', '-Command',
-            'Get-PhysicalDisk | Select-Object MediaType | ConvertTo-Json'
-        ], { encoding: 'utf8', timeout: 15000, windowsHide: true });
+        const { stdout } = await runPS(
+            'Get-PhysicalDisk | Select-Object MediaType | ConvertTo-Json',
+            { timeout: 15000 }
+        );
         const disks = JSON.parse(stdout);
         const list = Array.isArray(disks) ? disks : [disks];
         const isSSD = list.some(d => d.MediaType === 'SSD' || d.MediaType === 4);
@@ -188,9 +186,7 @@ function getRamInfo() {
 
 async function getHibernateStatus() {
     try {
-        const { stdout } = await execFileAsync('powercfg', ['/a'], {
-            encoding: 'utf8', timeout: 10000, windowsHide: true,
-        });
+        const { stdout } = await runCmd('powercfg /a', { timeout: 10000 });
         return stdout.toLowerCase().includes('hibernate') || stdout.toLowerCase().includes('ruhezustand');
     } catch {
         return false;
@@ -211,9 +207,7 @@ async function getVisualEffectsStatus() {
 
 async function getPowerPlan() {
     try {
-        const { stdout } = await execFileAsync('powercfg', ['/getactivescheme'], {
-            encoding: 'utf8', timeout: 5000, windowsHide: true,
-        });
+        const { stdout } = await runCmd('powercfg /getactivescheme', { timeout: 5000 });
         const match = stdout.match(/\((.+)\)/);
         return match ? match[1] : 'Unbekannt';
     } catch {
@@ -223,10 +217,10 @@ async function getPowerPlan() {
 
 async function getSoftwareDistributionSize() {
     try {
-        const { stdout } = await execFileAsync('powershell', [
-            '-NoProfile', '-Command',
-            '(Get-ChildItem "C:\\Windows\\SoftwareDistribution\\Download" -Recurse -ErrorAction SilentlyContinue | Measure-Object Length -Sum).Sum'
-        ], { encoding: 'utf8', timeout: 15000, windowsHide: true });
+        const { stdout } = await runPS(
+            '(Get-ChildItem "C:\\Windows\\SoftwareDistribution\\Download" -Recurse -ErrorAction SilentlyContinue | Measure-Object Length -Sum).Sum',
+            { timeout: 15000 }
+        );
         return parseInt(stdout.trim()) || 0;
     } catch {
         return 0;
@@ -235,7 +229,7 @@ async function getSoftwareDistributionSize() {
 
 async function isAdmin() {
     try {
-        await execFileAsync('net', ['session'], { timeout: 5000, windowsHide: true });
+        await runSafe('net', ['session'], { timeout: 5000 });
         return true;
     } catch {
         return false;
@@ -274,33 +268,22 @@ async function applyOptimization(id) {
         throw new Error('Diese Empfehlung muss manuell umgesetzt werden');
     }
 
-    // Parse command - handle quoted arguments (e.g. reg add "HKLM\...")
-    const args = [];
-    const regex = /"([^"]+)"|(\S+)/g;
-    let match;
-    while ((match = regex.exec(rec.command)) !== null) {
-        args.push(match[1] || match[2]);
-    }
-    const exe = args.shift();
-
     try {
-        await execFileAsync(exe, args, {
-            timeout: 30000, windowsHide: true, encoding: 'utf8',
-        });
+        await runCmd(rec.command, { timeout: 30000 });
         return { success: true, id, detail: `${rec.title} wurde erfolgreich angewendet.` };
     } catch (err) {
         const msg = err.message.includes('Zugriff verweigert') || err.message.includes('Access is denied')
-            ? 'Zugriff verweigert. Bitte starte die App als Administrator.'
+            || err.message.includes('Administratorrechte')
+            ? 'Diese Optimierung erfordert Administratorrechte.'
             : err.message;
-        return { success: false, id, error: msg };
+        return { success: false, id, error: msg, requiresAdmin: !!rec.requiresAdmin };
     }
 }
 
 async function runLongCommand(exe, args, timeout, id) {
     try {
-        const { stdout, stderr } = await execFileAsync(exe, args, {
-            timeout, windowsHide: true, encoding: 'utf8',
-        });
+        const cmd = [exe, ...args].join(' ');
+        const { stdout, stderr } = await runCmd(cmd, { timeout });
         return { success: true, id, output: stdout || stderr || '' };
     } catch (err) {
         return { success: false, id, error: err.message };
@@ -309,18 +292,18 @@ async function runLongCommand(exe, args, timeout, id) {
 
 async function cleanUpdateCache() {
     try {
-        await execFileAsync('net', ['stop', 'wuauserv'], { timeout: 30000, windowsHide: true });
+        await runCmd('net stop wuauserv', { timeout: 30000 });
     } catch { /* Dienst war eventuell schon gestoppt */ }
 
     try {
-        const { stdout } = await execFileAsync('powershell', [
-            '-NoProfile', '-Command',
-            'Remove-Item "C:\\Windows\\SoftwareDistribution\\Download\\*" -Recurse -Force -ErrorAction SilentlyContinue; "done"'
-        ], { encoding: 'utf8', timeout: 60000, windowsHide: true });
+        await runPS(
+            'Remove-Item "C:\\Windows\\SoftwareDistribution\\Download\\*" -Recurse -Force -ErrorAction SilentlyContinue; "done"',
+            { timeout: 60000 }
+        );
     } catch { /* Einige Dateien könnten gesperrt sein */ }
 
     try {
-        await execFileAsync('net', ['start', 'wuauserv'], { timeout: 30000, windowsHide: true });
+        await runCmd('net start wuauserv', { timeout: 30000 });
     } catch { /* Wird sich selbst starten */ }
 
     return { success: true, id: 'clean-update-cache' };
