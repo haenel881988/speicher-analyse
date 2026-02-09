@@ -28,14 +28,14 @@ const state = {
     currentScanId: null,
     currentPath: null,
     activeTab: 'tree',
-    activeRibbon: 'start',
     scanning: false,
 };
 
 // ===== DOM =====
 const els = {
-    ribbonDrives: document.getElementById('ribbon-drives'),
-    ribbonScanBtn: document.getElementById('ribbon-scan-btn'),
+    sidebarDrives: document.getElementById('sidebar-drives'),
+    sidebarScanBtn: document.getElementById('sidebar-scan-btn'),
+    drivesToggle: document.getElementById('drives-toggle'),
     tabContent: document.getElementById('tab-content'),
     scanProgress: document.getElementById('scan-progress'),
     progressStats: document.getElementById('progress-stats'),
@@ -55,8 +55,8 @@ const els = {
     themeToggle: document.getElementById('theme-toggle'),
     iconMoon: document.getElementById('icon-moon'),
     iconSun: document.getElementById('icon-sun'),
-    exportCsvBtn: document.getElementById('ribbon-export-csv'),
-    exportPdfBtn: document.getElementById('ribbon-export-pdf'),
+    exportCsvBtn: document.getElementById('sidebar-export-csv'),
+    exportPdfBtn: document.getElementById('sidebar-export-pdf'),
     searchInput: document.getElementById('search-input'),
     searchMinSize: document.getElementById('search-min-size'),
     searchResults: document.getElementById('search-results'),
@@ -96,7 +96,7 @@ searchPanel.onContextMenu = handleContextMenu;
 // ===== Init =====
 async function init() {
     loadTheme();
-    setupRibbon();
+    setupSidebar();
     setupExport();
     setupThemeToggle();
     setupPropertiesModal();
@@ -114,72 +114,62 @@ async function init() {
     await loadDrives();
 }
 
-// ===== Ribbon =====
-function setupRibbon() {
-    // Ribbon tab switching
-    document.querySelectorAll('.ribbon-tab').forEach(tab => {
-        tab.onclick = () => {
-            const ribbon = tab.dataset.ribbon;
-            if (ribbon === state.activeRibbon) return;
-            state.activeRibbon = ribbon;
-            document.querySelectorAll('.ribbon-tab').forEach(t => t.classList.remove('active'));
-            tab.classList.add('active');
-            document.querySelectorAll('.ribbon-panel').forEach(p => p.classList.remove('active'));
-            const panel = document.querySelector(`.ribbon-panel[data-ribbon-panel="${ribbon}"]`);
-            if (panel) panel.classList.add('active');
-        };
+// ===== Sidebar =====
+function setupSidebar() {
+    // Sidebar nav buttons (data-tab attribute)
+    document.querySelectorAll('.sidebar-nav-btn[data-tab]').forEach(btn => {
+        btn.onclick = () => switchToTab(btn.dataset.tab);
     });
 
-    // Ribbon content-tab buttons (data-tab attribute)
-    document.querySelectorAll('.ribbon-btn[data-tab]').forEach(btn => {
-        btn.onclick = () => {
-            const tab = btn.dataset.tab;
-            switchToTab(tab);
-        };
-    });
+    // Drives toggle (collapsible)
+    els.drivesToggle.onclick = () => {
+        els.drivesToggle.classList.toggle('collapsed');
+        els.sidebarDrives.classList.toggle('collapsed');
+    };
 }
 
 function setupScanButton() {
-    els.ribbonScanBtn.onclick = () => {
+    els.sidebarScanBtn.onclick = () => {
         if (state.scanning) return;
-        // Default: scan C: or the first available drive
         const defaultDrive = state.drives.find(d => d.mountpoint.toUpperCase().startsWith('C')) || state.drives[0];
         if (!defaultDrive) {
             showToast('Kein Laufwerk gefunden', 'error');
             return;
         }
-        const driveEl = els.ribbonDrives.querySelector(`.ribbon-drive[data-path="${defaultDrive.mountpoint}"]`);
+        const driveEl = els.sidebarDrives.querySelector(`.sidebar-drive[data-path="${defaultDrive.mountpoint}"]`);
         if (driveEl) {
             selectDrive(driveEl, defaultDrive.mountpoint);
         }
     };
 }
 
-// ===== Drives (Ribbon) =====
+// ===== Drives =====
 async function loadDrives() {
     try {
         state.drives = await fetchDrives();
         renderDrives();
     } catch (e) {
-        els.ribbonDrives.innerHTML = '<span style="color:var(--danger);font-size:11px">Fehler</span>';
+        els.sidebarDrives.innerHTML = '<span style="color:var(--danger);font-size:11px">Fehler</span>';
     }
 }
 
 function renderDrives() {
-    els.ribbonDrives.innerHTML = state.drives.map(drive => {
+    els.sidebarDrives.innerHTML = state.drives.map(drive => {
         const isCritical = drive.percent > 90;
         return `
-            <div class="ribbon-drive" data-path="${drive.mountpoint}" title="${drive.device} - ${formatBytes(drive.used)} / ${formatBytes(drive.total)} (${drive.fstype})">
-                <div class="ribbon-drive-icon">${getDriveIcon(drive)}</div>
-                <div class="ribbon-drive-label">${drive.mountpoint.replace('\\', '')}</div>
-                <div class="ribbon-drive-bar">
-                    <div class="ribbon-drive-bar-fill ${isCritical ? 'critical' : ''}" style="width:${drive.percent}%"></div>
+            <div class="sidebar-drive" data-path="${drive.mountpoint}" title="${drive.device} - ${formatBytes(drive.used)} / ${formatBytes(drive.total)} (${drive.fstype})">
+                <div class="sidebar-drive-icon">${getDriveIcon(drive)}</div>
+                <div class="sidebar-drive-info">
+                    <div class="sidebar-drive-label">${drive.mountpoint.replace('\\', '')} ${formatBytes(drive.free)} frei</div>
+                    <div class="sidebar-drive-bar">
+                        <div class="sidebar-drive-bar-fill ${isCritical ? 'critical' : ''}" style="width:${drive.percent}%"></div>
+                    </div>
                 </div>
             </div>
         `;
     }).join('');
 
-    els.ribbonDrives.querySelectorAll('.ribbon-drive').forEach(card => {
+    els.sidebarDrives.querySelectorAll('.sidebar-drive').forEach(card => {
         card.onclick = () => {
             if (state.scanning) return;
             selectDrive(card, card.dataset.path);
@@ -195,12 +185,12 @@ function getDriveIcon(drive) {
 }
 
 async function selectDrive(cardEl, path) {
-    els.ribbonDrives.querySelectorAll('.ribbon-drive').forEach(c => c.classList.remove('active', 'scanning'));
+    els.sidebarDrives.querySelectorAll('.sidebar-drive').forEach(c => c.classList.remove('active', 'scanning'));
     cardEl.classList.add('active', 'scanning');
 
     state.scanning = true;
     state.currentPath = path;
-    els.ribbonScanBtn.disabled = true;
+    els.sidebarScanBtn.disabled = true;
 
     try {
         const { scan_id } = await startScan(path);
@@ -219,7 +209,7 @@ async function selectDrive(cardEl, path) {
         console.error('Scan start error:', e);
         cardEl.classList.remove('scanning');
         state.scanning = false;
-        els.ribbonScanBtn.disabled = false;
+        els.sidebarScanBtn.disabled = false;
     }
 }
 
@@ -233,7 +223,7 @@ function updateProgress(progress) {
 async function onScanComplete(progress, cardEl) {
     state.scanning = false;
     cardEl.classList.remove('scanning');
-    els.ribbonScanBtn.disabled = false;
+    els.sidebarScanBtn.disabled = false;
 
     els.progressStats.textContent =
         `Fertig! ${formatNumber(progress.dirs_scanned)} Ordner \u00B7 ${formatNumber(progress.files_found)} Dateien \u00B7 ${formatBytes(progress.total_size)} \u00B7 ${formatDuration(progress.elapsed_seconds)}` +
@@ -251,7 +241,7 @@ async function onScanComplete(progress, cardEl) {
 function onScanError(error, cardEl) {
     state.scanning = false;
     cardEl.classList.remove('scanning');
-    els.ribbonScanBtn.disabled = false;
+    els.sidebarScanBtn.disabled = false;
     els.progressStats.textContent = 'Fehler: ' + (error.current_path || 'Unbekannt');
     els.progressBar.style.width = '0%';
     els.progressBar.style.animation = 'none';
@@ -291,33 +281,15 @@ async function runPostScanAnalysis() {
 function switchToTab(tabName) {
     state.activeTab = tabName;
 
-    // Update ribbon button highlights
-    document.querySelectorAll('.ribbon-btn[data-tab]').forEach(b => b.classList.remove('active'));
-    const ribbonBtn = document.querySelector(`.ribbon-btn[data-tab="${tabName}"]`);
-    if (ribbonBtn) ribbonBtn.classList.add('active');
+    // Update sidebar nav button highlights
+    document.querySelectorAll('.sidebar-nav-btn[data-tab]').forEach(b => b.classList.remove('active'));
+    const navBtn = document.querySelector(`.sidebar-nav-btn[data-tab="${tabName}"]`);
+    if (navBtn) navBtn.classList.add('active');
 
     // Switch content view
     els.tabContent.querySelectorAll('.tab-view').forEach(v => v.classList.remove('active'));
     const view = document.getElementById('view-' + tabName);
     if (view) view.classList.add('active');
-
-    // Auto-switch ribbon panel to match the tab
-    const ribbonMap = {
-        'dashboard': 'start', 'compare': 'start',
-        'tree': 'analyse', 'treemap': 'analyse', 'types': 'analyse', 'top100': 'analyse', 'duplicates': 'analyse',
-        'cleanup': 'bereinigung', 'old-files': 'bereinigung', 'registry': 'bereinigung', 'bloatware': 'bereinigung',
-        'autostart': 'system', 'services': 'system', 'optimizer': 'system', 'updates': 'system',
-    };
-    const targetRibbon = ribbonMap[tabName];
-    if (targetRibbon && targetRibbon !== state.activeRibbon) {
-        state.activeRibbon = targetRibbon;
-        document.querySelectorAll('.ribbon-tab').forEach(t => t.classList.remove('active'));
-        const tab = document.querySelector(`.ribbon-tab[data-ribbon="${targetRibbon}"]`);
-        if (tab) tab.classList.add('active');
-        document.querySelectorAll('.ribbon-panel').forEach(p => p.classList.remove('active'));
-        const panel = document.querySelector(`.ribbon-panel[data-ribbon-panel="${targetRibbon}"]`);
-        if (panel) panel.classList.add('active');
-    }
 
     if (tabName === 'treemap' && state.currentScanId) {
         setTimeout(() => treemapView.render(treemapView.rootPath), 50);
