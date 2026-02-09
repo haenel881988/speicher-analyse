@@ -15,6 +15,7 @@ const registry = require('./registry');
 const autostart = require('./autostart');
 const services = require('./services');
 const bloatware = require('./bloatware');
+const optimizer = require('./optimizer');
 
 // In-memory scan storage
 const scans = new Map();
@@ -339,6 +340,15 @@ function register(mainWindow) {
 
     ipcMain.handle('uninstall-bloatware', async (_event, entry) => {
         return bloatware.uninstallProgram(entry);
+    });
+
+    // === Optimizer ===
+    ipcMain.handle('get-optimizations', async () => {
+        return optimizer.getOptimizationRecommendations();
+    });
+
+    ipcMain.handle('apply-optimization', async (_event, id) => {
+        return optimizer.applyOptimization(id);
     });
 
     // === Platform ===

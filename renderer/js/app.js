@@ -19,6 +19,7 @@ import { DashboardView } from './dashboard.js';
 import { AutostartView } from './autostart.js';
 import { ServicesView } from './services.js';
 import { BloatwareView } from './bloatware.js';
+import { OptimizerView } from './optimizer.js';
 
 // ===== State =====
 const state = {
@@ -83,6 +84,7 @@ const dashboardView = new DashboardView(document.getElementById('view-dashboard'
 const autostartView = new AutostartView(document.getElementById('view-autostart'));
 const servicesView = new ServicesView(document.getElementById('view-services'));
 const bloatwareView = new BloatwareView(document.getElementById('view-bloatware'));
+const optimizerView = new OptimizerView(document.getElementById('view-optimizer'));
 
 // Wire context menu callbacks
 treeView.onContextMenu = handleContextMenu;
@@ -104,6 +106,7 @@ async function init() {
     await autostartView.init();
     await servicesView.init();
     await bloatwareView.init();
+    await optimizerView.init();
     dashboardView.onNavigate = (tab) => switchToTab(tab);
     await loadDrives();
 }
@@ -300,7 +303,7 @@ function switchToTab(tabName) {
         'dashboard': 'start', 'compare': 'start',
         'tree': 'analyse', 'treemap': 'analyse', 'types': 'analyse', 'top100': 'analyse', 'duplicates': 'analyse',
         'cleanup': 'bereinigung', 'old-files': 'bereinigung', 'registry': 'bereinigung', 'bloatware': 'bereinigung',
-        'autostart': 'system', 'services': 'system',
+        'autostart': 'system', 'services': 'system', 'optimizer': 'system',
     };
     const targetRibbon = ribbonMap[tabName];
     if (targetRibbon && targetRibbon !== state.activeRibbon) {
