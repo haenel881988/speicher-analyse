@@ -187,7 +187,7 @@ class DiskScanner {
                 }
                 if (match && f.size >= minSize) {
                     results.push({
-                        path: f.path,
+                        path: path.join(dirPath, f.name),
                         name: f.name,
                         size: f.size,
                         is_dir: false,

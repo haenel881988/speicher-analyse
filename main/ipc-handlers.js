@@ -30,6 +30,16 @@ function register(mainWindow) {
 
     // === Scan ===
     ipcMain.handle('start-scan', async (_event, scanPath) => {
+        // Clean up previous scans to free memory
+        for (const [oldId, oldScanner] of scans) {
+            if (oldScanner.worker) oldScanner.worker.terminate();
+            scans.delete(oldId);
+        }
+        for (const [oldId, finder] of duplicateFinders) {
+            finder.cancel();
+            duplicateFinders.delete(oldId);
+        }
+
         const scanId = crypto.randomUUID();
         const scanner = new DiskScanner(scanPath, scanId);
         scans.set(scanId, scanner);
@@ -194,11 +204,13 @@ function register(mainWindow) {
                 if (mainWindow && !mainWindow.isDestroyed()) {
                     mainWindow.webContents.send('duplicate-complete', results);
                 }
+                duplicateFinders.delete(scanId);
             },
             (error) => {
                 if (mainWindow && !mainWindow.isDestroyed()) {
                     mainWindow.webContents.send('duplicate-error', { error });
                 }
+                duplicateFinders.delete(scanId);
             },
             options
         );

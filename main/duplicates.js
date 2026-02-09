@@ -18,11 +18,11 @@ class DuplicateFinder {
         const minSize = options.minSize || 1024;
         const maxSize = options.maxSize || 2147483648;
         const sizeMap = new Map();
-        for (const [, files] of this.scanner.dirFiles) {
+        for (const [dirPath, files] of this.scanner.dirFiles) {
             for (const f of files) {
                 if (f.size === 0 || f.size < minSize || f.size > maxSize) continue;
                 if (!sizeMap.has(f.size)) sizeMap.set(f.size, []);
-                sizeMap.get(f.size).push({ path: f.path, name: f.name, size: f.size, ext: f.ext, mtime: f.mtime });
+                sizeMap.get(f.size).push({ path: path.join(dirPath, f.name), name: f.name, size: f.size, ext: f.ext, mtime: f.mtime });
             }
         }
         const candidates = [];

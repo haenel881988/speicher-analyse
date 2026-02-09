@@ -1,3 +1,5 @@
+const path = require('path');
+
 function getOldFiles(scanner, thresholdDays = 365, minSize = 0, maxResults = 500) {
     const cutoff = Date.now() / 1000 - (thresholdDays * 86400);
     const results = [];
@@ -6,7 +8,7 @@ function getOldFiles(scanner, thresholdDays = 365, minSize = 0, maxResults = 500
         for (const f of files) {
             if (f.mtime < cutoff && f.size >= minSize) {
                 results.push({
-                    path: f.path,
+                    path: path.join(dirPath, f.name),
                     name: f.name,
                     size: f.size,
                     extension: f.ext,

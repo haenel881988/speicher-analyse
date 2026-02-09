@@ -83,16 +83,16 @@ function scanRecursive(dirPath) {
                     extStat.count++;
                     extStat.totalSize += size;
 
-                    // Top 100 files (min-heap)
-                    const fileInfo = { size, path: fullPath, name: entry.name, ext, mtime: stat.mtimeMs / 1000 };
+                    // Top 100 files (min-heap) - keep full path (only 100 items)
+                    const fileInfoFull = { size, path: fullPath, name: entry.name, ext, mtime: stat.mtimeMs / 1000 };
                     if (topFiles.length < 100) {
-                        heapPush(topFiles, fileInfo);
+                        heapPush(topFiles, fileInfoFull);
                     } else if (size > topFiles[0].size) {
-                        heapReplace(topFiles, fileInfo);
+                        heapReplace(topFiles, fileInfoFull);
                     }
 
-                    // Store file for search
-                    filesInDir.push(fileInfo);
+                    // Store file for search/duplicates/old-files (no path - reconstruct from Map key + name)
+                    filesInDir.push({ size, name: entry.name, ext, mtime: stat.mtimeMs / 1000 });
 
                 } else if (entry.isDirectory()) {
                     // Skip symlinks, junctions

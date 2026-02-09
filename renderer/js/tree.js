@@ -1,5 +1,7 @@
 import { formatBytes, formatNumber } from './utils.js';
 
+const CACHE_MAX_SIZE = 500;
+
 export class TreeView {
     constructor(container, breadcrumbEl) {
         this.container = container;
@@ -36,10 +38,21 @@ export class TreeView {
     }
 
     async fetchNode(path) {
-        if (this.cache.has(path)) return this.cache.get(path);
+        if (this.cache.has(path)) {
+            // LRU: move to end
+            const val = this.cache.get(path);
+            this.cache.delete(path);
+            this.cache.set(path, val);
+            return val;
+        }
         try {
             const node = await window.api.getTreeNode(this.scanId, path, 1);
             if (node.error) return null;
+            // Evict oldest if at capacity
+            if (this.cache.size >= CACHE_MAX_SIZE) {
+                const oldest = this.cache.keys().next().value;
+                this.cache.delete(oldest);
+            }
             this.cache.set(path, node);
             return node;
         } catch (e) {
