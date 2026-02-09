@@ -14,6 +14,7 @@ const { readFilePreview } = require('./preview');
 const registry = require('./registry');
 const autostart = require('./autostart');
 const services = require('./services');
+const bloatware = require('./bloatware');
 
 // In-memory scan storage
 const scans = new Map();
@@ -329,6 +330,15 @@ function register(mainWindow) {
 
     ipcMain.handle('set-service-start-type', async (_event, name, startType) => {
         return services.setStartType(name, startType);
+    });
+
+    // === Bloatware ===
+    ipcMain.handle('scan-bloatware', async () => {
+        return bloatware.scanBloatware();
+    });
+
+    ipcMain.handle('uninstall-bloatware', async (_event, entry) => {
+        return bloatware.uninstallProgram(entry);
     });
 
     // === Platform ===

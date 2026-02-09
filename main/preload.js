@@ -99,6 +99,10 @@ contextBridge.exposeInMainWorld('api', {
     controlService: (name, action) => ipcRenderer.invoke('control-service', name, action),
     setServiceStartType: (name, startType) => ipcRenderer.invoke('set-service-start-type', name, startType),
 
+    // === Bloatware ===
+    scanBloatware: () => ipcRenderer.invoke('scan-bloatware'),
+    uninstallBloatware: (entry) => ipcRenderer.invoke('uninstall-bloatware', entry),
+
     // === Platform ===
     getPlatform: () => ipcRenderer.invoke('get-platform'),
 });
