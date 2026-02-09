@@ -61,6 +61,9 @@ speicher_analyse/
       chart.min.js
       html2pdf.bundle.min.js
 
+  docs/                   # Projektdokumentation
+    01_projektplanung/
+      projektplan.md     # v4.0 Roadmap & Projektplanung
   static/                 # ALT - v1.0 FastAPI Frontend (nicht mehr verwendet)
   assets/                 # Icons
   launch.js              # Electron Starter Script
@@ -77,20 +80,20 @@ node launch.js
 ## Architektur-Hinweise
 
 ### IPC-Muster
-Alle Frontend-Backend-Kommunikation laeuft ueber `contextBridge`:
+Alle Frontend-Backend-Kommunikation läuft über `contextBridge`:
 - `main/preload.js` definiert die API-Surface
 - `main/ipc-handlers.js` registriert alle Handler
 - Frontend ruft `window.api.methodName()` auf
 
 ### Scanner
-- Laeuft in einem Worker Thread (`scanner-worker.js`)
+- Läuft in einem Worker Thread (`scanner-worker.js`)
 - Ergebnisse werden in Maps gespeichert (tree, dirFiles, extensionStats)
-- Top-100 Dateien werden waehrend des Scans mitgetrackt
+- Top-100 Dateien werden während des Scans mitgetrackt
 
 ### Duplikat-Finder (3-Phasen)
 1. **Size-Grouping:** Pre-Filter auf Main Thread (90-98% weniger Daten)
 2. **Partial Hash:** Erste 64KB mit SHA-256
-3. **Full Hash:** 128KB Chunks fuer Dateien mit identischem Partial-Hash
+3. **Full Hash:** 128KB Chunks für Dateien mit identischem Partial-Hash
 
 ### Registry-Operationen
 - Komplett async (`execFile`, nicht `execSync`)
@@ -98,7 +101,7 @@ Alle Frontend-Backend-Kommunikation laeuft ueber `contextBridge`:
 - Auto-Backup vor jeder Bereinigung unter `%APPDATA%/speicher-analyse/registry-backups/`
 
 ### Unified Scan Flow
-Nach dem Festplatten-Scan werden automatisch ausgefuehrt:
+Nach dem Festplatten-Scan werden automatisch ausgeführt:
 - Cleanup-Kategorien scannen
 - Alte Dateien analysieren
 - Registry scannen
@@ -114,7 +117,7 @@ Ergebnisse erscheinen im Dashboard als klickbare Karten.
 
 ## Features (v3.5)
 1. Festplatten-Scan mit Verzeichnisbaum, Treemap, Dateitypen-Chart, Top 100
-2. Multi-Select + Dateioperationen (Umbenennen/Loeschen/Verschieben/Kopieren)
+2. Multi-Select + Dateioperationen (Umbenennen/Löschen/Verschieben/Kopieren)
 3. Duplikat-Finder (pre-filtered, 128KB Buffer, ETA-Anzeige)
 4. Alte-Dateien-Finder
 5. Bereinigungskategorien (Temp, Caches, Logs, etc.)
@@ -122,5 +125,9 @@ Ergebnisse erscheinen im Dashboard als klickbare Karten.
 7. Dateivorschau (Bilder, Text, PDF, Eigenschaften)
 8. Registry-Cleaner (automatisches Backup vor Bereinigung)
 9. Autostart-Manager (Registry Run Keys, Startup-Ordner, Aufgabenplanung)
-10. Windows-Dienste-Viewer (Start/Stop, Starttyp aendern)
-11. Dashboard (automatische Uebersicht nach Scan)
+10. Windows-Dienste-Viewer (Start/Stop, Starttyp ändern)
+11. Dashboard (automatische Übersicht nach Scan)
+
+## Projektplanung
+Die vollständige v4.0 Roadmap mit allen geplanten Features befindet sich in:
+→ [`docs/01_projektplanung/projektplan.md`](docs/01_projektplanung/projektplan.md)
