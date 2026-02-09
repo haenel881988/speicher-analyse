@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="de" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' file:; frame-src file:;">
+    <title>Speicher Analyse</title>
+    <link rel="stylesheet" href="css/style.css">
+    <script src="lib/chart.min.js"></script>
+    <script src="lib/html2pdf.bundle.min.js"></script>
+</head>
+<body>
+    <div id="app">
+        <!-- Header -->
+        <header id="app-header">
+            <div class="header-left">
+                <span class="header-logo">Speicher Analyse</span>
+                <span class="header-version">v3.5</span>
+            </div>
+            <div class="header-right">
+                <button class="btn-icon" id="preview-toggle" title="Vorschau-Panel (Ctrl+P)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
+                </button>
+                <button class="btn-icon" id="theme-toggle" title="Theme wechseln (Ctrl+T)">
+                    <svg id="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+                    <svg id="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+                </button>
+                <div class="dropdown">
+                    <button class="btn" id="export-btn">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        Export
+                    </button>
+                    <div class="dropdown-menu" id="export-menu">
+                        <button class="dropdown-item" id="export-csv-btn">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                            CSV exportieren
+                        </button>
+                        <button class="dropdown-item" id="export-pdf-btn">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                            PDF exportieren
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Layout -->
+        <div id="app-layout">
+            <!-- Sidebar -->
+            <aside id="sidebar">
+                <div class="sidebar-section">
+                    <div class="sidebar-section-title">Laufwerke</div>
+                    <div id="drive-list">
+                        <div class="loading-spinner"></div>
+                    </div>
+                </div>
+                <div id="search-panel">
+                    <div class="sidebar-section-title">Suche</div>
+                    <div class="search-input-wrap">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                        <input type="text" class="search-input" id="search-input" placeholder="Datei oder Ordner suchen..." disabled>
+                    </div>
+                    <div class="search-filters">
+                        <input type="text" class="search-filter-input" id="search-min-size" placeholder="Min. Gr. (z.B. 10MB)" disabled>
+                    </div>
+                    <div class="search-results" id="search-results"></div>
+                </div>
+            </aside>
+
+            <!-- Content -->
+            <main id="content">
+                <!-- Tab Row 1: Analyse -->
+                <nav id="tab-bar" class="tab-bar-row">
+                    <span class="tab-group-label">Analyse</span>
+                    <button class="tab-btn active" data-tab="tree">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+                        Verzeichnisbaum
+                    </button>
+                    <button class="tab-btn" data-tab="treemap">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
+                        Treemap
+                    </button>
+                    <button class="tab-btn" data-tab="types">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.21 15.89A10 10 0 118 2.83"/><path d="M22 12A10 10 0 0012 2v10z"/></svg>
+                        Dateitypen
+                    </button>
+                    <button class="tab-btn" data-tab="top100">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                        Top 100
+                    </button>
+                </nav>
+
+                <!-- Tab Row 2: Tools -->
+                <nav id="tab-bar-tools" class="tab-bar-row tab-bar-tools">
+                    <span class="tab-group-label">Tools</span>
+                    <button class="tab-btn" data-tab="dashboard">Übersicht</button>
+                    <button class="tab-btn" data-tab="duplicates">Duplikate</button>
+                    <button class="tab-btn" data-tab="old-files">Alte Dateien</button>
+                    <button class="tab-btn" data-tab="cleanup">Bereinigung</button>
+                    <button class="tab-btn" data-tab="registry">Registry</button>
+                    <button class="tab-btn" data-tab="autostart">Autostart</button>
+                    <button class="tab-btn" data-tab="services">Dienste</button>
+                    <button class="tab-btn" data-tab="compare">Vergleich</button>
+                </nav>
+
+                <div id="tab-content">
+                    <!-- Analyse Views -->
+                    <div id="view-tree" class="tab-view active">
+                        <div class="welcome-state" id="welcome-state">
+                            <div class="welcome-icon">&#128190;</div>
+                            <div class="welcome-title">Speicher Analyse</div>
+                            <div class="welcome-text">
+                                Klicke auf ein Laufwerk in der Sidebar, um die Analyse zu starten.
+                                Rechtsklick auf Dateien und Ordner für Dateioperationen.
+                            </div>
+                        </div>
+                        <div id="tree-content" style="display:none">
+                            <div class="breadcrumb" id="tree-breadcrumb"></div>
+                            <div class="tree-header">
+                                <span class="tree-header-name" style="padding-left:42px">Name</span>
+                                <span class="tree-header-bar">Anteil</span>
+                                <span class="tree-header-size">Größe</span>
+                                <span class="tree-header-items">Dateien</span>
+                                <span class="tree-header-pct">%</span>
+                            </div>
+                            <div id="tree-container"></div>
+                        </div>
+                    </div>
+
+                    <div id="view-treemap" class="tab-view">
+                        <div class="breadcrumb" id="treemap-breadcrumb"></div>
+                        <div id="treemap-container"></div>
+                    </div>
+
+                    <div id="view-types" class="tab-view">
+                        <div class="charts-layout">
+                            <div class="chart-card">
+                                <div class="chart-title">Speicher nach Kategorie</div>
+                                <div id="donut-chart-container">
+                                    <canvas id="donut-chart"></canvas>
+                                </div>
+                            </div>
+                            <div class="chart-card">
+                                <div class="chart-title">Dateitypen im Detail</div>
+                                <div class="type-table-wrap">
+                                    <table class="type-table" id="type-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Extension</th>
+                                                <th>Kategorie</th>
+                                                <th style="text-align:right">Anzahl</th>
+                                                <th style="text-align:right">Größe</th>
+                                                <th style="text-align:right">%</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="type-table-body"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="view-top100" class="tab-view">
+                        <table class="top-files-table" id="top-files-table">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Dateiname</th>
+                                    <th>Pfad</th>
+                                    <th>Typ</th>
+                                    <th style="text-align:right">Größe</th>
+                                </tr>
+                            </thead>
+                            <tbody id="top-files-body"></tbody>
+                        </table>
+                    </div>
+
+                    <!-- Tool Views -->
+                    <div id="view-dashboard" class="tab-view"></div>
+                    <div id="view-duplicates" class="tab-view"></div>
+                    <div id="view-old-files" class="tab-view"></div>
+                    <div id="view-cleanup" class="tab-view"></div>
+                    <div id="view-registry" class="tab-view"></div>
+                    <div id="view-autostart" class="tab-view"></div>
+                    <div id="view-services" class="tab-view"></div>
+                    <div id="view-compare" class="tab-view"></div>
+                </div>
+            </main>
+
+            <!-- Preview Panel -->
+            <aside id="preview-panel" style="display:none">
+                <div class="preview-header">
+                    <span class="preview-title" id="preview-title">Vorschau</span>
+                    <button class="preview-close" id="preview-close">&times;</button>
+                </div>
+                <div class="preview-content" id="preview-content"></div>
+            </aside>
+        </div>
+
+        <!-- Footer Progress -->
+        <footer id="scan-progress">
+            <div class="progress-text" id="progress-stats"></div>
+            <div class="progress-bar-wrap">
+                <div class="progress-bar-fill" id="progress-bar" style="width:0%"></div>
+            </div>
+            <div class="progress-path" id="progress-path"></div>
+        </footer>
+    </div>
+
+    <!-- Treemap Tooltip -->
+    <div class="treemap-tooltip" id="treemap-tooltip" style="display:none">
+        <div class="treemap-tooltip-name" id="tooltip-name"></div>
+        <div class="treemap-tooltip-detail" id="tooltip-detail"></div>
+    </div>
+
+    <!-- Properties Modal -->
+    <div class="modal-overlay" id="properties-modal" style="display:none">
+        <div class="modal-dialog">
+            <div class="modal-header">
+                <span class="modal-title">Eigenschaften</span>
+                <button class="modal-close" id="properties-close">&times;</button>
+            </div>
+            <div class="modal-body" id="properties-body"></div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toast-container"></div>
+
+    <script type="module" src="js/app.js"></script>
+</body>
+</html>

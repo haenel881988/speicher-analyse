@@ -1,0 +1,18 @@
+appId: com.speicheranalyse.app
+productName: Speicher Analyse
+directories:
+  output: build
+files:
+  - main/**/*
+  - renderer/**/*
+  - assets/**/*
+  - launch.js
+  - package.json
+win:
+  target: nsis
+  icon: assets/icon.ico
+nsis:
+  oneClick: true
+  perMachine: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
