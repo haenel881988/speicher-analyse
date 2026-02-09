@@ -107,6 +107,13 @@ contextBridge.exposeInMainWorld('api', {
     scanBloatware: () => ipcRenderer.invoke('scan-bloatware'),
     uninstallBloatware: (entry) => ipcRenderer.invoke('uninstall-bloatware', entry),
 
+    // === Updates ===
+    checkWindowsUpdates: () => ipcRenderer.invoke('check-windows-updates'),
+    getUpdateHistory: () => ipcRenderer.invoke('get-update-history'),
+    checkSoftwareUpdates: () => ipcRenderer.invoke('check-software-updates'),
+    updateSoftware: (packageId) => ipcRenderer.invoke('update-software', packageId),
+    getDriverInfo: () => ipcRenderer.invoke('get-driver-info'),
+
     // === Platform ===
     getPlatform: () => ipcRenderer.invoke('get-platform'),
 });

@@ -16,6 +16,7 @@ const autostart = require('./autostart');
 const services = require('./services');
 const bloatware = require('./bloatware');
 const optimizer = require('./optimizer');
+const updates = require('./updates');
 
 // In-memory scan storage
 const scans = new Map();
@@ -349,6 +350,27 @@ function register(mainWindow) {
 
     ipcMain.handle('apply-optimization', async (_event, id) => {
         return optimizer.applyOptimization(id);
+    });
+
+    // === Updates ===
+    ipcMain.handle('check-windows-updates', async () => {
+        return updates.checkWindowsUpdates();
+    });
+
+    ipcMain.handle('get-update-history', async () => {
+        return updates.getUpdateHistory();
+    });
+
+    ipcMain.handle('check-software-updates', async () => {
+        return updates.checkSoftwareUpdates();
+    });
+
+    ipcMain.handle('update-software', async (_event, packageId) => {
+        return updates.updateSoftware(packageId);
+    });
+
+    ipcMain.handle('get-driver-info', async () => {
+        return updates.getDriverInfo();
     });
 
     // === Platform ===
