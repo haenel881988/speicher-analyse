@@ -26,6 +26,9 @@ speicher_analyse/
     registry.js           # Registry-Scanner (async) + Auto-Backup
     autostart.js          # Autostart-Eintraege (Registry/Ordner/Tasks)
     services.js           # Windows-Dienste via PowerShell
+    bloatware.js          # Bloatware-Erkennung & Deinstallation
+    optimizer.js          # System-Optimierungsempfehlungen
+    updates.js            # Update-Manager (Windows/Software/Treiber)
     cleanup.js            # Bereinigungskategorien
     old-files.js          # Alte-Dateien-Finder
     menu.js               # Anwendungsmenue
@@ -50,6 +53,9 @@ speicher_analyse/
       registry.js        # Registry-Cleaner UI
       autostart.js       # Autostart-Manager UI
       services.js        # Dienste-Viewer UI
+      bloatware.js       # Bloatware-Scanner UI
+      optimizer.js       # System-Optimierung UI
+      updates.js         # Update-Manager UI
       scan-compare.js    # Scan-Vergleich UI
       preview.js         # Dateivorschau
       file-manager.js    # Dateioperationen (Cut/Copy/Paste/Delete)
@@ -67,7 +73,7 @@ speicher_analyse/
   static/                 # ALT - v1.0 FastAPI Frontend (nicht mehr verwendet)
   assets/                 # Icons
   launch.js              # Electron Starter Script
-  package.json           # v3.5.0
+  package.json           # v4.0.0
 ```
 
 ## Starten
@@ -115,18 +121,22 @@ Ergebnisse erscheinen im Dashboard als klickbare Karten.
 - **static/ Ordner:** Alter v1.0 FastAPI-Code, wird nicht mehr verwendet
 - **GPU Cache Fehler:** Chromium-Warnungen beim Start sind harmlos
 
-## Features (v3.5)
-1. Festplatten-Scan mit Verzeichnisbaum, Treemap, Dateitypen-Chart, Top 100
-2. Multi-Select + Dateioperationen (Umbenennen/Löschen/Verschieben/Kopieren)
-3. Duplikat-Finder (pre-filtered, 128KB Buffer, ETA-Anzeige)
-4. Alte-Dateien-Finder
-5. Bereinigungskategorien (Temp, Caches, Logs, etc.)
-6. Scan-Vergleich (Speichern/Laden)
-7. Dateivorschau (Bilder, Text, PDF, Eigenschaften)
-8. Registry-Cleaner (automatisches Backup vor Bereinigung)
-9. Autostart-Manager (Registry Run Keys, Startup-Ordner, Aufgabenplanung)
-10. Windows-Dienste-Viewer (Start/Stop, Starttyp ändern)
-11. Dashboard (automatische Übersicht nach Scan)
+## Features (v4.0)
+1. **Ribbon-UI Navigation** (wie Word/CCleaner: Start, Analyse, Bereinigung, System, Einstellungen)
+2. Festplatten-Scan mit Verzeichnisbaum, Treemap, Dateitypen-Chart, Top 100
+3. Multi-Select + Dateioperationen (Umbenennen/Löschen/Verschieben/Kopieren)
+4. Duplikat-Finder (pre-filtered, 128KB Buffer, ETA-Anzeige)
+5. Alte-Dateien-Finder
+6. Bereinigungskategorien (Temp, Caches, Logs, etc.)
+7. Scan-Vergleich (Speichern/Laden)
+8. Dateivorschau (Bilder, Text, PDF, Eigenschaften)
+9. Registry-Cleaner (automatisches Backup vor Bereinigung)
+10. Autostart-Manager (Registry Run Keys, Startup-Ordner, Aufgabenplanung)
+11. Windows-Dienste-Viewer (Start/Stop, Starttyp ändern)
+12. Dashboard (automatische Übersicht nach Scan)
+13. **Bloatware-Erkennung** (Ampel-System, Silent-Uninstall, 25+ bekannte PUPs)
+14. **System-Optimierung** (Hardware/Privacy/Performance-Empfehlungen)
+15. **Update-Manager** (Windows Updates, Software via winget, Treiber-Check)
 
 ## Projektplanung
 Die vollständige v4.0 Roadmap mit allen geplanten Features befindet sich in:
