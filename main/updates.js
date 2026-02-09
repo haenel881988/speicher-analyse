@@ -140,12 +140,50 @@ async function checkSoftwareUpdates() {
 
 async function updateSoftware(packageId) {
     try {
-        const { stdout, stderr } = await execFileAsync('winget', [
+        const { stdout } = await execFileAsync('winget', [
             'upgrade', '--id', packageId, '--silent', '--accept-package-agreements', '--accept-source-agreements'
         ], { encoding: 'utf8', timeout: 300000, windowsHide: true, maxBuffer: 5 * 1024 * 1024 });
 
         const success = stdout.toLowerCase().includes('erfolgreich') || stdout.toLowerCase().includes('successfully');
-        return { success, packageId, output: stdout };
+
+        // Verify: Check if the package still shows as needing update
+        let verified = false;
+        let installedVersion = '';
+        if (success) {
+            try {
+                const { stdout: listOut } = await execFileAsync('winget', [
+                    'list', '--id', packageId, '--accept-source-agreements'
+                ], { encoding: 'utf8', timeout: 30000, windowsHide: true, maxBuffer: 5 * 1024 * 1024 });
+
+                // If it's still in upgrade list, update didn't fully apply
+                const { stdout: upgradeOut } = await execFileAsync('winget', [
+                    'upgrade', '--id', packageId, '--accept-source-agreements'
+                ], { encoding: 'utf8', timeout: 30000, windowsHide: true, maxBuffer: 5 * 1024 * 1024 });
+
+                // If "Keine verfügbaren Upgrades" or "No available upgrade" → verified
+                const noUpgrade = upgradeOut.toLowerCase().includes('keine verfügbaren') ||
+                    upgradeOut.toLowerCase().includes('no available') ||
+                    !upgradeOut.includes(packageId);
+                verified = noUpgrade;
+
+                // Extract installed version from list output
+                const lines = listOut.split('\n');
+                for (const line of lines) {
+                    if (line.includes(packageId)) {
+                        const parts = line.split(/\s{2,}/).filter(p => p.trim());
+                        if (parts.length >= 3) {
+                            installedVersion = parts[2].trim();
+                        }
+                        break;
+                    }
+                }
+            } catch {
+                // Verification failed, but update might still have succeeded
+                verified = false;
+            }
+        }
+
+        return { success, packageId, output: stdout, verified, installedVersion };
     } catch (err) {
         return { success: false, packageId, error: err.message };
     }
@@ -157,30 +195,45 @@ async function getDriverInfo() {
             '-NoProfile', '-Command',
             `
             Get-WmiObject Win32_PnPSignedDriver |
-                Where-Object { $_.DriverDate } |
-                Select-Object DeviceName, DriverVersion, @{N='DriverDate';E={$_.DriverDate.Substring(0,8)}} |
+                Where-Object { $_.DriverDate -and $_.DeviceName } |
+                Select-Object DeviceName, DriverVersion, Manufacturer, DeviceClass, InfName, @{N='DriverDate';E={$_.DriverDate.Substring(0,8)}} |
+                Where-Object { $_.DriverDate -match '^(19[9]\\d|20\\d{2})' } |
                 Sort-Object DriverDate |
-                Select-Object -First 15 |
+                Select-Object -First 25 |
                 ConvertTo-Json -Depth 2
             `.trim()
         ], { encoding: 'utf8', timeout: 30000, windowsHide: true, maxBuffer: 5 * 1024 * 1024 });
 
         const parsed = JSON.parse(stdout.trim() || '[]');
+        const now = Date.now();
         const drivers = (Array.isArray(parsed) ? parsed : [parsed]).map(d => {
             const dateStr = d.DriverDate || '';
-            const year = dateStr.substring(0, 4);
+            const year = parseInt(dateStr.substring(0, 4));
             const month = dateStr.substring(4, 6);
             const day = dateStr.substring(6, 8);
-            const formattedDate = year && month && day ? `${year}-${month}-${day}` : 'Unbekannt';
-            const ageYears = year ? Math.floor((Date.now() - new Date(`${year}-${month}-${day}`).getTime()) / (365.25 * 24 * 3600 * 1000)) : 0;
+
+            if (!year || year < 1990 || year > new Date().getFullYear() + 1) {
+                return null;
+            }
+
+            const formattedDate = `${year}-${month}-${day}`;
+            const dateObj = new Date(`${year}-${month}-${day}`);
+            const ageMs = now - dateObj.getTime();
+            const ageYears = ageMs > 0 ? Math.floor(ageMs / (365.25 * 24 * 3600 * 1000)) : 0;
+            const manufacturer = d.Manufacturer || '';
+
             return {
                 name: d.DeviceName || 'Unbekannt',
                 version: d.DriverVersion || '',
                 date: formattedDate,
                 ageYears,
                 isOld: ageYears >= 3,
+                manufacturer,
+                deviceClass: d.DeviceClass || '',
+                infName: d.InfName || '',
+                supportUrl: getManufacturerSupportUrl(manufacturer),
             };
-        });
+        }).filter(Boolean);
 
         return drivers;
     } catch (err) {
@@ -189,4 +242,50 @@ async function getDriverInfo() {
     }
 }
 
-module.exports = { checkWindowsUpdates, getUpdateHistory, checkSoftwareUpdates, updateSoftware, getDriverInfo };
+function getManufacturerSupportUrl(manufacturer) {
+    if (!manufacturer) return '';
+    const m = manufacturer.toLowerCase();
+    const urls = {
+        'intel': 'https://www.intel.com/content/www/us/en/support/detect.html',
+        'nvidia': 'https://www.nvidia.com/Download/index.aspx',
+        'amd': 'https://www.amd.com/en/support',
+        'advanced micro devices': 'https://www.amd.com/en/support',
+        'realtek': 'https://www.realtek.com/en/downloads',
+        'microsoft': 'https://www.catalog.update.microsoft.com/',
+        'logitech': 'https://support.logi.com/hc/en-us/articles/360025297893',
+        'samsung': 'https://semiconductor.samsung.com/consumer-storage/support/downloads/',
+        'dell': 'https://www.dell.com/support/home/',
+        'hp': 'https://support.hp.com/drivers',
+        'lenovo': 'https://support.lenovo.com/solutions/ht003029-lenovo-system-update',
+        'asus': 'https://www.asus.com/support/download-center/',
+        'broadcom': 'https://www.broadcom.com/support/download-search',
+        'corsair': 'https://www.corsair.com/us/en/downloads',
+        'razer': 'https://www.razer.com/synapse-3',
+    };
+    for (const [key, url] of Object.entries(urls)) {
+        if (m.includes(key)) return url;
+    }
+    return '';
+}
+
+async function getHardwareInfo() {
+    try {
+        const { stdout } = await execFileAsync('powershell', [
+            '-NoProfile', '-Command',
+            `
+            $cs = Get-WmiObject Win32_ComputerSystem | Select-Object Manufacturer, Model
+            $bios = Get-WmiObject Win32_BIOS | Select-Object SerialNumber
+            @{
+                Manufacturer = $cs.Manufacturer
+                Model = $cs.Model
+                SerialNumber = $bios.SerialNumber
+            } | ConvertTo-Json
+            `.trim()
+        ], { encoding: 'utf8', timeout: 10000, windowsHide: true });
+        return JSON.parse(stdout.trim());
+    } catch {
+        return { Manufacturer: '', Model: '', SerialNumber: '' };
+    }
+}
+
+module.exports = { checkWindowsUpdates, getUpdateHistory, checkSoftwareUpdates, updateSoftware, getDriverInfo, getHardwareInfo };

@@ -8,6 +8,8 @@ export class OldFilesView {
         this.data = null;
         this.selectedFiles = new Set();
         this.onPreview = null;
+        this.sortCol = 'size';
+        this.sortAsc = false;
     }
 
     init(scanId) {
@@ -86,18 +88,22 @@ export class OldFilesView {
         summaryEl.textContent = `${formatNumber(this.data.totalCount)} Dateien \u00B7 ${formatBytes(this.data.totalSize)} gesamt`;
         actionsEl.style.display = 'flex';
 
+        const sorted = this.getSortedFiles();
+
         resultsEl.innerHTML = `<table class="tool-table">
             <thead><tr>
                 <th style="width:30px"></th>
-                <th>Datei</th>
+                <th class="sortable" data-sort="name">Datei ${this.sortIcon('name')}</th>
+                <th class="sortable" data-sort="context">Kontext ${this.sortIcon('context')}</th>
                 <th>Pfad</th>
-                <th style="text-align:right">Größe</th>
-                <th style="text-align:right">Alter</th>
+                <th class="sortable" data-sort="size" style="text-align:right">Größe ${this.sortIcon('size')}</th>
+                <th class="sortable" data-sort="age" style="text-align:right">Alter ${this.sortIcon('age')}</th>
             </tr></thead>
-            <tbody>${this.data.files.map(f => `
+            <tbody>${sorted.map(f => `
                 <tr data-path="${this.esc(f.path)}">
                     <td><input type="checkbox" class="file-check" data-path="${this.esc(f.path)}" data-size="${f.size}"></td>
                     <td class="name-col" title="${this.esc(f.name)}">${this.esc(f.name)}</td>
+                    <td class="context-col" title="${this.esc(f.context || '')}">${this.contextIcon(f.contextIcon)} ${this.esc(f.context || 'Sonstige')}</td>
                     <td class="path-col" title="${this.esc(f.path)}">${this.esc(f.path.substring(0, f.path.lastIndexOf('\\') || f.path.lastIndexOf('/')))}</td>
                     <td class="size-col">${formatBytes(f.size)}</td>
                     <td class="age-col">${this.formatAge(f.ageDays)}</td>
@@ -110,6 +116,15 @@ export class OldFilesView {
         });
 
         resultsEl.querySelectorAll('tr[data-path]').forEach(row => {
+            row.style.cursor = 'pointer';
+            row.onclick = (e) => {
+                if (e.target.type === 'checkbox') return;
+                const cb = row.querySelector('.file-check');
+                if (cb) {
+                    cb.checked = !cb.checked;
+                    this.updateSelection();
+                }
+            };
             row.ondblclick = () => window.api.openFile(row.dataset.path);
             row.oncontextmenu = (e) => {
                 e.preventDefault();
@@ -125,6 +140,17 @@ export class OldFilesView {
         };
 
         this.container.querySelector('#old-files-delete').onclick = () => this.deleteSelected();
+
+        // Wire sortable column headers
+        resultsEl.querySelectorAll('th.sortable').forEach(th => {
+            th.style.cursor = 'pointer';
+            th.onclick = () => {
+                const col = th.dataset.sort;
+                if (this.sortCol === col) this.sortAsc = !this.sortAsc;
+                else { this.sortCol = col; this.sortAsc = false; }
+                this.renderResults();
+            };
+        });
     }
 
     updateSelection() {
@@ -168,6 +194,28 @@ export class OldFilesView {
         }
     }
 
+    getSortedFiles() {
+        if (!this.data || !this.data.files) return [];
+        return [...this.data.files].sort((a, b) => {
+            let va, vb;
+            switch (this.sortCol) {
+                case 'name': va = a.name.toLowerCase(); vb = b.name.toLowerCase(); break;
+                case 'context': va = (a.context || '').toLowerCase(); vb = (b.context || '').toLowerCase(); break;
+                case 'size': va = a.size; vb = b.size; break;
+                case 'age': va = a.ageDays; vb = b.ageDays; break;
+                default: va = a.size; vb = b.size;
+            }
+            if (va < vb) return this.sortAsc ? -1 : 1;
+            if (va > vb) return this.sortAsc ? 1 : -1;
+            return 0;
+        });
+    }
+
+    sortIcon(col) {
+        if (this.sortCol !== col) return '';
+        return this.sortAsc ? ' \u25B2' : ' \u25BC';
+    }
+
     formatAge(days) {
         if (days >= 365) return `${Math.floor(days / 365)}J ${Math.floor((days % 365) / 30)}M`;
         if (days >= 30) return `${Math.floor(days / 30)}M ${days % 30}T`;
@@ -195,6 +243,22 @@ export class OldFilesView {
         } catch {
             return null;
         }
+    }
+
+    contextIcon(icon) {
+        const icons = {
+            'globe': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>',
+            'trash': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" style="vertical-align:middle"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>',
+            'file-text': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" style="vertical-align:middle"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>',
+            'download': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" style="vertical-align:middle"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>',
+            'download-cloud': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" style="vertical-align:middle"><polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.88 18.09A5 5 0 0018 9h-1.26A8 8 0 103 16.29"/></svg>',
+            'monitor': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" style="vertical-align:middle"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>',
+            'file': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" style="vertical-align:middle"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
+            'package': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" style="vertical-align:middle"><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>',
+            'database': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" style="vertical-align:middle"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>',
+            'shield': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" style="vertical-align:middle"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
+        };
+        return icons[icon] || icons['file'];
     }
 
     esc(text) { return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }

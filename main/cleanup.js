@@ -85,23 +85,6 @@ const CATEGORIES = [
         getPaths: () => [process.env.TEMP].filter(Boolean),
         fileFilter: (name) => name.toLowerCase().endsWith('.log'),
     },
-    {
-        id: 'node-modules',
-        name: 'node_modules',
-        description: 'Node.js Abhängigkeiten (aus Scan-Daten)',
-        icon: '\uD83D\uDCE6',
-        special: 'from-scan',
-        dirPattern: 'node_modules',
-    },
-    {
-        id: 'git-dirs',
-        name: '.git Verzeichnisse (>50MB)',
-        description: 'Git Repository-Daten (aus Scan-Daten)',
-        icon: '\uD83D\uDD00',
-        special: 'from-scan',
-        dirPattern: '.git',
-        minSize: 50 * 1024 * 1024,
-    },
 ];
 
 function findSubDirs(baseDir, subDirName) {

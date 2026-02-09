@@ -85,7 +85,7 @@ function scanRecursive(dirPath) {
 
                     // Top 100 files (min-heap) - keep full path (only 100 items)
                     const fileInfoFull = { size, path: fullPath, name: entry.name, ext, mtime: stat.mtimeMs / 1000 };
-                    if (topFiles.length < 100) {
+                    if (topFiles.length < 500) {
                         heapPush(topFiles, fileInfoFull);
                     } else if (size > topFiles[0].size) {
                         heapReplace(topFiles, fileInfoFull);

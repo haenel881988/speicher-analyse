@@ -19,6 +19,13 @@ export class UpdatesView {
     render() {
         this.container.innerHTML = `
             <div class="updates-view">
+                <div class="tool-toolbar" style="margin-bottom:8px">
+                    <button class="btn btn-primary" id="btn-check-all-updates">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+                        Alle Updates prüfen
+                    </button>
+                    <span class="tool-summary" id="all-updates-summary"></span>
+                </div>
                 <div class="updates-tabs">
                     <button class="updates-tab active" data-section="windows">Windows Updates</button>
                     <button class="updates-tab" data-section="software">Software Updates</button>
@@ -30,36 +37,36 @@ export class UpdatesView {
                         <div class="tool-toolbar">
                             <button class="btn btn-primary" id="btn-check-windows">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
-                                Auf Updates pruefen
+                                Auf Updates prüfen
                             </button>
                             <span class="tool-summary" id="windows-summary"></span>
                         </div>
                         <div id="windows-results" class="tool-results">
-                            <div class="tool-placeholder">Klicke auf "Auf Updates pruefen" um nach Windows Updates zu suchen.</div>
+                            <div class="tool-placeholder">Klicke auf "Auf Updates prüfen" um nach Windows Updates zu suchen.</div>
                         </div>
                     </div>
                     <div class="updates-section" data-section="software">
                         <div class="tool-toolbar">
                             <button class="btn btn-primary" id="btn-check-software">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
-                                Software-Updates pruefen
+                                Software-Updates prüfen
                             </button>
                             <span class="tool-summary" id="software-summary"></span>
                         </div>
                         <div id="software-results" class="tool-results">
-                            <div class="tool-placeholder">Klicke auf "Software-Updates pruefen" um verfuegbare Updates via winget zu finden.</div>
+                            <div class="tool-placeholder">Klicke auf "Software-Updates prüfen" um verfügbare Updates via winget zu finden.</div>
                         </div>
                     </div>
                     <div class="updates-section" data-section="drivers">
                         <div class="tool-toolbar">
                             <button class="btn btn-primary" id="btn-check-drivers">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
-                                Treiber pruefen
+                                Treiber prüfen
                             </button>
                             <span class="tool-summary" id="drivers-summary"></span>
                         </div>
                         <div id="drivers-results" class="tool-results">
-                            <div class="tool-placeholder">Klicke auf "Treiber pruefen" um aelteste Treiber anzuzeigen.</div>
+                            <div class="tool-placeholder">Klicke auf "Treiber prüfen" um älteste Treiber anzuzeigen.</div>
                         </div>
                     </div>
                     <div class="updates-section" data-section="history">
@@ -92,11 +99,37 @@ export class UpdatesView {
             };
         });
 
+        // "Check all" button
+        this.container.querySelector('#btn-check-all-updates').onclick = () => this.checkAll();
+
         // Action buttons
         this.container.querySelector('#btn-check-windows').onclick = () => this.checkWindowsUpdates();
         this.container.querySelector('#btn-check-software').onclick = () => this.checkSoftwareUpdates();
         this.container.querySelector('#btn-check-drivers').onclick = () => this.checkDrivers();
         this.container.querySelector('#btn-check-history').onclick = () => this.loadHistory();
+    }
+
+    async checkAll() {
+        const summary = this.container.querySelector('#all-updates-summary');
+        if (summary) summary.textContent = 'Alle Updates werden geprüft...';
+
+        await Promise.allSettled([
+            this.checkWindowsUpdates(),
+            this.checkSoftwareUpdates(),
+            this.checkDrivers(),
+        ]);
+
+        // Update combined summary
+        if (summary) {
+            const parts = [];
+            if (this.windowsUpdates.length > 0) parts.push(`${this.windowsUpdates.length} Windows`);
+            if (this.softwareUpdates.length > 0) parts.push(`${this.softwareUpdates.length} Software`);
+            const oldDrivers = this.drivers.filter(d => d.isOld).length;
+            if (oldDrivers > 0) parts.push(`${oldDrivers} Treiber veraltet`);
+            summary.textContent = parts.length > 0
+                ? `Gefunden: ${parts.join(', ')}`
+                : 'Alles aktuell';
+        }
     }
 
     async checkWindowsUpdates() {
@@ -109,12 +142,12 @@ export class UpdatesView {
             this.windowsUpdates = await window.api.checkWindowsUpdates();
             if (this.windowsUpdates.length === 0) {
                 results.innerHTML = '<div class="tool-placeholder">Keine ausstehenden Windows Updates gefunden. Dein System ist aktuell!</div>';
-                summary.textContent = 'Keine Updates verfuegbar';
+                summary.textContent = 'Keine Updates verfügbar';
                 return;
             }
 
             const totalSize = this.windowsUpdates.reduce((s, u) => s + (u.Size || 0), 0);
-            summary.textContent = `${this.windowsUpdates.length} Update(s) verfuegbar` + (totalSize > 0 ? ` (${formatBytes(totalSize)})` : '');
+            summary.textContent = `${this.windowsUpdates.length} Update(s) verfügbar` + (totalSize > 0 ? ` (${formatBytes(totalSize)})` : '');
 
             results.innerHTML = this.windowsUpdates.map(u => `
                 <div class="update-item">
@@ -130,7 +163,7 @@ export class UpdatesView {
                 </div>
             `).join('');
         } catch (err) {
-            results.innerHTML = `<div class="tool-error">Fehler beim Pruefen der Windows Updates: ${escapeHtml(err.message)}</div>`;
+            results.innerHTML = `<div class="tool-error">Fehler beim Prüfen der Windows Updates: ${escapeHtml(err.message)}</div>`;
             summary.textContent = 'Fehler';
         }
     }
@@ -153,12 +186,12 @@ export class UpdatesView {
             this.softwareUpdates = Array.isArray(data) ? data : [];
 
             if (this.softwareUpdates.length === 0) {
-                results.innerHTML = '<div class="tool-placeholder">Keine Software-Updates verfuegbar. Alle Programme sind aktuell!</div>';
+                results.innerHTML = '<div class="tool-placeholder">Keine Software-Updates verfügbar. Alle Programme sind aktuell!</div>';
                 summary.textContent = 'Alles aktuell';
                 return;
             }
 
-            summary.textContent = `${this.softwareUpdates.length} Update(s) verfuegbar`;
+            summary.textContent = `${this.softwareUpdates.length} Update(s) verfügbar`;
 
             results.innerHTML = `
                 <table class="tool-table">
@@ -167,7 +200,7 @@ export class UpdatesView {
                             <th>Programm</th>
                             <th>ID</th>
                             <th>Installiert</th>
-                            <th>Verfuegbar</th>
+                            <th>Verfügbar</th>
                             <th>Quelle</th>
                             <th></th>
                         </tr>
@@ -193,23 +226,38 @@ export class UpdatesView {
             results.querySelectorAll('[data-update-id]').forEach(btn => {
                 btn.onclick = async () => {
                     const pkgId = btn.dataset.updateId;
+                    const row = btn.closest('tr');
                     btn.disabled = true;
-                    btn.textContent = '...';
+                    btn.textContent = 'Installiere...';
                     try {
                         const result = await window.api.updateSoftware(pkgId);
                         if (result.success) {
-                            btn.textContent = 'OK';
-                            btn.classList.remove('btn-primary');
-                            btn.classList.add('btn-success');
-                            showToast(`${pkgId} erfolgreich aktualisiert`, 'success');
+                            if (result.verified) {
+                                btn.textContent = 'Verifiziert';
+                                btn.classList.remove('btn-primary');
+                                btn.classList.add('btn-success');
+                                showToast(`${pkgId} erfolgreich aktualisiert und verifiziert${result.installedVersion ? ` (v${result.installedVersion})` : ''}`, 'success');
+                                // Update the version cell in the row
+                                if (row && result.installedVersion) {
+                                    const cells = row.querySelectorAll('td');
+                                    if (cells[3]) cells[3].textContent = result.installedVersion;
+                                }
+                            } else {
+                                btn.textContent = 'OK (nicht verifiziert)';
+                                btn.classList.remove('btn-primary');
+                                btn.classList.add('btn-success');
+                                showToast(`${pkgId} Update abgeschlossen. Verifizierung ausstehend - ggf. Neustart erforderlich.`, 'success');
+                            }
                         } else {
                             btn.textContent = 'Fehler';
+                            btn.disabled = false;
                             btn.classList.remove('btn-primary');
                             btn.classList.add('btn-danger');
                             showToast(`Fehler: ${result.error || 'Unbekannt'}`, 'error');
                         }
                     } catch (err) {
                         btn.textContent = 'Fehler';
+                        btn.disabled = false;
                         showToast(`Update fehlgeschlagen: ${err.message}`, 'error');
                     }
                 };
@@ -224,13 +272,17 @@ export class UpdatesView {
         const results = this.container.querySelector('#drivers-results');
         const summary = this.container.querySelector('#drivers-summary');
         results.innerHTML = '<div class="loading-spinner" style="margin:40px auto"></div>';
-        summary.textContent = 'Pruefe Treiber...';
+        summary.textContent = 'Prüfe Treiber...';
 
         try {
-            this.drivers = await window.api.getDriverInfo();
+            const [drivers, hwInfo] = await Promise.all([
+                window.api.getDriverInfo(),
+                window.api.getHardwareInfo(),
+            ]);
+            this.drivers = drivers;
 
             if (this.drivers.length === 0) {
-                results.innerHTML = '<div class="tool-placeholder">Keine Treiber-Informationen verfuegbar.</div>';
+                results.innerHTML = '<div class="tool-placeholder">Keine Treiber-Informationen verfügbar.</div>';
                 summary.textContent = '';
                 return;
             }
@@ -238,11 +290,21 @@ export class UpdatesView {
             const oldCount = this.drivers.filter(d => d.isOld).length;
             summary.textContent = `${this.drivers.length} Treiber` + (oldCount > 0 ? ` (${oldCount} veraltet)` : ' - alle aktuell');
 
+            // Hardware info box
+            const hwHtml = hwInfo.Manufacturer ? `
+                <div class="hardware-info-box">
+                    <strong>System:</strong> ${escapeHtml(hwInfo.Manufacturer)} ${escapeHtml(hwInfo.Model || '')}
+                    ${hwInfo.SerialNumber ? ` | <strong>S/N:</strong> ${escapeHtml(hwInfo.SerialNumber)}` : ''}
+                </div>
+            ` : '';
+
             results.innerHTML = `
+                ${hwHtml}
                 <table class="tool-table">
                     <thead>
                         <tr>
-                            <th>Geraet</th>
+                            <th>Gerät</th>
+                            <th>Hersteller</th>
                             <th>Version</th>
                             <th>Datum</th>
                             <th>Alter</th>
@@ -253,6 +315,12 @@ export class UpdatesView {
                         ${this.drivers.map(d => `
                             <tr class="${d.isOld ? 'driver-old' : ''}">
                                 <td class="name-col" title="${escapeAttr(d.name)}">${escapeHtml(d.name)}</td>
+                                <td style="font-size:12px" title="${escapeAttr(d.manufacturer)}">
+                                    ${d.supportUrl
+                                        ? `<a href="#" class="driver-support-link" data-url="${escapeAttr(d.supportUrl)}" title="Treiber-Support öffnen">${escapeHtml(d.manufacturer)}</a>`
+                                        : escapeHtml(d.manufacturer || '-')
+                                    }
+                                </td>
                                 <td style="font-family:var(--font-mono);font-size:12px">${escapeHtml(d.version)}</td>
                                 <td style="font-family:var(--font-mono);font-size:12px">${escapeHtml(d.date)}</td>
                                 <td class="age-col">${d.ageYears > 0 ? d.ageYears + ' Jahre' : '< 1 Jahr'}</td>
@@ -267,6 +335,14 @@ export class UpdatesView {
                     </tbody>
                 </table>
             `;
+
+            // Wire support links
+            results.querySelectorAll('.driver-support-link').forEach(link => {
+                link.onclick = (e) => {
+                    e.preventDefault();
+                    window.api.openExternal(link.dataset.url);
+                };
+            });
         } catch (err) {
             results.innerHTML = `<div class="tool-error">Fehler: ${escapeHtml(err.message)}</div>`;
             summary.textContent = 'Fehler';
@@ -283,7 +359,7 @@ export class UpdatesView {
             this.updateHistory = await window.api.getUpdateHistory();
 
             if (this.updateHistory.length === 0) {
-                results.innerHTML = '<div class="tool-placeholder">Kein Update-Verlauf verfuegbar.</div>';
+                results.innerHTML = '<div class="tool-placeholder">Kein Update-Verlauf verfügbar.</div>';
                 summary.textContent = '';
                 return;
             }

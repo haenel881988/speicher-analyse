@@ -4,10 +4,28 @@ export class OptimizerView {
     constructor(container) {
         this.container = container;
         this.recommendations = [];
+        this._cache = null;
+        this._cacheTime = 0;
     }
 
     async init() {
         this.render();
+    }
+
+    async autoScan() {
+        const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+        if (this._cache && (Date.now() - this._cacheTime) < CACHE_TTL) {
+            return this._cache;
+        }
+        try {
+            this.recommendations = await window.api.getOptimizations();
+            this._cache = { totalRecommendations: this.recommendations.length };
+            this._cacheTime = Date.now();
+            if (this.recommendations.length > 0) this.renderResults();
+            return this._cache;
+        } catch {
+            return { totalRecommendations: 0 };
+        }
     }
 
     render() {
@@ -82,11 +100,12 @@ export class OptimizerView {
                             <div class="opt-item-desc">${escapeHtml(rec.description)}</div>
                             ${rec.savingsBytes ? `<div class="opt-item-savings">Einsparung: ${formatBytes(rec.savingsBytes)}</div>` : ''}
                             ${rec.manualSteps ? `<div class="opt-item-manual">${escapeHtml(rec.manualSteps)}</div>` : ''}
+                            ${rec.technicalDetail ? `<details class="opt-technical"><summary>Technische Details</summary><pre class="opt-technical-pre">${escapeHtml(rec.technicalDetail)}</pre></details>` : ''}
                         </div>
                         <div class="opt-item-actions">
                             <span class="impact-badge ${impactClass}">${impactLabel}</span>
                             ${rec.command || rec.customAction ? `<button class="btn btn-sm btn-primary opt-apply-btn" data-id="${rec.id}">Anwenden</button>` : ''}
-                            ${rec.requiresAdmin ? '<span class="badge-admin">Admin</span>' : ''}
+                            ${rec.requiresAdmin ? '<span class="badge-admin" title="Erfordert Administratorrechte">Admin</span>' : ''}
                         </div>
                     </div>
                 `;

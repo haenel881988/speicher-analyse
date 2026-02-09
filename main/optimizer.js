@@ -34,6 +34,7 @@ async function getOptimizationRecommendations() {
                 command: 'powercfg -h off',
                 reversible: true,
                 reverseCommand: 'powercfg -h on',
+                technicalDetail: `Befehl: powercfg -h off\nLöscht: C:\\hiberfil.sys (${totalRam} GB)\nRückgängig: powercfg -h on`,
             });
         }
 
@@ -44,8 +45,9 @@ async function getOptimizationRecommendations() {
                 title: 'Windows-Indexierung auf SSD einschränken',
                 description: 'Die Windows-Suchindexierung verursacht unnötige Schreibvorgänge auf der SSD. Bei SSDs ist die Suche auch ohne Index schnell genug.',
                 impact: 'medium',
-                command: null, // Manuell in Systemsteuerung
-                manualSteps: 'Systemsteuerung → Indizierungsoptionen → Ändern → SSD-Laufwerk abwählen',
+                command: null,
+                manualSteps: 'Systemsteuerung \u2192 Indizierungsoptionen \u2192 Ändern \u2192 SSD-Laufwerk abwählen',
+                technicalDetail: 'Manuell: Systemsteuerung > Indizierungsoptionen > Ändern\nSSD-Laufwerk aus der Indexierung entfernen\nDienst: Windows Search (WSearch)',
             });
         }
 
@@ -60,6 +62,7 @@ async function getOptimizationRecommendations() {
             reversible: true,
             reverseCommand: 'reg delete "HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\DataCollection" /v AllowTelemetry /f',
             requiresAdmin: true,
+            technicalDetail: 'Registry: HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\DataCollection\nWert: AllowTelemetry = 1 (REG_DWORD)\n0=Aus, 1=Basis, 2=Erweitert, 3=Voll\nSetzt auf "Basis" (Minimum für Windows 10/11 Home)',
         });
 
         recommendations.push({
@@ -71,6 +74,7 @@ async function getOptimizationRecommendations() {
             command: 'reg add "HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\AdvertisingInfo" /v Enabled /t REG_DWORD /d 0 /f',
             reversible: true,
             reverseCommand: 'reg add "HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\AdvertisingInfo" /v Enabled /t REG_DWORD /d 1 /f',
+            technicalDetail: 'Registry: HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\AdvertisingInfo\nWert: Enabled = 0 (REG_DWORD)\n0=Deaktiviert, 1=Aktiviert\nBetrifft nur den aktuellen Benutzer (HKCU)',
         });
 
         recommendations.push({
@@ -83,6 +87,7 @@ async function getOptimizationRecommendations() {
             reversible: true,
             reverseCommand: 'reg delete "HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\System" /v EnableActivityFeed /f',
             requiresAdmin: true,
+            technicalDetail: 'Registry: HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\System\nWert: EnableActivityFeed = 0 (REG_DWORD)\n0=Deaktiviert, 1=Aktiviert\nDeaktiviert Timeline/Aktivitätsverlauf systemweit',
         });
 
         // C3: Leistungsoptimierungen
@@ -96,6 +101,7 @@ async function getOptimizationRecommendations() {
                 command: 'powercfg /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c',
                 reversible: true,
                 reverseCommand: 'powercfg /setactive 381b4222-f694-41f0-9685-ff5bb260df2e',
+                technicalDetail: `Befehl: powercfg /setactive 8c5e7fda-...\nAktuell: "${currentPlan}"\nNeu: "Höchstleistung" (GUID: 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c)\nRückgängig: powercfg /setactive 381b4222-... (Ausbalanciert)`,
             });
         }
 
@@ -108,6 +114,31 @@ async function getOptimizationRecommendations() {
             command: 'reg add "HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\VisualEffects" /v VisualFXSetting /t REG_DWORD /d 2 /f',
             reversible: true,
             reverseCommand: 'reg add "HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\VisualEffects" /v VisualFXSetting /t REG_DWORD /d 0 /f',
+            technicalDetail: 'Registry: HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\VisualEffects\nWert: VisualFXSetting = 2 (REG_DWORD)\n0=Optimale Darstellung, 1=Benutzerdefiniert, 2=Optimale Leistung\nDeaktiviert: Animationen, Fenstervorschau, Schattenwurf, Transparenz',
+        });
+
+        recommendations.push({
+            id: 'sfc-scannow',
+            category: 'performance',
+            title: 'Systemdateien überprüfen (sfc /scannow)',
+            description: 'Überprüft die Integrität aller geschützten Systemdateien und repariert beschädigte Dateien. Kann Systemstabilität und Performance verbessern.',
+            impact: 'high',
+            command: null,
+            customAction: 'sfc-scannow',
+            requiresAdmin: true,
+            technicalDetail: 'Befehl: sfc /scannow\nPrüft: Alle geschützten Systemdateien in C:\\Windows\\\nReparatur: Automatisch aus WinSxS-Cache\nDauer: 5-15 Minuten\nLog: C:\\Windows\\Logs\\CBS\\CBS.log',
+        });
+
+        recommendations.push({
+            id: 'dism-restore-health',
+            category: 'performance',
+            title: 'Windows-Image reparieren (DISM)',
+            description: 'Repariert das Windows-Komponentenspeicher-Image. Sollte vor sfc /scannow ausgeführt werden, wenn Systemdateien beschädigt sind.',
+            impact: 'high',
+            command: null,
+            customAction: 'dism-restore-health',
+            requiresAdmin: true,
+            technicalDetail: 'Befehl: DISM /Online /Cleanup-Image /RestoreHealth\nPrüft: Windows-Komponentenspeicher (WinSxS)\nReparatur: Download fehlender Dateien via Windows Update\nDauer: 10-30 Minuten\nLog: C:\\Windows\\Logs\\DISM\\dism.log',
         });
 
         recommendations.push({
@@ -120,6 +151,8 @@ async function getOptimizationRecommendations() {
             command: null,
             manualSteps: 'Wird automatisch durchgeführt: Windows Update Dienst stoppen, Cache leeren, Dienst starten.',
             customAction: 'clean-update-cache',
+            requiresAdmin: true,
+            technicalDetail: 'Schritte:\n1. net stop wuauserv (Windows Update Dienst stoppen)\n2. Lösche C:\\Windows\\SoftwareDistribution\\Download\\*\n3. net start wuauserv (Dienst neu starten)\nWindows lädt fehlende Updates bei nächster Prüfung erneut herunter.',
         });
 
         // Sortiere nach Impact
@@ -200,29 +233,75 @@ async function getSoftwareDistributionSize() {
     }
 }
 
+async function isAdmin() {
+    try {
+        await execFileAsync('net', ['session'], { timeout: 5000, windowsHide: true });
+        return true;
+    } catch {
+        return false;
+    }
+}
+
 async function applyOptimization(id) {
     const recs = await getOptimizationRecommendations();
     const rec = recs.find(r => r.id === id);
     if (!rec) throw new Error('Empfehlung nicht gefunden');
 
+    // Check admin rights for commands that require it
+    if (rec.requiresAdmin) {
+        const admin = await isAdmin();
+        if (!admin) {
+            return {
+                success: false,
+                id,
+                error: 'Diese Optimierung erfordert Administratorrechte. Bitte starte die App als Administrator (Rechtsklick → "Als Administrator ausführen").',
+            };
+        }
+    }
+
     // Custom actions
     if (rec.customAction === 'clean-update-cache') {
         return cleanUpdateCache();
+    }
+    if (rec.customAction === 'sfc-scannow') {
+        return runLongCommand('sfc', ['/scannow'], 10 * 60 * 1000, 'sfc-scannow');
+    }
+    if (rec.customAction === 'dism-restore-health') {
+        return runLongCommand('DISM', ['/Online', '/Cleanup-Image', '/RestoreHealth'], 15 * 60 * 1000, 'dism-restore-health');
     }
 
     if (!rec.command) {
         throw new Error('Diese Empfehlung muss manuell umgesetzt werden');
     }
 
-    const parts = rec.command.split(' ');
-    const exe = parts[0];
-    const args = parts.slice(1);
+    // Parse command - handle quoted arguments (e.g. reg add "HKLM\...")
+    const args = [];
+    const regex = /"([^"]+)"|(\S+)/g;
+    let match;
+    while ((match = regex.exec(rec.command)) !== null) {
+        args.push(match[1] || match[2]);
+    }
+    const exe = args.shift();
 
     try {
         await execFileAsync(exe, args, {
             timeout: 30000, windowsHide: true, encoding: 'utf8',
         });
-        return { success: true, id };
+        return { success: true, id, detail: `${rec.title} wurde erfolgreich angewendet.` };
+    } catch (err) {
+        const msg = err.message.includes('Zugriff verweigert') || err.message.includes('Access is denied')
+            ? 'Zugriff verweigert. Bitte starte die App als Administrator.'
+            : err.message;
+        return { success: false, id, error: msg };
+    }
+}
+
+async function runLongCommand(exe, args, timeout, id) {
+    try {
+        const { stdout, stderr } = await execFileAsync(exe, args, {
+            timeout, windowsHide: true, encoding: 'utf8',
+        });
+        return { success: true, id, output: stdout || stderr || '' };
     } catch (err) {
         return { success: false, id, error: err.message };
     }

@@ -2,20 +2,16 @@ const { parentPort, workerData } = require('worker_threads');
 const fs = require('fs');
 const crypto = require('crypto');
 
-const { files, options = {} } = workerData;
-const minFileSize = options.minSize || 1024;
-const maxFileSize = options.maxSize || 2147483648;
+const { files } = workerData;
 
-// Phase 1: Group by size
+// Files are already pre-filtered by size+ext on main thread (system paths excluded)
+// Re-group by size for hashing phases
 const sizeGroups = new Map();
 for (const f of files) {
-    if (f.size === 0 || f.size < minFileSize || f.size > maxFileSize) continue;
-    const key = f.size;
-    if (!sizeGroups.has(key)) sizeGroups.set(key, []);
-    sizeGroups.get(key).push(f);
+    if (!sizeGroups.has(f.size)) sizeGroups.set(f.size, []);
+    sizeGroups.get(f.size).push(f);
 }
 
-// Filter to only groups with 2+ files
 const candidates = [];
 for (const [size, group] of sizeGroups) {
     if (group.length >= 2) {
@@ -30,7 +26,7 @@ const startTime = Date.now();
 
 function sendProgress(phase, currentFile) {
     const now = Date.now();
-    if (now - lastProgressTime >= 300) {
+    if (now - lastProgressTime >= 250) {
         lastProgressTime = now;
         const elapsed = (now - startTime) / 1000;
         const pct = totalToHash > 0 ? filesHashed / totalToHash : 0;
@@ -46,20 +42,24 @@ function sendProgress(phase, currentFile) {
     }
 }
 
-function hashFile(filePath, partialOnly = false) {
+// Reusable buffers (avoid re-allocation per file)
+const PARTIAL_SIZE = 8192;   // 8KB partial hash (was 64KB - sufficient for differentiation)
+const FULL_BUF_SIZE = 262144; // 256KB chunks for full hash (was 128KB - faster I/O)
+const partialBuf = Buffer.alloc(PARTIAL_SIZE);
+const fullBuf = Buffer.alloc(FULL_BUF_SIZE);
+
+function hashFile(filePath, partialOnly) {
     try {
         const hash = crypto.createHash('sha256');
         const fd = fs.openSync(filePath, 'r');
-        const bufSize = partialOnly ? 65536 : 131072; // 64KB for partial, 128KB chunks for full
-        const buf = Buffer.alloc(bufSize);
-        let bytesRead;
 
         if (partialOnly) {
-            bytesRead = fs.readSync(fd, buf, 0, bufSize, 0);
-            if (bytesRead > 0) hash.update(buf.subarray(0, bytesRead));
+            const bytesRead = fs.readSync(fd, partialBuf, 0, PARTIAL_SIZE, 0);
+            if (bytesRead > 0) hash.update(partialBuf.subarray(0, bytesRead));
         } else {
-            while ((bytesRead = fs.readSync(fd, buf, 0, bufSize, null)) > 0) {
-                hash.update(buf.subarray(0, bytesRead));
+            let bytesRead;
+            while ((bytesRead = fs.readSync(fd, fullBuf, 0, FULL_BUF_SIZE, null)) > 0) {
+                hash.update(fullBuf.subarray(0, bytesRead));
             }
         }
 
@@ -70,7 +70,7 @@ function hashFile(filePath, partialOnly = false) {
     }
 }
 
-// Phase 2: Partial hash (first 64KB)
+// Phase 1: Partial hash (first 8KB) - fast pre-filter
 const partialGroups = new Map();
 for (const candidate of candidates) {
     const hashMap = new Map();
@@ -91,12 +91,24 @@ for (const candidate of candidates) {
     }
 }
 
-// Phase 3: Full hash only where partial hashes match
+// Phase 2: Full hash only where partial hashes match
 filesHashed = 0;
-const totalFullHash = [...partialGroups.values()].reduce((sum, g) => sum + g.files.length, 0);
 const finalGroups = [];
 
 for (const [, candidate] of partialGroups) {
+    // For small files (<= partial size), partial hash IS the full hash
+    if (candidate.size <= PARTIAL_SIZE) {
+        finalGroups.push({
+            hash: 'small-file',
+            size: candidate.size,
+            files: candidate.files.map(f => ({
+                path: f.path, name: f.name, ext: f.ext, mtime: f.mtime,
+            })),
+        });
+        filesHashed += candidate.files.length;
+        continue;
+    }
+
     const hashMap = new Map();
     for (const f of candidate.files) {
         const h = hashFile(f.path, false);
@@ -113,10 +125,7 @@ for (const [, candidate] of partialGroups) {
                 hash,
                 size: candidate.size,
                 files: group.map(f => ({
-                    path: f.path,
-                    name: f.name,
-                    ext: f.ext,
-                    mtime: f.mtime,
+                    path: f.path, name: f.name, ext: f.ext, mtime: f.mtime,
                 })),
             });
         }

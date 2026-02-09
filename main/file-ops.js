@@ -2,14 +2,48 @@ const fs = require('fs');
 const path = require('path');
 const { shell } = require('electron');
 
+function friendlyError(err, filePath) {
+    const name = path.basename(filePath);
+    if (err.code === 'EACCES' || err.code === 'EPERM') {
+        return `Zugriff verweigert: "${name}". Möglicherweise sind Administratorrechte erforderlich.`;
+    }
+    if (err.code === 'EBUSY') {
+        return `"${name}" wird von einem anderen Programm verwendet.`;
+    }
+    if (err.code === 'ENOENT') {
+        return `"${name}" wurde nicht gefunden (bereits gelöscht?).`;
+    }
+    if (err.code === 'ENOTEMPTY') {
+        return `Ordner "${name}" ist nicht leer.`;
+    }
+    if (err.message && err.message.includes('not allowed')) {
+        return `"${name}" kann nicht in den Papierkorb verschoben werden.`;
+    }
+    return `Fehler bei "${name}": ${err.message}`;
+}
+
+async function retryOnBusy(fn, retries = 3, delayMs = 500) {
+    for (let i = 0; i < retries; i++) {
+        try {
+            return await fn();
+        } catch (err) {
+            if (err.code === 'EBUSY' && i < retries - 1) {
+                await new Promise(r => setTimeout(r, delayMs * (i + 1)));
+                continue;
+            }
+            throw err;
+        }
+    }
+}
+
 async function trashItems(paths) {
     const results = [];
     for (const p of paths) {
         try {
-            await shell.trashItem(p);
+            await retryOnBusy(() => shell.trashItem(p));
             results.push({ path: p, success: true });
         } catch (err) {
-            results.push({ path: p, success: false, error: err.message });
+            results.push({ path: p, success: false, error: friendlyError(err, p) });
         }
     }
     return results;
@@ -21,13 +55,13 @@ async function deleteItems(paths) {
         try {
             const stat = await fs.promises.stat(p);
             if (stat.isDirectory()) {
-                await fs.promises.rm(p, { recursive: true, force: true });
+                await retryOnBusy(() => fs.promises.rm(p, { recursive: true, force: true }));
             } else {
-                await fs.promises.unlink(p);
+                await retryOnBusy(() => fs.promises.unlink(p));
             }
             results.push({ path: p, success: true });
         } catch (err) {
-            results.push({ path: p, success: false, error: err.message });
+            results.push({ path: p, success: false, error: friendlyError(err, p) });
         }
     }
     return results;

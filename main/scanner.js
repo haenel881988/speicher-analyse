@@ -76,6 +76,11 @@ class DiskScanner {
                 this.errorsCount = msg.errorsCount;
                 this.status = 'complete';
                 this.isComplete = true;
+                // Terminate worker to free memory
+                if (this.worker) {
+                    this.worker.terminate();
+                    this.worker = null;
+                }
                 if (onComplete) onComplete(this.getProgress());
             }
         });
@@ -126,14 +131,18 @@ class DiskScanner {
     }
 
     getTopFiles(limit = 100) {
+        const { isSystemPath, isInsideExcludedDir } = require('./exclusions');
         const sorted = [...this.topFiles].sort((a, b) => b.size - a.size);
-        return sorted.slice(0, limit).map(f => ({
-            path: f.path,
-            name: f.name,
-            size: f.size,
-            extension: f.ext,
-            modified: f.mtime,
-        }));
+        return sorted
+            .filter(f => !isSystemPath(f.path) && !isInsideExcludedDir(f.path))
+            .slice(0, limit)
+            .map(f => ({
+                path: f.path,
+                name: f.name,
+                size: f.size,
+                extension: f.ext,
+                modified: f.mtime,
+            }));
     }
 
     getFileTypeStats() {
@@ -150,12 +159,86 @@ class DiskScanner {
         return stats;
     }
 
+    releaseBulkData() {
+        if (this.dirFiles) {
+            this.dirFiles.clear();
+            this.dirFiles = null;
+        }
+    }
+
+    getFilesByExtension(ext, limit = 500) {
+        if (!this.dirFiles) return [];
+        const results = [];
+        for (const [dirPath, files] of this.dirFiles) {
+            for (const f of files) {
+                if (f.ext === ext) {
+                    results.push({
+                        path: path.join(dirPath, f.name),
+                        name: f.name,
+                        size: f.size,
+                        extension: f.ext,
+                        modified: f.mtime,
+                    });
+                }
+            }
+        }
+        results.sort((a, b) => b.size - a.size);
+        return results.slice(0, limit);
+    }
+
+    getFilesByCategory(category, limit = 500) {
+        if (!this.dirFiles) return [];
+        const results = [];
+        for (const [dirPath, files] of this.dirFiles) {
+            for (const f of files) {
+                if (getCategory(f.ext) === category) {
+                    results.push({
+                        path: path.join(dirPath, f.name),
+                        name: f.name,
+                        size: f.size,
+                        extension: f.ext,
+                        modified: f.mtime,
+                    });
+                }
+            }
+        }
+        results.sort((a, b) => b.size - a.size);
+        return results.slice(0, limit);
+    }
+
+    getSizeDuplicates(minSize = 1024) {
+        if (!this.dirFiles) return { totalGroups: 0, totalFiles: 0, totalSaveable: 0 };
+        const sizeMap = new Map();
+        for (const [dirPath, files] of this.dirFiles) {
+            for (const f of files) {
+                if (f.size < minSize) continue;
+                const key = f.size;
+                if (!sizeMap.has(key)) {
+                    sizeMap.set(key, 1);
+                } else {
+                    sizeMap.set(key, sizeMap.get(key) + 1);
+                }
+            }
+        }
+        let totalGroups = 0;
+        let totalFiles = 0;
+        let totalSaveable = 0;
+        for (const [size, count] of sizeMap) {
+            if (count > 1) {
+                totalGroups++;
+                totalFiles += count;
+                totalSaveable += size * (count - 1);
+            }
+        }
+        return { totalGroups, totalFiles, totalSaveable };
+    }
+
     search(query, minSize = 0, maxResults = 200) {
         const results = [];
         const queryLower = query.toLowerCase();
         const isGlob = query.includes('*') || query.includes('?');
 
-        // Search directories
+        // Search directories (tree is always available)
         for (const [dirPath, data] of this.tree) {
             const name = data.name.toLowerCase();
             let match = false;
@@ -175,7 +258,8 @@ class DiskScanner {
             }
         }
 
-        // Search files
+        // Search files (only if bulk data still available)
+        if (!this.dirFiles) return results.slice(0, maxResults);
         for (const [dirPath, files] of this.dirFiles) {
             for (const f of files) {
                 const name = f.name.toLowerCase();

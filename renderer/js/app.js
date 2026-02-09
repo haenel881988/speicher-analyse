@@ -31,11 +31,20 @@ const state = {
     scanning: false,
 };
 
+// Track which tabs have been auto-loaded this session
+const tabLoaded = {
+    autostart: false,
+    services: false,
+    bloatware: false,
+    updates: false,
+    duplicates: false,
+    optimizer: false,
+};
+
 // ===== DOM =====
 const els = {
-    sidebarDrives: document.getElementById('sidebar-drives'),
-    sidebarScanBtn: document.getElementById('sidebar-scan-btn'),
-    drivesToggle: document.getElementById('drives-toggle'),
+    toolbarDriveSelect: document.getElementById('toolbar-drive-select'),
+    toolbarScanBtn: document.getElementById('toolbar-scan-btn'),
     tabContent: document.getElementById('tab-content'),
     scanProgress: document.getElementById('scan-progress'),
     progressStats: document.getElementById('progress-stats'),
@@ -55,8 +64,8 @@ const els = {
     themeToggle: document.getElementById('theme-toggle'),
     iconMoon: document.getElementById('icon-moon'),
     iconSun: document.getElementById('icon-sun'),
-    exportCsvBtn: document.getElementById('sidebar-export-csv'),
-    exportPdfBtn: document.getElementById('sidebar-export-pdf'),
+    exportCsvBtn: document.getElementById('toolbar-export-csv'),
+    exportPdfBtn: document.getElementById('toolbar-export-pdf'),
     searchInput: document.getElementById('search-input'),
     searchMinSize: document.getElementById('search-min-size'),
     searchResults: document.getElementById('search-results'),
@@ -92,18 +101,20 @@ const updatesView = new UpdatesView(document.getElementById('view-updates'));
 treeView.onContextMenu = handleContextMenu;
 treemapView.onContextMenu = handleContextMenu;
 searchPanel.onContextMenu = handleContextMenu;
+fileTypeChart.onContextMenu = handleContextMenu;
 
 // ===== Init =====
 async function init() {
     loadTheme();
     setupSidebar();
+    setupToolbar();
     setupExport();
     setupThemeToggle();
     setupPropertiesModal();
     setupContextMenuActions();
     setupKeyboardShortcuts();
     setupPreviewToggle();
-    setupScanButton();
+    setupTopFilesFilters();
     await registryView.init();
     await autostartView.init();
     await servicesView.init();
@@ -112,34 +123,50 @@ async function init() {
     await updatesView.init();
     dashboardView.onNavigate = (tab) => switchToTab(tab);
     await loadDrives();
+
+    // Auto-scan C: drive on startup
+    const cDrive = state.drives.find(d => d.mountpoint.toUpperCase().startsWith('C'));
+    if (cDrive) {
+        selectDriveByPath(cDrive.mountpoint);
+    }
 }
 
 // ===== Sidebar =====
 function setupSidebar() {
-    // Sidebar nav buttons (data-tab attribute)
     document.querySelectorAll('.sidebar-nav-btn[data-tab]').forEach(btn => {
         btn.onclick = () => switchToTab(btn.dataset.tab);
     });
 
-    // Drives toggle (collapsible)
-    els.drivesToggle.onclick = () => {
-        els.drivesToggle.classList.toggle('collapsed');
-        els.sidebarDrives.classList.toggle('collapsed');
-    };
+    // Sidebar toggle (click only, no hover)
+    const sidebar = document.getElementById('sidebar');
+    const toggleBtn = document.getElementById('sidebar-toggle');
+    if (toggleBtn && sidebar) {
+        if (localStorage.getItem('sidebar-expanded') === 'true') {
+            sidebar.classList.add('expanded');
+        }
+        toggleBtn.onclick = () => {
+            sidebar.classList.toggle('expanded');
+            localStorage.setItem('sidebar-expanded', sidebar.classList.contains('expanded'));
+        };
+    }
 }
 
-function setupScanButton() {
-    els.sidebarScanBtn.onclick = () => {
+// ===== Toolbar =====
+function setupToolbar() {
+    // Scan button
+    els.toolbarScanBtn.onclick = () => {
         if (state.scanning) return;
-        const defaultDrive = state.drives.find(d => d.mountpoint.toUpperCase().startsWith('C')) || state.drives[0];
-        if (!defaultDrive) {
-            showToast('Kein Laufwerk gefunden', 'error');
+        const selectedPath = els.toolbarDriveSelect.value;
+        if (!selectedPath) {
+            showToast('Bitte zuerst ein Laufwerk auswählen', 'info');
             return;
         }
-        const driveEl = els.sidebarDrives.querySelector(`.sidebar-drive[data-path="${defaultDrive.mountpoint}"]`);
-        if (driveEl) {
-            selectDrive(driveEl, defaultDrive.mountpoint);
-        }
+        selectDriveByPath(selectedPath);
+    };
+
+    // Drive dropdown change
+    els.toolbarDriveSelect.onchange = () => {
+        // Don't auto-scan on change, just select
     };
 }
 
@@ -149,67 +176,52 @@ async function loadDrives() {
         state.drives = await fetchDrives();
         renderDrives();
     } catch (e) {
-        els.sidebarDrives.innerHTML = '<span style="color:var(--danger);font-size:11px">Fehler</span>';
+        els.toolbarDriveSelect.innerHTML = '<option value="">Fehler beim Laden</option>';
     }
 }
 
 function renderDrives() {
-    els.sidebarDrives.innerHTML = state.drives.map(drive => {
-        const isCritical = drive.percent > 90;
-        return `
-            <div class="sidebar-drive" data-path="${drive.mountpoint}" title="${drive.device} - ${formatBytes(drive.used)} / ${formatBytes(drive.total)} (${drive.fstype})">
-                <div class="sidebar-drive-icon">${getDriveIcon(drive)}</div>
-                <div class="sidebar-drive-info">
-                    <div class="sidebar-drive-label">${drive.mountpoint.replace('\\', '')} ${formatBytes(drive.free)} frei</div>
-                    <div class="sidebar-drive-bar">
-                        <div class="sidebar-drive-bar-fill ${isCritical ? 'critical' : ''}" style="width:${drive.percent}%"></div>
-                    </div>
-                </div>
-            </div>
-        `;
+    const defaultOption = '<option value="">Laufwerk...</option>';
+    const options = state.drives.map(drive => {
+        const label = `${drive.mountpoint.replace('\\', '')} ${formatBytes(drive.free)} frei (${drive.fstype})`;
+        return `<option value="${drive.mountpoint}" title="${drive.device} - ${formatBytes(drive.used)} / ${formatBytes(drive.total)}">${label}</option>`;
     }).join('');
+    els.toolbarDriveSelect.innerHTML = defaultOption + options;
 
-    els.sidebarDrives.querySelectorAll('.sidebar-drive').forEach(card => {
-        card.onclick = () => {
-            if (state.scanning) return;
-            selectDrive(card, card.dataset.path);
-        };
-    });
+    // Pre-select C: drive if available
+    const cDrive = state.drives.find(d => d.mountpoint.toUpperCase().startsWith('C'));
+    if (cDrive) {
+        els.toolbarDriveSelect.value = cDrive.mountpoint;
+    }
 }
 
-function getDriveIcon(drive) {
-    const d = drive.device.toUpperCase();
-    if (d.includes('C:')) return '\uD83D\uDCBB';
-    if (drive.fstype === 'CDFS' || drive.fstype === 'UDF') return '\uD83D\uDCBF';
-    return '\uD83D\uDCBE';
-}
-
-async function selectDrive(cardEl, path) {
-    els.sidebarDrives.querySelectorAll('.sidebar-drive').forEach(c => c.classList.remove('active', 'scanning'));
-    cardEl.classList.add('active', 'scanning');
-
+async function selectDriveByPath(drivePath) {
     state.scanning = true;
-    state.currentPath = path;
-    els.sidebarScanBtn.disabled = true;
+    state.currentPath = drivePath;
+    Object.keys(tabLoaded).forEach(k => tabLoaded[k] = false);
+    els.toolbarScanBtn.disabled = true;
+    els.toolbarDriveSelect.disabled = true;
 
     try {
-        const { scan_id } = await startScan(path);
+        const { scan_id } = await startScan(drivePath);
         state.currentScanId = scan_id;
 
         els.scanProgress.classList.add('active');
+        els.progressBar.classList.add('animating');
         els.welcomeState.style.display = 'none';
         els.treeContent.style.display = 'none';
+        setStatus('Laufwerk wird gescannt...', true);
 
         setupScanListeners(
             (progress) => updateProgress(progress),
-            (progress) => onScanComplete(progress, cardEl),
-            (error) => onScanError(error, cardEl),
+            (progress) => onScanComplete(progress),
+            (error) => onScanError(error),
         );
     } catch (e) {
         console.error('Scan start error:', e);
-        cardEl.classList.remove('scanning');
         state.scanning = false;
-        els.sidebarScanBtn.disabled = false;
+        els.toolbarScanBtn.disabled = false;
+        els.toolbarDriveSelect.disabled = false;
     }
 }
 
@@ -220,31 +232,34 @@ function updateProgress(progress) {
     els.progressBar.style.width = '100%';
 }
 
-async function onScanComplete(progress, cardEl) {
+async function onScanComplete(progress) {
     state.scanning = false;
-    cardEl.classList.remove('scanning');
-    els.sidebarScanBtn.disabled = false;
+    els.toolbarScanBtn.disabled = false;
+    els.toolbarDriveSelect.disabled = false;
 
     els.progressStats.textContent =
         `Fertig! ${formatNumber(progress.dirs_scanned)} Ordner \u00B7 ${formatNumber(progress.files_found)} Dateien \u00B7 ${formatBytes(progress.total_size)} \u00B7 ${formatDuration(progress.elapsed_seconds)}` +
         (progress.errors_count > 0 ? ` \u00B7 ${progress.errors_count} Fehler` : '');
     els.progressBar.style.width = '100%';
-    els.progressBar.style.animation = 'none';
+    els.progressBar.classList.remove('animating');
 
     state.lastScanProgress = progress;
     searchPanel.enable(state.currentScanId);
+    setStatus('Daten werden geladen...', true);
     await loadAllViews();
+    setStatus('Bereit');
 
     setTimeout(() => els.scanProgress.classList.remove('active'), 3000);
 }
 
-function onScanError(error, cardEl) {
+function onScanError(error) {
     state.scanning = false;
-    cardEl.classList.remove('scanning');
-    els.sidebarScanBtn.disabled = false;
+    els.toolbarScanBtn.disabled = false;
+    els.toolbarDriveSelect.disabled = false;
     els.progressStats.textContent = 'Fehler: ' + (error.current_path || 'Unbekannt');
     els.progressBar.style.width = '0%';
-    els.progressBar.style.animation = 'none';
+    els.progressBar.classList.remove('animating');
+    setStatus('Scan-Fehler');
 }
 
 // ===== Load Views =====
@@ -255,6 +270,7 @@ async function loadAllViews() {
     treemapView.init(state.currentScanId, state.currentPath);
     await fileTypeChart.init(state.currentScanId);
     fileTypeChart.setupTableSort(els.typeTable);
+    fileTypeChart.setupDetailPanel();
     await loadTopFiles();
 
     // Init tool views with current scan
@@ -269,13 +285,20 @@ async function loadAllViews() {
 }
 
 async function runPostScanAnalysis() {
-    const [cleanup, oldFiles, registry] = await Promise.allSettled([
+    setStatus('Analyse wird durchgeführt...', true);
+    const [cleanup, oldFiles, registry, optimizer, sizeDuplicates] = await Promise.allSettled([
         cleanupView.autoScan(),
         oldFilesView.autoSearch(),
         registryView.autoScan(),
+        optimizerView.autoScan(),
+        window.api.getSizeDuplicates(state.currentScanId, 1024),
     ]);
-    dashboardView.updateResults({ cleanup, oldFiles, registry });
+    dashboardView.updateResults({ cleanup, oldFiles, registry, optimizer, sizeDuplicates });
+    setStatus('Bereit');
     switchToTab('dashboard');
+
+    // Release bulk file data to free ~200-400 MB RAM
+    await window.api.releaseScanBulkData(state.currentScanId);
 }
 
 function switchToTab(tabName) {
@@ -294,25 +317,101 @@ function switchToTab(tabName) {
     if (tabName === 'treemap' && state.currentScanId) {
         setTimeout(() => treemapView.render(treemapView.rootPath), 50);
     }
+
+    // Auto-load data when tab is clicked
+    autoLoadTab(tabName);
+}
+
+async function autoLoadTab(tabName) {
+    if (tabLoaded[tabName]) return;
+
+    switch (tabName) {
+        case 'autostart':
+            tabLoaded.autostart = true;
+            setStatus('Autostart wird geladen...', true);
+            await autostartView.scan();
+            setStatus('Bereit');
+            break;
+        case 'services':
+            tabLoaded.services = true;
+            setStatus('Dienste werden geladen...', true);
+            await servicesView.load();
+            setStatus('Bereit');
+            break;
+        case 'bloatware':
+            tabLoaded.bloatware = true;
+            setStatus('Bloatware wird gesucht...', true);
+            await bloatwareView.scan();
+            setStatus('Bereit');
+            break;
+        case 'updates':
+            tabLoaded.updates = true;
+            setStatus('Updates werden geprüft...', true);
+            await updatesView.checkAll();
+            setStatus('Bereit');
+            break;
+        case 'duplicates':
+            // Duplikat-Scan bleibt manuell (braucht dirFiles, die nach Analyse freigegeben werden)
+            break;
+        case 'optimizer':
+            if (!optimizerView._cache) {
+                tabLoaded.optimizer = true;
+                setStatus('System wird analysiert...', true);
+                await optimizerView.scan();
+                setStatus('Bereit');
+            }
+            break;
+    }
 }
 
 async function loadTopFiles() {
+    const limitEl = document.getElementById('top-files-limit');
+    const categoryEl = document.getElementById('top-files-category');
+    const limit = parseInt(limitEl?.value || '100', 10);
+    const categoryFilter = categoryEl?.value || '';
+
     try {
-        const files = await window.api.getTopFiles(state.currentScanId, 100);
-        renderTopFiles(files);
+        const files = await window.api.getTopFiles(state.currentScanId, limit);
+        const filtered = categoryFilter
+            ? files.filter(f => getCategoryForExt(f.extension) === categoryFilter)
+            : files;
+        renderTopFiles(filtered);
+
+        const summaryEl = document.getElementById('top-files-summary');
+        if (summaryEl) {
+            summaryEl.textContent = `${filtered.length} Dateien${categoryFilter ? ' (' + categoryFilter + ')' : ''} \u00B7 ${formatBytes(filtered.reduce((s, f) => s + f.size, 0))}`;
+        }
     } catch (e) { console.error('Error loading top files:', e); }
+}
+
+function setupTopFilesFilters() {
+    const limitEl = document.getElementById('top-files-limit');
+    const categoryEl = document.getElementById('top-files-category');
+    if (limitEl) limitEl.onchange = () => { if (state.currentScanId) loadTopFiles(); };
+    if (categoryEl) categoryEl.onchange = () => { if (state.currentScanId) loadTopFiles(); };
+}
+
+function formatAge(mtime) {
+    if (!mtime) return '-';
+    const days = Math.floor((Date.now() / 1000 - mtime) / 86400);
+    if (days < 1) return 'Heute';
+    if (days < 30) return days + ' T';
+    if (days < 365) return Math.floor(days / 30) + ' M';
+    return Math.floor(days / 365) + ' J';
 }
 
 function renderTopFiles(files) {
     els.topFilesBody.innerHTML = files.map((file, i) => {
         const dirPath = file.path.substring(0, Math.max(file.path.lastIndexOf('\\'), file.path.lastIndexOf('/')));
         const catClass = getCategoryClass(getCategoryForExt(file.extension));
+        const age = formatAge(file.modified);
         return `
             <tr data-path="${escapeAttr(file.path)}" data-name="${escapeAttr(file.name)}">
                 <td class="rank-col">${i + 1}</td>
                 <td class="name-col" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</td>
                 <td class="path-col" title="${escapeHtml(dirPath)}">${escapeHtml(dirPath)}</td>
                 <td class="type-col"><span class="category-badge ${catClass}">${file.extension || '-'}</span></td>
+                <td class="age-col">${age}</td>
                 <td class="size-col">${formatBytes(file.size)}</td>
             </tr>
         `;
@@ -526,6 +625,14 @@ function handleSearchNavigate(path, isDir) {
     } else if (previewPanel.isVisible()) {
         previewPanel.show(path);
     }
+}
+
+// ===== Status Bar =====
+function setStatus(text, loading = false) {
+    const statusText = document.getElementById('status-text');
+    const statusSpinner = document.getElementById('status-spinner');
+    if (statusText) statusText.textContent = text;
+    if (statusSpinner) statusSpinner.style.display = loading ? 'inline-block' : 'none';
 }
 
 // ===== Helpers =====

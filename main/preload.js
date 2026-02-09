@@ -25,6 +25,8 @@ contextBridge.exposeInMainWorld('api', {
     getTopFiles: (scanId, limit) => ipcRenderer.invoke('get-top-files', scanId, limit),
     getFileTypes: (scanId) => ipcRenderer.invoke('get-file-types', scanId),
     search: (scanId, query, minSize) => ipcRenderer.invoke('search', scanId, query, minSize),
+    getFilesByExtension: (scanId, ext, limit) => ipcRenderer.invoke('get-files-by-extension', scanId, ext, limit),
+    getFilesByCategory: (scanId, category, limit) => ipcRenderer.invoke('get-files-by-category', scanId, category, limit),
 
     // === Export ===
     exportCSV: (scanId) => ipcRenderer.invoke('export-csv', scanId),
@@ -72,6 +74,12 @@ contextBridge.exposeInMainWorld('api', {
         ipcRenderer.on('duplicate-complete', (_e, data) => callback(data));
     },
 
+    // === Size Duplicates (pre-scan) ===
+    getSizeDuplicates: (scanId, minSize) => ipcRenderer.invoke('get-size-duplicates', scanId, minSize),
+
+    // === Memory management ===
+    releaseScanBulkData: (scanId) => ipcRenderer.invoke('release-scan-bulk-data', scanId),
+
     // === Cleanup ===
     scanCleanupCategories: (scanId) => ipcRenderer.invoke('scan-cleanup-categories', scanId),
     cleanCategory: (categoryId, paths) => ipcRenderer.invoke('clean-category', categoryId, paths),
@@ -113,7 +121,9 @@ contextBridge.exposeInMainWorld('api', {
     checkSoftwareUpdates: () => ipcRenderer.invoke('check-software-updates'),
     updateSoftware: (packageId) => ipcRenderer.invoke('update-software', packageId),
     getDriverInfo: () => ipcRenderer.invoke('get-driver-info'),
+    getHardwareInfo: () => ipcRenderer.invoke('get-hardware-info'),
 
     // === Platform ===
     getPlatform: () => ipcRenderer.invoke('get-platform'),
+    openExternal: (url) => ipcRenderer.invoke('open-external', url),
 });

@@ -43,6 +43,8 @@ export class DashboardView {
         const cleanupVal = r.cleanup && r.cleanup.status === 'fulfilled' && r.cleanup.value;
         const oldFilesVal = r.oldFiles && r.oldFiles.status === 'fulfilled' && r.oldFiles.value;
         const registryVal = r.registry && r.registry.status === 'fulfilled' && r.registry.value;
+        const optimizerVal = r.optimizer && r.optimizer.status === 'fulfilled' && r.optimizer.value;
+        const dupVal = r.sizeDuplicates && r.sizeDuplicates.status === 'fulfilled' && r.sizeDuplicates.value;
 
         cardsEl.innerHTML = `
             <div class="dash-card dash-card-primary">
@@ -73,11 +75,18 @@ export class DashboardView {
                 <div class="dash-card-detail">${registryVal ? registryVal.categories + ' Kategorien' : ''}</div>
             </div>
 
-            <div class="dash-card clickable" data-action="duplicates">
+            <div class="dash-card ${dupVal ? 'clickable' : 'loading'}" data-action="duplicates">
                 <div class="dash-card-icon">&#x1F4CB;</div>
                 <div class="dash-card-title">Duplikate</div>
-                <div class="dash-card-value">Scan starten</div>
-                <div class="dash-card-detail">Identische Dateien finden</div>
+                <div class="dash-card-value">${dupVal ? (dupVal.totalGroups > 0 ? '~' + formatBytes(dupVal.totalSaveable) + ' einsparbar' : 'Keine gefunden') : 'Wird analysiert...'}</div>
+                <div class="dash-card-detail">${dupVal ? formatNumber(dupVal.totalFiles) + ' Dateien in ' + formatNumber(dupVal.totalGroups) + ' Gruppen (Vorschau)' : ''}</div>
+            </div>
+
+            <div class="dash-card ${optimizerVal ? 'clickable' : 'loading'}" data-action="optimizer">
+                <div class="dash-card-icon">&#x26A1;</div>
+                <div class="dash-card-title">Optimierung</div>
+                <div class="dash-card-value">${optimizerVal ? optimizerVal.totalRecommendations + ' Empfehlungen' : 'Wird analysiert...'}</div>
+                <div class="dash-card-detail">${optimizerVal ? 'Hardware, Datenschutz, Leistung' : ''}</div>
             </div>
 
             <div class="dash-card clickable" data-action="autostart">

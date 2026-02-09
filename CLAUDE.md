@@ -1,5 +1,12 @@
 # Speicher Analyse
 
+# Git Workflow
+
+**Immer ausführen, nach jeder Änderung.:** 
+git add .; git committ -m "type:features - detaillierte Beschreibung / Änderungsprotokoll"; git push
+
+
+
 ## Projektbeschreibung
 Speicher Analyse ist ein Windows-Desktop-Tool zur Festplattenanalyse und Systemoptimierung.
 Es kombiniert Funktionen von TreeSize (Speichervisualisierung) und CCleaner (Bereinigung) in einer modernen Electron-App.

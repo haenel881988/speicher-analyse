@@ -1,5 +1,6 @@
 const path = require('path');
 const { Worker } = require('worker_threads');
+const { isSystemPath, isInsideExcludedDir } = require('./exclusions');
 
 class DuplicateFinder {
     constructor(scanner, scanId) {
@@ -14,15 +15,25 @@ class DuplicateFinder {
         this.status = 'scanning';
         this.results = null;
 
+        if (!this.scanner.dirFiles) {
+            this.status = 'error';
+            if (onError) onError({ message: 'Scan-Daten nicht mehr verfügbar. Bitte zuerst einen neuen Laufwerk-Scan durchführen.' });
+            return;
+        }
+
         // Phase 0: Pre-filter on main thread - only send size-duplicate candidates
         const minSize = options.minSize || 1024;
         const maxSize = options.maxSize || 2147483648;
+        const excludeSystem = options.excludeSystem !== false; // Default: exclude system files
         const sizeMap = new Map();
         for (const [dirPath, files] of this.scanner.dirFiles) {
+            // Skip system paths and excluded directories
+            if (excludeSystem && (isSystemPath(dirPath) || isInsideExcludedDir(dirPath))) continue;
             for (const f of files) {
                 if (f.size === 0 || f.size < minSize || f.size > maxSize) continue;
-                if (!sizeMap.has(f.size)) sizeMap.set(f.size, []);
-                sizeMap.get(f.size).push({ path: path.join(dirPath, f.name), name: f.name, size: f.size, ext: f.ext, mtime: f.mtime });
+                const key = `${f.size}:${f.ext || ''}`; // Group by size AND extension
+                if (!sizeMap.has(key)) sizeMap.set(key, []);
+                sizeMap.get(key).push({ path: path.join(dirPath, f.name), name: f.name, size: f.size, ext: f.ext, mtime: f.mtime });
             }
         }
         const candidates = [];

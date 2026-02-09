@@ -104,6 +104,18 @@ function register(mainWindow) {
         return scanner.search(query, minSize || 0);
     });
 
+    ipcMain.handle('get-files-by-extension', async (_event, scanId, ext, limit) => {
+        const scanner = scans.get(scanId);
+        if (!scanner) return [];
+        return scanner.getFilesByExtension(ext, limit || 500);
+    });
+
+    ipcMain.handle('get-files-by-category', async (_event, scanId, category, limit) => {
+        const scanner = scans.get(scanId);
+        if (!scanner) return [];
+        return scanner.getFilesByCategory(category, limit || 500);
+    });
+
     // === Export ===
     ipcMain.handle('export-csv', async (_event, scanId) => {
         const scanner = scans.get(scanId);
@@ -222,6 +234,20 @@ function register(mainWindow) {
         const finder = duplicateFinders.get(scanId);
         if (finder) finder.cancel();
         return { success: true };
+    });
+
+    // === Release bulk data (free memory after post-scan analysis) ===
+    ipcMain.handle('release-scan-bulk-data', async (_event, scanId) => {
+        const scanner = scans.get(scanId);
+        if (scanner) scanner.releaseBulkData();
+        return { success: true };
+    });
+
+    // === Size Duplicates (pre-scan for dashboard) ===
+    ipcMain.handle('get-size-duplicates', async (_event, scanId, minSize) => {
+        const scanner = scans.get(scanId);
+        if (!scanner) return { totalGroups: 0, totalFiles: 0, totalSaveable: 0 };
+        return scanner.getSizeDuplicates(minSize || 1024);
     });
 
     // === Cleanup ===
@@ -385,9 +411,20 @@ function register(mainWindow) {
         return updates.getDriverInfo();
     });
 
+    ipcMain.handle('get-hardware-info', async () => {
+        return updates.getHardwareInfo();
+    });
+
     // === Platform ===
     ipcMain.handle('get-platform', async () => {
         return process.platform;
+    });
+
+    ipcMain.handle('open-external', async (_event, url) => {
+        const { shell } = require('electron');
+        if (url && (url.startsWith('https://') || url.startsWith('http://'))) {
+            await shell.openExternal(url);
+        }
     });
 }
 
