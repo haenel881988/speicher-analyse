@@ -330,7 +330,7 @@ body {
 }
 
 #sidebar.expanded .sidebar-toggle-btn {
-    color: var(--accent);
+    color: var(--accent-text);
 }
 
 #sidebar.expanded {
@@ -2493,7 +2493,7 @@ body {
 
 .opt-technical summary {
     cursor: pointer;
-    color: var(--accent);
+    color: var(--accent-text);
     font-size: 11px;
     user-select: none;
 }
@@ -2622,7 +2622,7 @@ body {
 
 .update-kb {
     font-family: var(--font-mono);
-    color: var(--accent);
+    color: var(--accent-text);
     font-weight: 600;
 }
 
@@ -2668,7 +2668,7 @@ body {
 }
 
 .driver-support-link {
-    color: var(--accent);
+    color: var(--accent-text);
     text-decoration: none;
     cursor: pointer;
 }
@@ -2751,7 +2751,7 @@ body {
 
 .explorer-qa-item.active {
     background: var(--accent-light);
-    color: var(--accent);
+    color: var(--accent-text);
     border-left-color: var(--accent);
 }
 
@@ -2857,7 +2857,7 @@ body {
 }
 
 .explorer-bc-segment {
-    color: var(--accent);
+    color: var(--accent-text);
     cursor: pointer;
     padding: 1px 4px;
     border-radius: 3px;
@@ -2987,7 +2987,7 @@ body {
 }
 
 .explorer-col-name.dir-name {
-    color: var(--accent);
+    color: var(--accent-text);
 }
 
 .explorer-col-size {
@@ -3188,7 +3188,7 @@ body {
     flex-shrink: 0;
 }
 .explorer-tab-new:hover {
-    color: var(--accent);
+    color: var(--accent-text);
 }
 
 /* ===== v6.2: Dual Panel ===== */
@@ -3325,7 +3325,7 @@ body {
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.03em;
-    color: var(--accent);
+    color: var(--accent-text);
     background: var(--bg-primary);
     border-top: 1px solid var(--border);
     border-bottom: 1px solid var(--border);
@@ -3477,7 +3477,7 @@ body {
     border-bottom: 1px solid var(--border);
 }
 .batch-rename-preview .batch-rename-new.changed {
-    color: var(--accent);
+    color: var(--accent-text);
     font-weight: 600;
 }
 .batch-rename-preview .batch-rename-done {
@@ -3539,7 +3539,7 @@ body {
 .settings-section-title {
     font-size: 14px;
     font-weight: 600;
-    color: var(--accent);
+    color: var(--accent-text);
     margin-bottom: 12px;
 }
 .settings-row {
@@ -3678,7 +3678,7 @@ body {
 .settings-version {
     font-family: var(--font-mono);
     font-size: 12px;
-    color: var(--accent);
+    color: var(--accent-text);
 }
 
 /* ===== v6.3: Terminal Panel ===== */
@@ -3833,7 +3833,7 @@ body {
 .privacy-btn-apply-all:hover { opacity: 0.85; }
 .privacy-section { margin-bottom: 20px; }
 .privacy-section-title { font-size: 15px; margin: 0 0 12px; color: var(--text-primary); }
-.privacy-cat-title { font-size: 13px; margin: 12px 0 6px; color: var(--accent); text-transform: uppercase; }
+.privacy-cat-title { font-size: 13px; margin: 12px 0 6px; color: var(--accent-text); text-transform: uppercase; }
 .privacy-category { margin-bottom: 8px; }
 .privacy-setting {
     display: flex;
@@ -3941,7 +3941,7 @@ body {
     cursor: default;
 }
 .audit-table th.sortable { cursor: pointer; }
-.audit-table th.sortable:hover { color: var(--accent); }
+.audit-table th.sortable:hover { color: var(--accent-text); }
 .audit-table td { padding: 6px 8px; border-bottom: 1px solid var(--bg-tertiary); }
 .audit-row-orphaned { background: rgba(233, 69, 96, 0.05); }
 .audit-name { max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -3955,7 +3955,7 @@ body {
     cursor: pointer;
     font-size: 10px;
 }
-.audit-btn-detail:hover { color: var(--accent); border-color: var(--accent); }
+.audit-btn-detail:hover { color: var(--accent-text); border-color: var(--accent); }
 .audit-empty { padding: 24px; text-align: center; color: var(--text-secondary); }
 
 /* ===== v7.0: Network Monitor ===== */
@@ -3975,7 +3975,7 @@ body {
     cursor: pointer;
     font-size: 12px;
 }
-.network-tab.active { background: var(--bg-tertiary); color: var(--accent); border-bottom-color: var(--bg-tertiary); }
+.network-tab.active { background: var(--bg-tertiary); color: var(--accent-text); border-bottom-color: var(--bg-tertiary); }
 .network-toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; }
 .network-search {
     flex: 1;
@@ -4006,7 +4006,7 @@ body {
     font-size: 11px;
 }
 .network-table th.sortable { cursor: pointer; }
-.network-table th.sortable:hover { color: var(--accent); }
+.network-table th.sortable:hover { color: var(--accent-text); }
 .network-table td { padding: 5px 8px; border-bottom: 1px solid var(--bg-tertiary); }
 .network-row-local td { opacity: 0.5; }
 .network-ip { font-family: var(--font-mono); font-size: 11px; }
@@ -4033,7 +4033,7 @@ body {
 .network-adapter-down { opacity: 0.5; }
 .network-adapter-name { font-weight: 600; font-size: 13px; margin-bottom: 2px; }
 .network-adapter-desc { font-size: 11px; color: var(--text-secondary); margin-bottom: 4px; }
-.network-adapter-speed { font-size: 11px; color: var(--accent); margin-bottom: 10px; }
+.network-adapter-speed { font-size: 11px; color: var(--accent-text); margin-bottom: 10px; }
 .network-adapter-stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
 .network-adapter-stat { text-align: center; }
 .network-stat-label { font-size: 10px; color: var(--text-secondary); display: block; }
