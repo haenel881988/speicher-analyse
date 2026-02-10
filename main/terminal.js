@@ -1,79 +1,83 @@
 'use strict';
 
-const { spawn, execFile } = require('child_process');
+const pty = require('node-pty');
+const { execFile } = require('child_process');
 
 /**
- * Terminal manager - spawns shell processes for embedded terminal.
+ * Terminal manager - spawns PTY shell processes for embedded terminal.
  * Supports PowerShell, CMD, and WSL (if installed).
- * Uses child_process.spawn (no node-pty dependency).
+ * Uses node-pty (ConPTY on Windows 10+) for full TTY support.
  */
 
-const sessions = new Map(); // sessionId → { process, cwd, shellType }
+const sessions = new Map(); // sessionId → { pty, cwd, shellType }
 let nextId = 1;
 
 const SHELL_CONFIGS = {
     powershell: {
         cmd: 'powershell.exe',
-        args: ['-NoLogo', '-NoProfile', '-NoExit', '-Command', '-'],
-        prompt: 'PS>',
+        args: ['-NoLogo', '-NoProfile'],
         cdCommand: (dir) => `Set-Location -LiteralPath '${dir.replace(/'/g, "''")}'`,
     },
     cmd: {
         cmd: 'cmd.exe',
-        args: ['/Q', '/K'],
-        prompt: '>',
+        args: [],
         cdCommand: (dir) => `cd /d "${dir}"`,
     },
     wsl: {
         cmd: 'wsl.exe',
         args: ['-e', 'bash', '--login'],
-        prompt: '$',
         cdCommand: (dir) => {
-            // Convert Windows path to WSL path: C:\Users → /mnt/c/Users
             const wslPath = dir.replace(/^([A-Za-z]):/, (_, d) => `/mnt/${d.toLowerCase()}`).replace(/\\/g, '/');
             return `cd "${wslPath}"`;
         },
     },
 };
 
-function createSession(cwd, shellType = 'powershell') {
+function createSession(cwd, shellType = 'powershell', cols = 80, rows = 24) {
     const config = SHELL_CONFIGS[shellType];
     if (!config) {
         throw new Error(`Unbekannter Shell-Typ: ${shellType}`);
     }
 
     const id = `term-${nextId++}`;
-    const ps = spawn(config.cmd, config.args, {
+    const ptyProcess = pty.spawn(config.cmd, config.args, {
+        name: 'xterm-256color',
+        cols,
+        rows,
         cwd: shellType === 'wsl' ? undefined : cwd,
-        stdio: ['pipe', 'pipe', 'pipe'],
-        windowsHide: true,
-        env: { ...process.env, TERM: 'dumb' },
+        env: { ...process.env },
     });
 
-    sessions.set(id, { process: ps, cwd, shellType });
+    sessions.set(id, { pty: ptyProcess, cwd, shellType });
 
-    // For WSL, navigate to the Windows cwd after launch
+    // WSL: navigate to Windows cwd after launch
     if (shellType === 'wsl' && cwd) {
-        const cdCmd = config.cdCommand(cwd);
-        ps.stdin.write(cdCmd + '\n');
+        ptyProcess.write(config.cdCommand(cwd) + '\r');
     }
 
-    return { id, process: ps };
+    return { id, pty: ptyProcess };
 }
 
 function writeToSession(id, data) {
     const session = sessions.get(id);
-    if (!session || !session.process.stdin.writable) return false;
-    session.process.stdin.write(data);
+    if (!session) return false;
+    session.pty.write(data);
     return true;
+}
+
+function resizeSession(id, cols, rows) {
+    const session = sessions.get(id);
+    if (!session) return;
+    try {
+        session.pty.resize(cols, rows);
+    } catch { /* ignore resize errors */ }
 }
 
 function destroySession(id) {
     const session = sessions.get(id);
     if (!session) return;
     try {
-        session.process.stdin.end();
-        session.process.kill();
+        session.pty.kill();
     } catch { /* ignore */ }
     sessions.delete(id);
 }
@@ -90,8 +94,6 @@ function getSession(id) {
 
 /**
  * Detect available shells on the system.
- * PowerShell and CMD are always available on Windows.
- * WSL is checked by running `wsl --list --quiet`.
  */
 async function getAvailableShells() {
     const shells = [
@@ -99,7 +101,6 @@ async function getAvailableShells() {
         { id: 'cmd', label: 'CMD', available: true },
     ];
 
-    // Check WSL availability
     try {
         await new Promise((resolve, reject) => {
             execFile('wsl.exe', ['--list', '--quiet'], { timeout: 3000 }, (err, stdout) => {
@@ -115,23 +116,7 @@ async function getAvailableShells() {
     return shells;
 }
 
-/**
- * Get the cd command for a specific shell type.
- */
-function getCdCommand(shellType, dir) {
-    const config = SHELL_CONFIGS[shellType];
-    return config ? config.cdCommand(dir) : null;
-}
-
-/**
- * Get the prompt string for a specific shell type.
- */
-function getPrompt(shellType) {
-    const config = SHELL_CONFIGS[shellType];
-    return config ? config.prompt : '>';
-}
-
 module.exports = {
-    createSession, writeToSession, destroySession, destroyAllSessions,
-    getSession, getAvailableShells, getCdCommand, getPrompt, SHELL_CONFIGS,
+    createSession, writeToSession, resizeSession, destroySession, destroyAllSessions,
+    getSession, getAvailableShells, SHELL_CONFIGS,
 };

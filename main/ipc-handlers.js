@@ -705,22 +705,17 @@ function register(mainWindow) {
         return terminal.getAvailableShells();
     });
 
-    ipcMain.handle('terminal-create', async (_event, cwd, shellType) => {
-        const { id, process: ps } = terminal.createSession(cwd, shellType || 'powershell');
+    ipcMain.handle('terminal-create', async (_event, cwd, shellType, cols, rows) => {
+        const { id, pty: ptyProcess } = terminal.createSession(cwd, shellType || 'powershell', cols || 80, rows || 24);
 
-        ps.stdout.on('data', (data) => {
+        ptyProcess.onData((data) => {
             if (mainWindow && !mainWindow.isDestroyed()) {
-                mainWindow.webContents.send('terminal-data', { id, data: data.toString('utf8') });
+                mainWindow.webContents.send('terminal-data', { id, data });
             }
         });
-        ps.stderr.on('data', (data) => {
+        ptyProcess.onExit(({ exitCode }) => {
             if (mainWindow && !mainWindow.isDestroyed()) {
-                mainWindow.webContents.send('terminal-data', { id, data: data.toString('utf8') });
-            }
-        });
-        ps.on('exit', (code) => {
-            if (mainWindow && !mainWindow.isDestroyed()) {
-                mainWindow.webContents.send('terminal-exit', { id, code });
+                mainWindow.webContents.send('terminal-exit', { id, code: exitCode });
             }
         });
 
@@ -729,6 +724,11 @@ function register(mainWindow) {
 
     ipcMain.handle('terminal-write', async (_event, id, data) => {
         return terminal.writeToSession(id, data);
+    });
+
+    ipcMain.handle('terminal-resize', async (_event, id, cols, rows) => {
+        terminal.resizeSession(id, cols, rows);
+        return { success: true };
     });
 
     ipcMain.handle('terminal-destroy', async (_event, id) => {

@@ -191,8 +191,9 @@ contextBridge.exposeInMainWorld('api', {
 
     // === Terminal ===
     terminalGetShells: () => ipcRenderer.invoke('terminal-get-shells'),
-    terminalCreate: (cwd, shellType) => ipcRenderer.invoke('terminal-create', cwd, shellType),
+    terminalCreate: (cwd, shellType, cols, rows) => ipcRenderer.invoke('terminal-create', cwd, shellType, cols, rows),
     terminalWrite: (id, data) => ipcRenderer.invoke('terminal-write', id, data),
+    terminalResize: (id, cols, rows) => ipcRenderer.invoke('terminal-resize', id, cols, rows),
     terminalDestroy: (id) => ipcRenderer.invoke('terminal-destroy', id),
     terminalOpenExternal: (cwd, command) => ipcRenderer.invoke('terminal-open-external', cwd, command),
     onTerminalData: (callback) => {

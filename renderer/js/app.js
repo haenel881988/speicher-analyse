@@ -1009,6 +1009,7 @@ function toggleTheme() {
     updateThemeIcons();
     fileTypeChart.updateTheme();
     editorPanel.setTheme(next);
+    globalTerminal.updateTheme();
 }
 
 function updateThemeIcons() {

@@ -1,27 +1,12 @@
 /**
  * Terminal Panel - Global embedded multi-shell terminal (VS Code style).
  * Supports PowerShell, CMD, and WSL (if installed).
- * Opens with Ctrl+` from ANY tab and auto-navigates to the current explorer folder.
- * Uses main process spawn (no node-pty/xterm.js dependency).
+ * Uses node-pty (backend) + xterm.js (frontend) for full PTY support.
+ * All commands run natively - including claude, ssh, vim, python, etc.
  */
 
-function getShellPrompt(shell, cwd) {
-    switch (shell) {
-        case 'powershell': return `PS ${cwd}>`;
-        case 'cmd': return `${cwd}>`;
-        case 'wsl': return `${cwd}$`;
-        default: return '>';
-    }
-}
-
-const SHELL_CD_COMMANDS = {
-    powershell: (dir) => `Set-Location -LiteralPath '${dir.replace(/'/g, "''")}'`,
-    cmd: (dir) => `cd /d "${dir}"`,
-    wsl: (dir) => {
-        const wslPath = dir.replace(/^([A-Za-z]):/, (_, d) => `/mnt/${d.toLowerCase()}`).replace(/\\/g, '/');
-        return `cd "${wslPath}"`;
-    },
-};
+import { Terminal } from '../lib/xterm/xterm.mjs';
+import { FitAddon } from '../lib/xterm/addon-fit.mjs';
 
 const SHELL_START_MSG = {
     powershell: 'PowerShell',
@@ -29,20 +14,12 @@ const SHELL_START_MSG = {
     wsl: 'WSL (Bash)',
 };
 
-// Befehle die ein echtes PTY (Pseudo-Terminal) benötigen und in Pipes nicht funktionieren.
-// Diese werden automatisch in einem EXTERNEN Terminal geöffnet.
-const PTY_REQUIRED_COMMANDS = new Set([
-    'ssh', 'nano', 'vim', 'vi', 'less', 'more', 'top', 'htop',
-    'python', 'python3', 'node', 'irb', 'ghci', 'julia',
-]);
-
 export class TerminalPanel {
     constructor(parentContainer) {
         this.parentContainer = parentContainer;
         this.panel = null;
-        this.output = null;
-        this.input = null;
-        this.promptEl = null;
+        this.xterm = null;
+        this.fitAddon = null;
         this.titleEl = null;
         this.shellSelect = null;
         this.sessionId = null;
@@ -50,8 +27,9 @@ export class TerminalPanel {
         this.currentCwd = 'C:\\';
         this.currentShell = 'powershell';
         this.availableShells = [];
-        this.history = [];
-        this.historyIndex = -1;
+        this.resizeObserver = null;
+        this._dataListenerSet = false;
+        this._exitListenerSet = false;
     }
 
     toggle(cwd) {
@@ -70,7 +48,6 @@ export class TerminalPanel {
             await this._createDOM();
         }
 
-        // Parent-Container sichtbar machen (für globales #terminal-global)
         this.parentContainer.style.display = '';
         this.panel.style.display = '';
 
@@ -78,20 +55,35 @@ export class TerminalPanel {
             await this._createSession();
         }
 
-        this.input.focus();
+        // Fit after showing (needs visible container for dimensions)
+        requestAnimationFrame(() => {
+            if (this.fitAddon && this.visible) {
+                this.fitAddon.fit();
+            }
+            if (this.xterm) {
+                this.xterm.focus();
+            }
+        });
     }
 
     hide() {
         this.visible = false;
         if (this.panel) this.panel.style.display = 'none';
-        // Parent-Container ausblenden
         this.parentContainer.style.display = 'none';
     }
 
     async destroy() {
+        if (this.resizeObserver) {
+            this.resizeObserver.disconnect();
+            this.resizeObserver = null;
+        }
         if (this.sessionId) {
             await window.api.terminalDestroy(this.sessionId);
             this.sessionId = null;
+        }
+        if (this.xterm) {
+            this.xterm.dispose();
+            this.xterm = null;
         }
         if (this.panel) {
             this.panel.remove();
@@ -123,66 +115,141 @@ export class TerminalPanel {
             `<option value="${s.id}" ${!s.available ? 'disabled' : ''} ${s.id === this.currentShell ? 'selected' : ''}>${s.label}</option>`
         ).join('');
 
-        this.panel.innerHTML = `
-            <div class="terminal-header">
-                <span class="terminal-title">Terminal</span>
-                <select class="terminal-shell-select" title="Shell auswählen">${shellOptions}</select>
-                <div class="terminal-controls">
-                    <button class="terminal-btn terminal-btn-clear" title="Ausgabe löschen">Löschen</button>
-                    <button class="terminal-btn terminal-btn-restart" title="Neu starten">Neustart</button>
-                    <button class="terminal-btn terminal-btn-close" title="Schließen (Ctrl+\`)">\u00D7</button>
-                </div>
-            </div>
-            <div class="terminal-output"></div>
-            <div class="terminal-input-row">
-                <span class="terminal-prompt">${getShellPrompt(this.currentShell, this.currentCwd)}</span>
-                <input type="text" class="terminal-input" placeholder="Befehl eingeben..." spellcheck="false" autocomplete="off">
+        // Header (kept from v7.2 design)
+        const header = document.createElement('div');
+        header.className = 'terminal-header';
+        header.innerHTML = `
+            <span class="terminal-title">Terminal</span>
+            <select class="terminal-shell-select" title="Shell auswählen">${shellOptions}</select>
+            <div class="terminal-controls">
+                <button class="terminal-btn terminal-btn-clear" title="Ausgabe löschen">Löschen</button>
+                <button class="terminal-btn terminal-btn-restart" title="Neu starten">Neustart</button>
+                <button class="terminal-btn terminal-btn-close" title="Schließen (Ctrl+\`)">\u00D7</button>
             </div>
         `;
+        this.panel.appendChild(header);
 
-        this.output = this.panel.querySelector('.terminal-output');
-        this.input = this.panel.querySelector('.terminal-input');
-        this.promptEl = this.panel.querySelector('.terminal-prompt');
-        this.titleEl = this.panel.querySelector('.terminal-title');
-        this.shellSelect = this.panel.querySelector('.terminal-shell-select');
+        // xterm.js container
+        this.xtermContainer = document.createElement('div');
+        this.xtermContainer.className = 'xterm-container';
+        this.panel.appendChild(this.xtermContainer);
 
-        // Wire events
-        this.panel.querySelector('.terminal-btn-close').onclick = () => this.hide();
-        this.panel.querySelector('.terminal-btn-clear').onclick = () => { this.output.textContent = ''; };
-        this.panel.querySelector('.terminal-btn-restart').onclick = () => this._restart();
+        this.titleEl = header.querySelector('.terminal-title');
+        this.shellSelect = header.querySelector('.terminal-shell-select');
+
+        // Wire header button events
+        header.querySelector('.terminal-btn-close').onclick = () => this.hide();
+        header.querySelector('.terminal-btn-clear').onclick = () => {
+            if (this.xterm) this.xterm.clear();
+        };
+        header.querySelector('.terminal-btn-restart').onclick = () => this._restart();
 
         // Shell selector change
         this.shellSelect.onchange = async () => {
             const newShell = this.shellSelect.value;
             if (newShell !== this.currentShell) {
                 this.currentShell = newShell;
-                this.promptEl.textContent = getShellPrompt(newShell, this.currentCwd);
                 await this._restart();
             }
         };
 
-        this.input.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                this._sendCommand(this.input.value);
-                this.input.value = '';
-            } else if (e.key === 'ArrowUp') {
-                e.preventDefault();
-                this._navigateHistory(-1);
-            } else if (e.key === 'ArrowDown') {
-                e.preventDefault();
-                this._navigateHistory(1);
-            } else if (e.key === 'Escape') {
-                e.preventDefault();
-                this.hide();
-            }
+        // Prevent terminal keyboard events from reaching other components
+        this.panel.addEventListener('keydown', (e) => {
+            // Allow Ctrl+` to toggle terminal (handled by app.js)
+            if (e.key === '`' && e.ctrlKey) return;
             e.stopPropagation();
         });
 
-        // Prevent terminal keyboard events from reaching other components
-        this.panel.addEventListener('keydown', (e) => e.stopPropagation());
-
         this.parentContainer.appendChild(this.panel);
+
+        // Create xterm.js instance
+        this._createXterm();
+    }
+
+    _createXterm() {
+        this.xterm = new Terminal({
+            cursorBlink: true,
+            fontSize: 13,
+            fontFamily: 'Consolas, "Courier New", monospace',
+            theme: this._getXtermTheme(),
+            allowProposedApi: true,
+            scrollback: 5000,
+        });
+
+        this.fitAddon = new FitAddon();
+        this.xterm.loadAddon(this.fitAddon);
+        this.xterm.open(this.xtermContainer);
+
+        // Bidirectional data flow: keyboard → backend
+        this.xterm.onData((data) => {
+            if (this.sessionId) {
+                window.api.terminalWrite(this.sessionId, data);
+            }
+        });
+
+        // Resize: xterm → backend PTY
+        this.xterm.onResize(({ cols, rows }) => {
+            if (this.sessionId) {
+                window.api.terminalResize(this.sessionId, cols, rows);
+            }
+        });
+
+        // Auto-fit on container resize
+        this.resizeObserver = new ResizeObserver(() => {
+            if (this.fitAddon && this.visible) {
+                this.fitAddon.fit();
+            }
+        });
+        this.resizeObserver.observe(this.xtermContainer);
+    }
+
+    _getXtermTheme() {
+        const isDark = document.documentElement.dataset.theme !== 'light';
+        return isDark ? {
+            background: '#1a1d2e',
+            foreground: '#e2e4f0',
+            cursor: '#6c5ce7',
+            cursorAccent: '#1a1d2e',
+            selectionBackground: '#6c5ce730',
+            black: '#1a1d2e',
+            red: '#ff6b6b',
+            green: '#51cf66',
+            yellow: '#ffd43b',
+            blue: '#6c5ce7',
+            magenta: '#cc5de8',
+            cyan: '#22b8cf',
+            white: '#e2e4f0',
+            brightBlack: '#5a5e72',
+            brightRed: '#ff8787',
+            brightGreen: '#69db7c',
+            brightYellow: '#ffe066',
+            brightBlue: '#845ef7',
+            brightMagenta: '#da77f2',
+            brightCyan: '#3bc9db',
+            brightWhite: '#ffffff',
+        } : {
+            background: '#ffffff',
+            foreground: '#2d3436',
+            cursor: '#6c5ce7',
+            cursorAccent: '#ffffff',
+            selectionBackground: '#6c5ce730',
+            black: '#2d3436',
+            red: '#e74c3c',
+            green: '#27ae60',
+            yellow: '#f39c12',
+            blue: '#6c5ce7',
+            magenta: '#8e44ad',
+            cyan: '#00cec9',
+            white: '#dfe6e9',
+            brightBlack: '#636e72',
+            brightRed: '#ff6b6b',
+            brightGreen: '#00b894',
+            brightYellow: '#fdcb6e',
+            brightBlue: '#845ef7',
+            brightMagenta: '#a29bfe',
+            brightCyan: '#81ecec',
+            brightWhite: '#ffffff',
+        };
     }
 
     _wireResize() {
@@ -191,7 +258,7 @@ export class TerminalPanel {
 
         const onMouseMove = (e) => {
             const delta = startY - e.clientY;
-            const newHeight = Math.max(120, Math.min(window.innerHeight * 0.5, startHeight + delta));
+            const newHeight = Math.max(120, Math.min(window.innerHeight * 0.7, startHeight + delta));
             if (this.panel) this.panel.style.height = newHeight + 'px';
         };
 
@@ -201,6 +268,10 @@ export class TerminalPanel {
             document.removeEventListener('mouseup', onMouseUp);
             document.body.style.cursor = '';
             document.body.style.userSelect = '';
+            // Re-fit xterm after resize
+            if (this.fitAddon && this.visible) {
+                this.fitAddon.fit();
+            }
         };
 
         this.resizeHandle.addEventListener('mousedown', (e) => {
@@ -217,112 +288,44 @@ export class TerminalPanel {
 
     async _createSession() {
         try {
-            const result = await window.api.terminalCreate(this.currentCwd, this.currentShell);
+            // Get dimensions from FitAddon
+            let cols = 80, rows = 24;
+            if (this.fitAddon) {
+                const dims = this.fitAddon.proposeDimensions();
+                if (dims) {
+                    cols = dims.cols;
+                    rows = dims.rows;
+                }
+            }
+
+            const result = await window.api.terminalCreate(this.currentCwd, this.currentShell, cols, rows);
             this.sessionId = result.id;
-            const shellLabel = SHELL_START_MSG[this.currentShell] || this.currentShell;
-            this._appendOutput(`${shellLabel} gestartet in: ${this.currentCwd}\n`, 'info');
 
-            window.api.onTerminalData(({ id, data }) => {
-                if (id === this.sessionId) {
-                    this._appendOutput(data);
-                }
-            });
-
-            window.api.onTerminalExit(({ id, code }) => {
-                if (id === this.sessionId) {
-                    this._appendOutput(`\nProzess beendet (Code: ${code})\n`, 'info');
-                    this.sessionId = null;
-                }
-            });
-        } catch (err) {
-            this._appendOutput(`Fehler: ${err.message}\n`, 'error');
-        }
-    }
-
-    async _sendCommand(cmd) {
-        if (!cmd.trim()) return;
-
-        this.history.push(cmd);
-        if (this.history.length > 100) this.history.shift();
-        this.historyIndex = this.history.length;
-
-        const prompt = getShellPrompt(this.currentShell, this.currentCwd);
-        this._appendOutput(`${prompt} ${cmd}\n`, 'cmd');
-
-        // Prüfe ob der Befehl ein echtes Terminal (PTY) benötigt
-        const baseCmd = cmd.trim().split(/\s+/)[0].toLowerCase().replace(/\.exe$/, '');
-
-        // Spezialbehandlung: claude CLI
-        if (baseCmd === 'claude') {
-            const args = cmd.trim().split(/\s+/).slice(1);
-            const hasPrintFlag = args.some(a => a === '-p' || a === '--print');
-
-            if (!hasPrintFlag) {
-                // Interaktiver Modus braucht ein echtes PTY
-                this._appendOutput(
-                    `→ "claude" benötigt ein echtes Terminal (PTY) für den interaktiven Modus.\n` +
-                    `  Dieses Terminal nutzt Pipes – TUI-Apps können hier nicht dargestellt werden.\n` +
-                    `  Tipp: "claude -p 'deine Frage'" funktioniert hier für Einzel-Abfragen.\n` +
-                    `→ Interaktiver Modus wird in externem Terminal geöffnet...\n`,
-                    'info'
-                );
-                await this._openExternal(cmd.trim());
-                return;
+            // Wire IPC data listener (only once)
+            if (!this._dataListenerSet) {
+                this._dataListenerSet = true;
+                window.api.onTerminalData(({ id, data }) => {
+                    if (id === this.sessionId && this.xterm) {
+                        this.xterm.write(data);
+                    }
+                });
             }
-            // -p/--print Modus funktioniert in Pipes → normal weiterleiten
-        }
 
-        if (PTY_REQUIRED_COMMANDS.has(baseCmd)) {
-            this._appendOutput(
-                `→ "${baseCmd}" benötigt ein echtes Terminal (PTY) und wird extern geöffnet...\n`,
-                'info'
-            );
-            await this._openExternal(cmd.trim());
-            return;
-        }
-
-        if (!this.sessionId) {
-            await this._createSession();
-        }
-
-        if (this.sessionId) {
-            await window.api.terminalWrite(this.sessionId, cmd + '\n');
-        }
-    }
-
-    _appendOutput(text, type) {
-        if (!this.output) return;
-        const span = document.createElement('span');
-        span.textContent = text;
-        if (type === 'error') span.style.color = 'var(--danger)';
-        else if (type === 'info') span.style.color = 'var(--accent-text)';
-        else if (type === 'cmd') span.style.color = 'var(--success)';
-        this.output.appendChild(span);
-        this.output.scrollTop = this.output.scrollHeight;
-    }
-
-    _navigateHistory(direction) {
-        if (this.history.length === 0) return;
-        this.historyIndex += direction;
-        if (this.historyIndex < 0) this.historyIndex = 0;
-        if (this.historyIndex >= this.history.length) {
-            this.historyIndex = this.history.length;
-            this.input.value = '';
-        } else {
-            this.input.value = this.history[this.historyIndex];
-        }
-    }
-
-    async _openExternal(command) {
-        try {
-            const result = await window.api.terminalOpenExternal(this.currentCwd, command);
-            if (result.success) {
-                this._appendOutput(`→ Externes Terminal gestartet.\n\n`, 'info');
-            } else {
-                this._appendOutput(`→ Fehler beim Öffnen: ${result.error}\n\n`, 'error');
+            if (!this._exitListenerSet) {
+                this._exitListenerSet = true;
+                window.api.onTerminalExit(({ id, code }) => {
+                    if (id === this.sessionId) {
+                        if (this.xterm) {
+                            this.xterm.write(`\r\n\x1b[33mProzess beendet (Code: ${code})\x1b[0m\r\n`);
+                        }
+                        this.sessionId = null;
+                    }
+                });
             }
         } catch (err) {
-            this._appendOutput(`→ Fehler: ${err.message}\n\n`, 'error');
+            if (this.xterm) {
+                this.xterm.write(`\x1b[31mFehler: ${err.message}\x1b[0m\r\n`);
+            }
         }
     }
 
@@ -331,21 +334,31 @@ export class TerminalPanel {
             await window.api.terminalDestroy(this.sessionId);
             this.sessionId = null;
         }
-        this.output.textContent = '';
+        if (this.xterm) {
+            this.xterm.clear();
+            this.xterm.reset();
+        }
         await this._createSession();
-        this.input.focus();
+        if (this.xterm) this.xterm.focus();
     }
 
     async changeCwd(cwd) {
         this.currentCwd = cwd;
-        if (this.promptEl) {
-            this.promptEl.textContent = getShellPrompt(this.currentShell, this.currentCwd);
-        }
         if (this.sessionId && this.visible) {
-            const cdFn = SHELL_CD_COMMANDS[this.currentShell];
+            const config = { powershell: (d) => `Set-Location -LiteralPath '${d.replace(/'/g, "''")}'`, cmd: (d) => `cd /d "${d}"`, wsl: (d) => { const p = d.replace(/^([A-Za-z]):/, (_, l) => `/mnt/${l.toLowerCase()}`).replace(/\\/g, '/'); return `cd "${p}"`; } };
+            const cdFn = config[this.currentShell];
             if (cdFn) {
-                await window.api.terminalWrite(this.sessionId, cdFn(cwd) + '\n');
+                await window.api.terminalWrite(this.sessionId, cdFn(cwd) + '\r');
             }
+        }
+    }
+
+    /**
+     * Update xterm.js theme (call after theme toggle).
+     */
+    updateTheme() {
+        if (this.xterm) {
+            this.xterm.options.theme = this._getXtermTheme();
         }
     }
 }
