@@ -2163,6 +2163,23 @@ body {
     }
 }
 
+/* ===== Smart Layout (JS-gesteuert via Klassen auf #app) ===== */
+#app.smart-layout-narrow .tab-view {
+    padding: 8px;
+}
+
+#app.smart-layout-wide .tab-view {
+    padding: 20px;
+}
+
+#app.smart-layout-narrow .dashboard-cards {
+    grid-template-columns: 1fr;
+}
+
+#app.smart-layout-wide .dashboard-cards {
+    grid-template-columns: repeat(3, 1fr);
+}
+
 /* ===== Dashboard ===== */
 .dashboard {
     padding: 8px;

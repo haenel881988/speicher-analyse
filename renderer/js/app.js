@@ -281,9 +281,11 @@ async function init() {
     } else {
         // Check for restored session data (admin elevation OR persistent session)
         try {
+            console.log('[Session] Prüfe auf gespeicherte Session...');
             const restored = await window.api.getRestoredSession();
             if (restored && restored.sessions && restored.sessions.length > 0) {
                 const progress = restored.sessions[0];
+                console.log(`[Session] Session gefunden: ${progress.files_found} Dateien, ${progress.dirs_scanned} Ordner`);
                 state.currentScanId = progress.scan_id;
                 state.currentPath = progress.current_path;
                 state.lastScanProgress = progress;
@@ -324,9 +326,11 @@ async function init() {
                 setStatus('Bereit');
                 showToast('Scan-Daten wurden wiederhergestellt');
                 setTimeout(() => els.scanProgress.classList.remove('active'), 3000);
+            } else {
+                console.log('[Session] Keine Session-Daten vorhanden (Datei fehlt oder leer)');
             }
         } catch (err) {
-            console.error('Session restore check failed:', err);
+            console.error('[Session] Restore FEHLER:', err);
         }
     }
 
@@ -1157,9 +1161,18 @@ function setupPreviewResize() {
 
 // ===== Smart Layout (intelligente Fensteranordnung) =====
 function setupSmartLayout() {
+    const sidebar = document.getElementById('sidebar');
+    const appEl = document.getElementById('app');
     const previewPanel = document.getElementById('preview-panel');
     const terminalGlobal = document.getElementById('terminal-global');
     let smartLayoutEnabled = true;
+    let userToggledSidebar = false;
+
+    // Manuelle Sidebar-Toggles erkennen → Smart Layout greift dann nicht in Sidebar ein
+    const sidebarToggle = sidebar?.querySelector('.sidebar-toggle-btn');
+    if (sidebarToggle) {
+        sidebarToggle.addEventListener('click', () => { userToggledSidebar = true; });
+    }
 
     // Preference laden
     window.api.getPreferences().then(prefs => {
@@ -1171,7 +1184,12 @@ function setupSmartLayout() {
     document.addEventListener('settings-pref-change', (e) => {
         if (e.detail?.key === 'smartLayout') {
             smartLayoutEnabled = e.detail.value;
-            if (smartLayoutEnabled) applySmartLayout();
+            if (smartLayoutEnabled) {
+                userToggledSidebar = false;
+                applySmartLayout();
+            } else {
+                appEl?.classList.remove('smart-layout-narrow', 'smart-layout-wide');
+            }
         }
     });
 
@@ -1179,27 +1197,32 @@ function setupSmartLayout() {
         if (!smartLayoutEnabled) return;
         const w = window.innerWidth;
 
-        // Preview Panel Breite anpassen (nur wenn sichtbar)
-        if (previewPanel && previewPanel.style.display !== 'none') {
+        // 1. CSS-Klassen auf #app für responsive Grid/Padding
+        appEl?.classList.toggle('smart-layout-narrow', w < 1000);
+        appEl?.classList.toggle('smart-layout-wide', w >= 1400);
+
+        // 2. Sidebar auto-collapse/expand (nur wenn User nicht manuell umgeschaltet hat)
+        if (sidebar && !userToggledSidebar) {
             if (w < 1000) {
-                previewPanel.style.width = '280px';
-            } else if (w < 1400) {
-                previewPanel.style.width = '320px';
-            } else {
-                previewPanel.style.width = '400px';
+                sidebar.classList.remove('expanded');
+            } else if (w >= 1400) {
+                sidebar.classList.add('expanded');
             }
         }
 
-        // Terminal max-height anpassen
+        // 3. Preview Panel Breite anpassen (nur wenn sichtbar)
+        if (previewPanel && previewPanel.style.display !== 'none') {
+            if (w < 1000) previewPanel.style.width = '280px';
+            else if (w < 1400) previewPanel.style.width = '320px';
+            else previewPanel.style.width = '400px';
+        }
+
+        // 4. Terminal max-height anpassen (nur wenn vorhanden)
         const termPanel = terminalGlobal?.querySelector('.terminal-panel');
         if (termPanel) {
-            if (w < 1000) {
-                termPanel.style.maxHeight = '30vh';
-            } else if (w < 1400) {
-                termPanel.style.maxHeight = '35vh';
-            } else {
-                termPanel.style.maxHeight = '40vh';
-            }
+            if (w < 1000) termPanel.style.maxHeight = '30vh';
+            else if (w < 1400) termPanel.style.maxHeight = '35vh';
+            else termPanel.style.maxHeight = '40vh';
         }
     };
 

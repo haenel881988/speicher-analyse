@@ -1,6 +1,6 @@
 {
   "name": "speicher-analyse",
-  "version": "7.5.0",
+  "version": "7.2.1",
   "description": "Speicher Analyse - Disk Space Analyzer & File Manager",
   "main": "main/main.js",
   "scripts": {

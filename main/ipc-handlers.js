@@ -74,8 +74,11 @@ function register(mainWindow) {
                 }
                 // Auto-save session after scan completion
                 if (preferences.get('sessionSaveAfterScan')) {
-                    session.saveSession(scans, lastKnownUiState).catch(err =>
-                        console.error('Auto-Session-Save nach Scan fehlgeschlagen:', err.message)
+                    console.log('[Session] Auto-Save nach Scan wird durchgeführt...');
+                    session.saveSession(scans, lastKnownUiState).then(saved => {
+                        console.log(`[Session] Auto-Save ${saved ? 'erfolgreich' : 'fehlgeschlagen (keine Daten)'}`);
+                    }).catch(err =>
+                        console.error('[Session] Auto-Save FEHLER:', err.message)
                     );
                 }
             },
@@ -690,13 +693,19 @@ function register(mainWindow) {
         }
 
         // 2. Check for persistent session (only if sessionRestore enabled)
-        if (!preferences.get('sessionRestore')) return;
+        if (!preferences.get('sessionRestore')) {
+            console.log('[Session] sessionRestore ist deaktiviert → überspringe');
+            return;
+        }
 
+        console.log('[Session] Lade gespeicherte Session...');
         const persistentSession = await session.loadSession();
         if (persistentSession && persistentSession.scans.length > 0) {
+            console.log(`[Session] ${persistentSession.scans.length} Scan(s) gefunden, rekonstruiere...`);
             for (const s of persistentSession.scans) {
                 const scanner = session.reconstructScanner(s);
                 scans.set(s.scanId, scanner);
+                console.log(`[Session] Scan ${s.scanId} rekonstruiert: ${s.rootPath}, ${s.filesFound} Dateien, ${s.dirsScanned} Ordner`);
             }
             restoredSessions = persistentSession.scans.map(s => ({
                 scan_id: s.scanId,
@@ -709,8 +718,10 @@ function register(mainWindow) {
                 elapsed_seconds: 0,
             }));
             restoredUiState = persistentSession.ui || null;
+        } else {
+            console.log('[Session] Keine gespeicherte Session gefunden oder Session-Datei leer');
         }
-    })().catch(err => console.error('Session restore failed:', err));
+    })().catch(err => console.error('[Session] Restore FEHLGESCHLAGEN:', err));
 
     // Renderer calls this to check for restored session data
     // Awaits the loading promise to guarantee data is ready (no race condition)
@@ -940,6 +951,7 @@ function register(mainWindow) {
         preferences.flush();
 
         // 2. Session speichern (synchron via gzipSync, da before-quit nicht async wartet)
+        console.log(`[Session] before-quit: sessionSaveOnClose=${preferences.get('sessionSaveOnClose')}, scans.size=${scans.size}`);
         if (preferences.get('sessionSaveOnClose') && scans.size > 0) {
             try {
                 const zlib = require('zlib');

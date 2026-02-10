@@ -64,6 +64,14 @@ class PreferencesStore {
                             this.data[key] = raw[key];
                         }
                     }
+                    // Migration v7.2→v7.2.1: minimizeToTray war fälschlicherweise true als Default.
+                    // Bestehende User hatten true gespeichert → X-Button minimierte statt zu schließen.
+                    // Einmalige Migration: Wenn die alte Version den Wert auf true hatte, korrigieren.
+                    if (raw.minimizeToTray === true && !raw._migratedMinimizeToTray) {
+                        this.data.minimizeToTray = false;
+                        this.data._migratedMinimizeToTray = true;
+                        this._dirty = true;
+                    }
                 }
             }
         } catch { /* start fresh if corrupted */ }

@@ -192,7 +192,7 @@ export class SettingsView {
                     <div class="settings-row">
                         <div class="settings-label">
                             <strong>Intelligentes Layout</strong>
-                            <span class="settings-desc">Passt Panels (Vorschau, Terminal) automatisch an die Fenstergröße an.</span>
+                            <span class="settings-desc">Passt Sidebar, Panels und Content automatisch an die Fenstergröße an. Sidebar klappt bei schmalen Fenstern zu, bei breiten auf.</span>
                         </div>
                         <div class="settings-value">
                             <div class="settings-toggle ${prefs.smartLayout ? 'active' : ''}" data-key="smartLayout"></div>
@@ -287,7 +287,7 @@ export class SettingsView {
                             <span class="settings-desc">Disk Space Analyzer & System Optimizer</span>
                         </div>
                         <div class="settings-value">
-                            <span class="settings-version">v7.4</span>
+                            <span class="settings-version">v7.2.1</span>
                         </div>
                     </div>
                 </div>
