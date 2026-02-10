@@ -3055,6 +3055,21 @@ body {
     font-weight: 600;
 }
 
+.explorer-status-scan-hint {
+    font-size: 10px;
+    color: var(--success);
+    font-weight: 600;
+}
+
+.explorer-size-bar {
+    margin-top: 2px;
+}
+
+.explorer-size-bar .size-bar {
+    height: 4px;
+    border-radius: 2px;
+}
+
 .explorer-loading {
     display: flex;
     align-items: center;

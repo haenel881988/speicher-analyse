@@ -18,6 +18,7 @@
 | v7.2 | Fertig | Governance, WCAG-Kontrast-Fixes, Terminal Multi-Shell, Versions-Fix |
 | v7.3 | Fertig | Terminal: node-pty + xterm.js (echtes PTY), CWD-Sync |
 | v7.4 | Fertig | Session-Persistenz, PreferencesStore, Energieverwaltung, Einstellungen-Rewrite |
+| v7.5 | Fertig | Explorer-Ordnergrößen aus Scan-Daten, Proportionsbalken, Session-UI-State-Fix |
 | v8.0 | Geplant | Automatisierung, Browser-Bereinigung, Backup, Undo-Log |
 | v9.0 | Vision | KI-Integration (BYOB: Cloud + Ollama), Notion-Modul |
 | v1.0.0 | Vision | Erster stabiler Release (Semver), Installer, Auto-Update, Lizenzierung |

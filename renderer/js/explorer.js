@@ -79,6 +79,9 @@ export class ExplorerView {
         this._omnibarSearching = false;
         this._debounceTimer = null;
         this._deepSearchRunning = false;
+        // Scan-based folder sizes
+        this._folderSizes = null;
+        this._parentFolderSize = 0;
     }
 
     async init() {
@@ -201,6 +204,29 @@ export class ExplorerView {
         try {
             this.dirTags = await window.api.getTagsForDirectory(dirPath);
         } catch { this.dirTags = {}; }
+
+        // Enrich folder sizes from scan data (if scan available)
+        this._folderSizes = null;
+        this._parentFolderSize = 0;
+        const scanId = this.getScanId();
+        if (scanId) {
+            const folderPaths = this.entries.filter(e => e.isDirectory).map(e => e.path);
+            if (folderPaths.length > 0) {
+                try {
+                    const data = await window.api.getFolderSizesBulk(scanId, folderPaths, this.currentPath);
+                    if (data && data.folders) {
+                        this._folderSizes = data.folders;
+                        this._parentFolderSize = data.parent?.size || 0;
+                        for (const entry of this.entries) {
+                            if (entry.isDirectory && data.folders[entry.path]) {
+                                entry.size = data.folders[entry.path].size;
+                            }
+                        }
+                    }
+                } catch { /* kein Scan-Daten verfügbar → weiter ohne */ }
+            }
+        }
+
         this.renderFileList();
         this.renderStatus(result);
     }
@@ -683,12 +709,24 @@ export class ExplorerView {
         for (const entry of sorted) {
             const icon = entry.isDirectory ? FOLDER_ICON : FILE_ICON;
             const nameClass = entry.isDirectory ? 'explorer-col-name dir-name' : 'explorer-col-name';
-            const sizeStr = entry.isDirectory ? '' : formatBytes(entry.size);
             const typeStr = entry.isDirectory ? 'Ordner' : (entry.extension || '-');
             const dateStr = entry.modified ? this.formatDateTime(entry.modified) : '-';
 
-            // Size color coding (files only)
-            const sizeClass = !entry.isDirectory ? getSizeClass(entry.size) : '';
+            // Size string + optional proportion bar for folders with scan data
+            let sizeStr = '';
+            let sizeBarHtml = '';
+            if (entry.isDirectory && entry.size > 0 && this._folderSizes) {
+                sizeStr = formatBytes(entry.size);
+                const pct = this._parentFolderSize > 0
+                    ? (entry.size / this._parentFolderSize * 100) : 0;
+                const barWidth = Math.max(pct, 0.5);
+                sizeBarHtml = `<div class="explorer-size-bar"><div class="size-bar"><div class="size-bar-fill" style="width:${barWidth}%"></div></div></div>`;
+            } else if (!entry.isDirectory) {
+                sizeStr = formatBytes(entry.size);
+            }
+
+            // Size color coding (folders + files when size > 0)
+            const sizeClass = entry.size > 0 ? getSizeClass(entry.size) : '';
             // Temp file detection
             const isTemp = !entry.isDirectory && isTempFile(entry.name, entry.extension);
             // Empty folder detection
@@ -704,7 +742,7 @@ export class ExplorerView {
                             data-name="${this.escAttr(entry.name)}" draggable="true" class="${rowClasses}">
                 <td class="explorer-col-icon">${icon}</td>
                 <td class="${nameClass}" title="${this.escAttr(entry.path)}">${tagDot}${this.esc(entry.name)}${tempBadge}${emptyBadge}</td>
-                <td class="explorer-col-size">${sizeStr}</td>
+                <td class="explorer-col-size">${sizeStr}${sizeBarHtml}</td>
                 <td class="explorer-col-type">${this.esc(typeStr)}</td>
                 <td class="explorer-col-date">${dateStr}</td>
             </tr>`;
@@ -1001,13 +1039,19 @@ export class ExplorerView {
     renderStatus(result) {
         const dirs = result.entries.filter(e => e.isDirectory).length;
         const files = result.entries.filter(e => !e.isDirectory).length;
-        const totalSize = result.entries.filter(e => !e.isDirectory).reduce((s, e) => s + e.size, 0);
+        const filesTotalSize = result.entries.filter(e => !e.isDirectory).reduce((s, e) => s + e.size, 0);
 
         let html = `<span class="explorer-status-count">${dirs} Ordner, ${files} Dateien</span>`;
-        html += `<span>${formatBytes(totalSize)}</span>`;
+
+        if (this._parentFolderSize > 0) {
+            html += `<span title="Gesamtgröße (inkl. Unterordner)">${formatBytes(this._parentFolderSize)}</span>`;
+            html += `<span class="explorer-status-scan-hint">Scan</span>`;
+        } else {
+            html += `<span>${formatBytes(filesTotalSize)}</span>`;
+        }
 
         if (result.truncated) {
-            html += `<span style="color:var(--warning)">Ansicht begrenzt auf 5.000 Eintr\u00E4ge (${result.totalEntries} insgesamt)</span>`;
+            html += `<span style="color:var(--warning)">Ansicht begrenzt auf 5.000 Einträge (${result.totalEntries} insgesamt)</span>`;
         }
 
         this.els.status.innerHTML = html;

@@ -16,6 +16,8 @@ Archiv: [`archiv/aenderungsprotokoll_v7.0-v7.2.md`](archiv/aenderungsprotokoll_v
 | 6 | 2026-02-10 | v7.4 | feature | **Energieverwaltung** - 3 Modi: Automatisch, Leistung, Energiesparen. Einstellbarer Akku-Schwellwert (10-80%). Option: Hintergrund-Tasks auf Akku deaktivieren. Battery-Polling-Intervall passt sich automatisch an (30s/60s/120s je nach Modus). |
 | 7 | 2026-02-10 | v7.4 | feature | **Einstellungen-Seite komplett überarbeitet** - Von 5 auf 7 Sektionen erweitert: Session & Wiederherstellung, Energieverwaltung, Allgemein, Globaler Hotkey, Terminal, Windows Integration, Über. Neue UI-Elemente: iOS-style Toggle-Switches, Range-Slider, Theme-Switch, Styled Selects. |
 | 8 | 2026-02-10 | v7.4 | improve | **Theme-Integration** - Theme-Wechsel aus Einstellungen-Seite, bidirektionale Synchronisation mit Toolbar-Button. localStorage → Preferences Migration (einmalig). Theme wird persistent gespeichert. |
+| 9 | 2026-02-10 | v7.5 | feature | **Explorer-Ordnergrößen aus Scan-Daten** - Nach einem Scan zeigt der Explorer Ordnergrößen (rekursiv) in der GRÖSSE-Spalte an. Proportionsbalken visualisieren den Anteil am Elternordner. Neuer Bulk-IPC-Handler `get-folder-sizes-bulk` mit O(1) Map-Lookup pro Pfad. Farbcodierung auch für Ordner (>10MB gelb, >100MB orange, >1GB rot). Status-Bar zeigt Gesamtgröße + "Scan"-Hinweis. Graceful Degradation: ohne Scan bleiben Ordner leer. |
+| 10 | 2026-02-10 | v7.5 | fix | **Session UI-State-Persistenz** - Main Process hatte keinen Zugriff auf Renderer-State (activeTab, activePath). Neuer IPC-Handler `update-ui-state` empfängt den State vom Renderer. `pushUiState()` wird bei Tab-Wechsel und nach Scan-Abschluss aufgerufen. Auto-Save nach Scan und Before-Quit nutzen jetzt `lastKnownUiState` statt leeres `{}`. |
 
 ---
 

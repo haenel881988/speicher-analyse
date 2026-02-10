@@ -32,6 +32,9 @@ const deepSearchWorkers = new Map();
 // Singleton PreferencesStore (shared across module)
 const preferences = new PreferencesStore();
 
+// Last known UI state (pushed from renderer for session persistence)
+let lastKnownUiState = {};
+
 function register(mainWindow) {
     // Init preferences (needs app.getPath which requires app ready)
     preferences.init();
@@ -71,7 +74,7 @@ function register(mainWindow) {
                 }
                 // Auto-save session after scan completion
                 if (preferences.get('sessionSaveAfterScan')) {
-                    session.saveSession(scans, {}).catch(err =>
+                    session.saveSession(scans, lastKnownUiState).catch(err =>
                         console.error('Auto-Session-Save nach Scan fehlgeschlagen:', err.message)
                     );
                 }
@@ -94,6 +97,33 @@ function register(mainWindow) {
         const node = scanner.getTreeNode(nodePath, depth || 1);
         if (!node) return { error: 'Pfad nicht gefunden' };
         return node;
+    });
+
+    // === Bulk Folder Sizes (for Explorer enrichment from scan data) ===
+    ipcMain.handle('get-folder-sizes-bulk', async (_event, scanId, folderPaths, parentPath) => {
+        const scanner = scans.get(scanId);
+        if (!scanner || !scanner.isComplete) return null;
+
+        const result = { folders: {}, parent: null };
+
+        for (const fp of folderPaths) {
+            const node = scanner.tree.get(fp);
+            if (node) {
+                result.folders[fp] = {
+                    size: node.size,
+                    ownSize: node.ownSize,
+                    fileCount: node.fileCount,
+                    dirCount: node.dirCount,
+                };
+            }
+        }
+
+        if (parentPath) {
+            const parentNode = scanner.tree.get(parentPath);
+            if (parentNode) result.parent = { size: parentNode.size };
+        }
+
+        return result;
     });
 
     ipcMain.handle('get-treemap-data', async (_event, scanId, nodePath, depth) => {
@@ -888,11 +918,17 @@ function register(mainWindow) {
 
     ipcMain.handle('save-session-now', async (_event, uiState) => {
         try {
-            const saved = await session.saveSession(scans, uiState || {});
+            const saved = await session.saveSession(scans, uiState || lastKnownUiState);
             return { success: saved };
         } catch (err) {
             return { success: false, error: err.message };
         }
+    });
+
+    // === UI State (pushed from renderer for session persistence) ===
+    ipcMain.handle('update-ui-state', async (_event, uiState) => {
+        lastKnownUiState = uiState || {};
+        return { success: true };
     });
 
     // Cleanup on app quit: save session, then terminate workers and release memory
@@ -927,7 +963,7 @@ function register(mainWindow) {
 
                 if (sessions.length > 0) {
                     if (!fss.existsSync(SESSION_DIR)) fss.mkdirSync(SESSION_DIR, { recursive: true });
-                    const payload = { version: 1, savedAt: new Date().toISOString(), ui: {}, scans: sessions };
+                    const payload = { version: 1, savedAt: new Date().toISOString(), ui: lastKnownUiState, scans: sessions };
                     const compressed = zlib.gzipSync(JSON.stringify(payload));
                     fss.writeFileSync(SESSION_FILE, compressed);
                 }

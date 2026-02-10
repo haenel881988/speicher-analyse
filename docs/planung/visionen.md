@@ -156,6 +156,38 @@ Asymmetrische Kryptographie (Ed25519):
 
 **→ Projektplan:** v1.0.0 — Lizenzierung (Teil des stabilen Releases)
 
+
+### 5.4 Release-Nodes
+
+Bitte original-Text so stehen lassen. Das sind Simons Gedanken.
+Diese können jedoch für weitere Versionen und Funktionen weiter aufgegriffen und erweitert werden.
+
+ #### 5.5.1 Simon - Die Squirell Geschichte - eine Art Vorlage / inspiration für die Release-Nodes.
+
+Die meisten Apps wie VS Code etc. haben sehr langweilige Release-Nodes.
+Aus diesem Grund habe ich mir einen Markennamen überlegt, nämlich: swiss-squirrel.ch
+
+Denn ein Einhörnchen verlegt gerne sehr schnell und überall seine Nüsse, wie die User, sehr schnell ihre Dateien, Verzeichnisse verlegen und nicht mehr finden.
+Somit ist Swiss Squirell ein Super Eichhörnchen, ich, Simon der das ganze mithilfe der KI, nämlich sein Freund und Helfer wie der magische Geist an seiner Seite - stehts hilft, das Projekt zu entwickeln, so das Simon seine Nüsse wiederfinden kann.
+
+Auf dem Weg zu seinen Goldenen Nüssen begnet Simon der Squirell ganz vielen Plagegeistern. z.B.: pagefile.sys - was die Unordnung in Simons goldenen Nüssenkorb nur vergrössert.
+Die Tracking und Telemetrie Daten können ganz grosse Eichhörnchen wie Microsoft etc. schauen, was für Nüsse, wie viele Nüsse Simon in seinem Nüssekorb zuhause hat.
+
+Und so begibt sich Simon auf die sagenumwobene Reise und mit jedem Release findet Simon eine weitere Nuss, oder sieht, dass im Korb eine faule Nuss - also ein Bug, vorhanden ist.
+
+Es gibt ganz viele helferlein, von treesize, dass aber nur die speicherbelegung anzeigt. Was ist denn mit den Diensten, mit den Prozessen? Was ist mit dem Terminal?
+Fehlanzeige.
+Jetzt gibt es auch Ccleaner - aber dieser ist in Obhut von Avast.
+Echt doof wenn Simon bedenkt, das Avast ein Virenschutz-Bloatware-Hersteller ist, der nur mehr schadet als nützt, wie die Corona-Impfung... Ach aber anderes Thema, lassen wir das politische smile ;) - oder eben wie ein kaputtes Stuhlbein. Ist weder hilfreich noch nützt es jemand, es ist einfach nur lästig.
+
+Jetzt gibt es noch asshampoo, malware antibytes usw. ganz viele lästige Tools - und mal abgesehen davon, braucht man um diese Tools zu verwenden eine Internet-Verbindung mit dem Vorwand, um Updates einzuspielen, der Sicherheit, aber während dann sämtliche Daten gesammelt werden.
+
+Nun lass dich mal überraschen, was alles so avast nach hause sendet, dafür hat Simon mit seinem Freund (Claude), eine Lösung entwickelt, so dass auch unbeholfene Squirrels prüfen kann, wer alles in ihr Nest guckt.
+
+
+
+
+
 ---
 
 ## Marketing Vision:

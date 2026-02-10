@@ -242,6 +242,10 @@ contextBridge.exposeInMainWorld('api', {
     // === Session ===
     getSessionInfo: () => ipcRenderer.invoke('get-session-info'),
     saveSessionNow: (uiState) => ipcRenderer.invoke('save-session-now', uiState),
+    updateUiState: (uiState) => ipcRenderer.invoke('update-ui-state', uiState),
+
+    // === Folder Sizes (Explorer enrichment from scan data) ===
+    getFolderSizesBulk: (scanId, folderPaths, parentPath) => ipcRenderer.invoke('get-folder-sizes-bulk', scanId, folderPaths, parentPath),
 
     // === Terminal Menu Actions (from menu bar) ===
     onToggleTerminal: (callback) => {

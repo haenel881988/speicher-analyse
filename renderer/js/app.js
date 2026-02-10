@@ -474,6 +474,7 @@ async function onScanComplete(progress) {
     els.progressBar.classList.remove('animating');
 
     state.lastScanProgress = progress;
+    pushUiState(); // Ensure UI state is saved before auto-session-save
     setStatus('Daten werden geladen...', true);
     await loadAllViews();
     setStatus('Bereit');
@@ -556,6 +557,17 @@ function switchToTab(tabName) {
 
     // Auto-load data when tab is clicked
     autoLoadTab(tabName);
+
+    // Push UI state to main process for session persistence
+    pushUiState();
+}
+
+function pushUiState() {
+    window.api.updateUiState({
+        activeTab: state.activeTab,
+        activePath: state.currentPath,
+        driveSelection: els.toolbarDriveSelect?.value || null,
+    }).catch(() => {});
 }
 
 async function autoLoadTab(tabName) {
