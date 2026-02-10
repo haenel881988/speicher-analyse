@@ -19,8 +19,8 @@ export class NetworkView {
 
     async init() {
         this.container.innerHTML = '<div class="loading-state">Netzwerk wird analysiert...</div>';
+        this._errorCount = 0;
         await this.refresh();
-        this._loaded = true;
     }
 
     async refresh() {
@@ -36,10 +36,20 @@ export class NetworkView {
             this.bandwidth = bandwidth || [];
 
             this._lastError = null;
+            this._errorCount = 0;
+            this._loaded = true;
             this.render();
         } catch (err) {
             console.error('Netzwerk-Monitor Fehler:', err);
             this._lastError = err.message;
+            this._loaded = false;
+            this._errorCount = (this._errorCount || 0) + 1;
+
+            // Bei wiederholten Fehlern Auto-Refresh stoppen
+            if (this._errorCount >= 3 && this.pollInterval) {
+                this.stopPolling();
+            }
+
             this.container.innerHTML = `
                 <div class="network-page">
                     <div class="network-header"><h2>Netzwerk-Monitor</h2></div>
@@ -50,6 +60,7 @@ export class NetworkView {
                             Mögliche Ursachen: PowerShell-Berechtigungen, Netzwerk-Cmdlets nicht verfügbar, oder Timeout.
                             Versuche es erneut oder starte die App als Administrator.
                         </p>
+                        ${this._errorCount >= 3 ? '<p style="color:var(--text-muted);font-size:12px">Auto-Refresh wurde nach 3 Fehlern gestoppt.</p>' : ''}
                         <button class="network-btn" id="network-retry" style="margin-top:12px">Erneut versuchen</button>
                     </div>
                 </div>`;
@@ -58,6 +69,7 @@ export class NetworkView {
                 retryBtn.onclick = async () => {
                     retryBtn.disabled = true;
                     retryBtn.textContent = 'Wird geladen...';
+                    this._errorCount = 0;
                     await this.refresh();
                 };
             }

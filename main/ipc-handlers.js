@@ -546,6 +546,27 @@ function register(mainWindow) {
         return { success: true };
     });
 
+    // === Open External Terminal with command ===
+    // Opens a real PowerShell/CMD window and runs a command (for PTY-required programs like claude, ssh, etc.)
+    ipcMain.handle('terminal-open-external', async (_event, cwd, command) => {
+        const { spawn: spawnProc } = require('child_process');
+        const resolved = path.resolve(cwd);
+        try {
+            // Windows Terminal (wt.exe) if available, otherwise PowerShell directly
+            const child = spawnProc('cmd.exe', ['/c', 'start', 'powershell.exe', '-NoExit', '-Command',
+                `Set-Location -LiteralPath '${resolved.replace(/'/g, "''")}'; ${command}`
+            ], {
+                detached: true,
+                stdio: 'ignore',
+                windowsHide: false,
+            });
+            child.unref();
+            return { success: true };
+        } catch (err) {
+            return { success: false, error: err.message };
+        }
+    });
+
     // === Open With dialog ===
     ipcMain.handle('open-with-dialog', async (_event, filePath) => {
         const { execFile: spawnExec } = require('child_process');

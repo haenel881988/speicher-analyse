@@ -12,7 +12,6 @@ export class SmartView {
 
     async init() {
         if (this._loaded) return;
-        this._loaded = true;
         this.container.innerHTML = '<div class="loading-state">Festplatten werden analysiert...</div>';
         await this.scan();
     }
@@ -20,10 +19,30 @@ export class SmartView {
     async scan() {
         try {
             this.disks = await window.api.getDiskHealth();
+            this._loaded = true;
             this.render();
         } catch (err) {
-            this.container.innerHTML = `<div class="error-state">Fehler: ${err.message}</div>`;
+            this._loaded = false;
+            this.container.innerHTML = `
+                <div class="error-state" style="padding:24px">
+                    <p><strong>Fehler beim Laden der Festplatten-Daten:</strong></p>
+                    <p style="color:var(--text-secondary);margin:8px 0">${this._esc(err.message)}</p>
+                    <button class="network-btn" id="smart-retry" style="margin-top:12px">Erneut versuchen</button>
+                </div>`;
+            const retryBtn = this.container.querySelector('#smart-retry');
+            if (retryBtn) {
+                retryBtn.onclick = async () => {
+                    retryBtn.disabled = true;
+                    retryBtn.textContent = 'Wird geladen...';
+                    await this.init();
+                };
+            }
         }
+    }
+
+    _esc(text) {
+        if (!text) return '';
+        return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
     render() {

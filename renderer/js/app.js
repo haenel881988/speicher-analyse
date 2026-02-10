@@ -174,7 +174,7 @@ async function init() {
     try {
         state.capabilities = await window.api.getSystemCapabilities();
         if (!state.capabilities.wingetAvailable) {
-            showToast('WinGet nicht verfuegbar - Software-Updates deaktiviert', 'info');
+            showToast('WinGet nicht verfügbar - Software-Updates deaktiviert', 'info');
         }
     } catch { /* ignore */ }
 

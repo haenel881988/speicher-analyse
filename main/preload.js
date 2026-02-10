@@ -194,6 +194,7 @@ contextBridge.exposeInMainWorld('api', {
     terminalCreate: (cwd, shellType) => ipcRenderer.invoke('terminal-create', cwd, shellType),
     terminalWrite: (id, data) => ipcRenderer.invoke('terminal-write', id, data),
     terminalDestroy: (id) => ipcRenderer.invoke('terminal-destroy', id),
+    terminalOpenExternal: (cwd, command) => ipcRenderer.invoke('terminal-open-external', cwd, command),
     onTerminalData: (callback) => {
         ipcRenderer.removeAllListeners('terminal-data');
         ipcRenderer.on('terminal-data', (_e, data) => callback(data));

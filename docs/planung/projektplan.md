@@ -163,13 +163,14 @@ Historische Pläne: siehe [`archiv/projektplan_v3-v5.md`](archiv/projektplan_v3-
 |---------|-------------|
 | **Governance** | Qualitätsstandards in `docs/planung/governance.md`: WCAG 2.2 AA, Sprache, Performance, Sicherheit, Versionierung. |
 | **WCAG Kontrast-Fixes** | Komplett überarbeitet: --text-muted 2.3:1→4.7:1, --text-secondary 4.67:1→6.7:1 (Dark), --text-muted 3.2:1→5.3:1 (Light). Alle WCAG 2.2 AA 4.5:1 konform. |
-| **Terminal Multi-Shell** | Shell-Selector (PowerShell/CMD/WSL). Dynamische Prompts, WSL-Pfadkonvertierung. PTY-Erkennung für interaktive Befehle (claude, ssh). |
+| **Terminal Multi-Shell** | Shell-Selector (PowerShell/CMD/WSL). Dynamische Prompts, WSL-Pfadkonvertierung. Intelligente PTY-Erkennung (nur echte REPL-Befehle warnen). |
 | **Terminal-Kontextmenü** | "Im Terminal öffnen" → eingebettetes Terminal statt externes Fenster. |
 | **Versions-Fix** | Konsistente Version 7.2 in package.json, index.html, settings.js. |
-| **Netzwerk-Monitor Fix** | Timeout 10s→30s, sequentielle PS-Aufrufe, Retry-Button bei Fehler, Fehler-Feedback. |
+| **Netzwerk-Monitor Fix** | Timeout 10s→30s, sequentielle PS-Aufrufe, Retry-Button bei Fehler, Auto-Stopp nach 3 Fehlern. |
 | **Datei-Vorschau im Explorer** | Doppelklick auf PDF/DOCX/XLSX/Bilder/Code öffnet integrierte Vorschau statt externes Programm. |
-| **Menü: Daten-Aktualisierung** | F5 = Daten der aktuellen Ansicht aktualisieren (kein Page-Reload). Ctrl+Shift+R = Page-Reload. |
-| **Kundenorientierung (CLAUDE.md)** | Regeln: Niemals User widersprechen, Tiefenrecherche, Beweislast bei Claude. |
+| **Smart Reload (F5)** | F5 speichert App-Zustand in sessionStorage, führt echten Page-Reload durch, stellt Zustand wieder her. CSS/JS-Änderungen werden geladen + Scan-Daten bleiben erhalten. |
+| **Fehlerbehandlung** | _loaded-Flag wird bei Fehler zurückgesetzt (Privacy, S.M.A.R.T., Software-Audit, Netzwerk). Retry-Buttons in allen Fehlerseiten. |
+| **OBERSTE DIREKTIVE (CLAUDE.md)** | Alle Probleme liegen IMMER im Quellcode. Niemals User/Client beschuldigen. Visuelles Ergebnis = Wahrheit. |
 
 ---
 

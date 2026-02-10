@@ -26,7 +26,8 @@ const SHELL_START_MSG = {
     wsl: 'WSL (Bash)',
 };
 
-// Befehle die ein echtes PTY (Pseudo-Terminal) benötigen und in Pipes nicht funktionieren
+// Befehle die ein echtes PTY (Pseudo-Terminal) benötigen und in Pipes nicht funktionieren.
+// Diese werden automatisch in einem EXTERNEN Terminal geöffnet.
 const PTY_REQUIRED_COMMANDS = new Set([
     'claude', 'ssh', 'nano', 'vim', 'vi', 'less', 'more', 'top', 'htop',
     'python', 'python3', 'node', 'irb', 'ghci', 'julia',
@@ -207,14 +208,28 @@ export class TerminalPanel {
         // Prüfe ob der Befehl ein echtes Terminal (PTY) benötigt
         const baseCmd = cmd.trim().split(/\s+/)[0].toLowerCase().replace(/\.exe$/, '');
         if (PTY_REQUIRED_COMMANDS.has(baseCmd)) {
+            // Automatisch in echtem externen Terminal öffnen
             this._appendOutput(
-                `\nHinweis: "${baseCmd}" benötigt ein echtes Terminal (PTY).\n` +
-                `Das eingebettete Terminal verwendet Pipes und unterstützt keine interaktiven Programme.\n` +
-                `→ Verwende ein externes Terminal (Windows Terminal, PowerShell) für "${baseCmd}".\n` +
-                `→ Vollständige Terminal-Emulation (xterm.js) ist für eine zukünftige Version geplant.\n\n`,
+                `→ "${baseCmd}" wird in einem externen Terminal geöffnet...\n`,
                 'info'
             );
-            // Trotzdem versuchen auszuführen - manche Programme geben nicht-interaktive Ausgabe
+            try {
+                const result = await window.api.terminalOpenExternal(this.currentCwd, cmd.trim());
+                if (result.success) {
+                    this._appendOutput(
+                        `→ Externes Terminal gestartet.\n\n`,
+                        'info'
+                    );
+                } else {
+                    this._appendOutput(
+                        `→ Fehler beim Öffnen: ${result.error}\n\n`,
+                        'error'
+                    );
+                }
+            } catch (err) {
+                this._appendOutput(`→ Fehler: ${err.message}\n\n`, 'error');
+            }
+            return; // Nicht im eingebetteten Terminal ausführen
         }
 
         if (!this.sessionId) {

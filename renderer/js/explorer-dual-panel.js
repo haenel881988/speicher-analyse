@@ -46,6 +46,7 @@ export class ExplorerDualPanel {
                 onContextMenu: (type, data) => this._handleContextMenu(type, data, 'right'),
                 showQuickAccess: false,
                 panelId: 'right',
+                getScanId: this.getScanId,
             });
             const currentPath = this.leftPanel.getActiveExplorer()?.currentPath || 'C:\\';
             await this.rightPanel.createTab(currentPath);
