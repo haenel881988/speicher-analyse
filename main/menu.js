@@ -53,6 +53,21 @@ function buildAppMenu(mainWindow) {
             ],
         },
         {
+            label: 'Terminal',
+            submenu: [
+                {
+                    label: 'Terminal ein-/ausblenden',
+                    accelerator: 'Ctrl+`',
+                    click: () => mainWindow.webContents.send('toggle-terminal'),
+                },
+                { type: 'separator' },
+                {
+                    label: 'Neues Terminal',
+                    click: () => mainWindow.webContents.send('new-terminal'),
+                },
+            ],
+        },
+        {
             label: 'Hilfe',
             submenu: [
                 {

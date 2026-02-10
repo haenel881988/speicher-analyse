@@ -5,11 +5,14 @@
  * Uses main process spawn (no node-pty/xterm.js dependency).
  */
 
-const SHELL_PROMPTS = {
-    powershell: 'PS>',
-    cmd: '>',
-    wsl: '$',
-};
+function getShellPrompt(shell, cwd) {
+    switch (shell) {
+        case 'powershell': return `PS ${cwd}>`;
+        case 'cmd': return `${cwd}>`;
+        case 'wsl': return `${cwd}$`;
+        default: return '>';
+    }
+}
 
 const SHELL_CD_COMMANDS = {
     powershell: (dir) => `Set-Location -LiteralPath '${dir.replace(/'/g, "''")}'`,
@@ -29,7 +32,7 @@ const SHELL_START_MSG = {
 // Befehle die ein echtes PTY (Pseudo-Terminal) benötigen und in Pipes nicht funktionieren.
 // Diese werden automatisch in einem EXTERNEN Terminal geöffnet.
 const PTY_REQUIRED_COMMANDS = new Set([
-    'claude', 'ssh', 'nano', 'vim', 'vi', 'less', 'more', 'top', 'htop',
+    'ssh', 'nano', 'vim', 'vi', 'less', 'more', 'top', 'htop',
     'python', 'python3', 'node', 'irb', 'ghci', 'julia',
 ]);
 
@@ -83,9 +86,6 @@ export class TerminalPanel {
         if (this.panel) this.panel.style.display = 'none';
         // Parent-Container ausblenden
         this.parentContainer.style.display = 'none';
-        // Status-Bar-Button aktualisieren
-        const btn = document.getElementById('terminal-toggle-btn');
-        if (btn) btn.classList.remove('active');
     }
 
     async destroy() {
@@ -135,7 +135,7 @@ export class TerminalPanel {
             </div>
             <div class="terminal-output"></div>
             <div class="terminal-input-row">
-                <span class="terminal-prompt">${SHELL_PROMPTS[this.currentShell]}</span>
+                <span class="terminal-prompt">${getShellPrompt(this.currentShell, this.currentCwd)}</span>
                 <input type="text" class="terminal-input" placeholder="Befehl eingeben..." spellcheck="false" autocomplete="off">
             </div>
         `;
@@ -156,7 +156,7 @@ export class TerminalPanel {
             const newShell = this.shellSelect.value;
             if (newShell !== this.currentShell) {
                 this.currentShell = newShell;
-                this.promptEl.textContent = SHELL_PROMPTS[newShell];
+                this.promptEl.textContent = getShellPrompt(newShell, this.currentCwd);
                 await this._restart();
             }
         };
@@ -246,7 +246,7 @@ export class TerminalPanel {
         if (this.history.length > 100) this.history.shift();
         this.historyIndex = this.history.length;
 
-        const prompt = SHELL_PROMPTS[this.currentShell] || '>';
+        const prompt = getShellPrompt(this.currentShell, this.currentCwd);
         this._appendOutput(`${prompt} ${cmd}\n`, 'cmd');
 
         // Prüfe ob der Befehl ein echtes Terminal (PTY) benötigt
@@ -320,6 +320,9 @@ export class TerminalPanel {
 
     async changeCwd(cwd) {
         this.currentCwd = cwd;
+        if (this.promptEl) {
+            this.promptEl.textContent = getShellPrompt(this.currentShell, this.currentCwd);
+        }
         if (this.sessionId && this.visible) {
             const cdFn = SHELL_CD_COMMANDS[this.currentShell];
             if (cdFn) {

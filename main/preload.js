@@ -233,6 +233,16 @@ contextBridge.exposeInMainWorld('api', {
     // === System Score ===
     getSystemScore: (results) => ipcRenderer.invoke('get-system-score', results),
 
+    // === Terminal Menu Actions (from menu bar) ===
+    onToggleTerminal: (callback) => {
+        ipcRenderer.removeAllListeners('toggle-terminal');
+        ipcRenderer.on('toggle-terminal', () => callback());
+    },
+    onNewTerminal: (callback) => {
+        ipcRenderer.removeAllListeners('new-terminal');
+        ipcRenderer.on('new-terminal', () => callback());
+    },
+
     // === Tray Actions (received from main) ===
     onTrayAction: (callback) => {
         ipcRenderer.removeAllListeners('tray-action');
