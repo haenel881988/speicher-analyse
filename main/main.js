@@ -1,5 +1,6 @@
 const { app, BrowserWindow, ipcMain, shell, dialog, Menu } = require('electron');
 const path = require('path');
+const fs = require('fs');
 
 // Prevent GPU shader disk cache errors when multiple instances try to access the same cache files
 app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');
@@ -112,7 +113,43 @@ if (!gotLock) {
         }
     }
 
-    app.whenReady().then(createWindow);
+    app.whenReady().then(() => {
+        createWindow();
+
+        // ===== Dev Auto-Reload =====
+        // Watches renderer/ and main/ for file changes.
+        // - Renderer changes (CSS/JS/HTML): auto-reload the window
+        // - Main process changes: full app relaunch
+        const rendererDir = path.join(__dirname, '..', 'renderer');
+        const mainDir = __dirname;
+        let reloadTimer = null;
+
+        function debounceReload(callback, delay = 300) {
+            if (reloadTimer) clearTimeout(reloadTimer);
+            reloadTimer = setTimeout(callback, delay);
+        }
+
+        try {
+            fs.watch(rendererDir, { recursive: true }, (_event, filename) => {
+                if (!filename || !mainWindow) return;
+                debounceReload(() => {
+                    console.log(`[Auto-Reload] Renderer geändert: ${filename}`);
+                    mainWindow.webContents.reloadIgnoringCache();
+                });
+            });
+
+            fs.watch(mainDir, { recursive: false }, (_event, filename) => {
+                if (!filename || !mainWindow || !filename.endsWith('.js')) return;
+                debounceReload(() => {
+                    console.log(`[Auto-Reload] Main-Prozess geändert: ${filename} → App wird neu gestartet...`);
+                    app.relaunch();
+                    app.exit(0);
+                }, 500);
+            });
+        } catch (err) {
+            console.error('Auto-Reload watcher error:', err);
+        }
+    });
 
     app.on('before-quit', () => {
         isQuitting = true;

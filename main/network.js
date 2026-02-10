@@ -32,7 +32,7 @@ async function getConnections() {
             }
         }
         $result | ConvertTo-Json -Depth 3 -Compress
-    `.replace(/\n/g, ' ');
+    `.trim();
 
     try {
         const { stdout } = await runPS(psScript, PS_OPTS);
@@ -77,7 +77,7 @@ async function getBandwidth() {
             }
         }
         $result | ConvertTo-Json -Depth 3 -Compress
-    `.replace(/\n/g, ' ');
+    `.trim();
 
     try {
         const { stdout } = await runPS(psScript, PS_OPTS);
@@ -128,7 +128,7 @@ async function getFirewallRules(direction = 'Inbound') {
             }
         }
         $result | ConvertTo-Json -Depth 3 -Compress
-    `.replace(/\n/g, ' ');
+    `.trim();
 
     try {
         const { stdout } = await runPS(psScript, PS_OPTS);
@@ -168,7 +168,7 @@ async function blockProcess(processName, processPath) {
     const psScript = `
         New-NetFirewallRule -DisplayName '${ruleName}' -Name '${ruleName}' -Direction Outbound -Action Block -Program '${safePath}' -Enabled True -ErrorAction Stop | Out-Null;
         Write-Output 'OK'
-    `.replace(/\n/g, ' ');
+    `.trim();
 
     try {
         const { stdout } = await runPS(psScript, PS_OPTS);
@@ -198,7 +198,7 @@ async function unblockProcess(ruleName) {
     const psScript = `
         Remove-NetFirewallRule -Name '${safeName}' -ErrorAction Stop | Out-Null;
         Write-Output 'OK'
-    `.replace(/\n/g, ' ');
+    `.trim();
 
     try {
         const { stdout } = await runPS(psScript, PS_OPTS);
@@ -241,7 +241,7 @@ async function getNetworkSummary() {
             uniqueRemoteIPs  = $uniqueIPs
             topProcesses     = @($topProcesses)
         } | ConvertTo-Json -Depth 3 -Compress
-    `.replace(/\n/g, ' ');
+    `.trim();
 
     try {
         const { stdout } = await runPS(psScript, PS_OPTS);
