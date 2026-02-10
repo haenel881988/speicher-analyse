@@ -31,6 +31,7 @@
 | 23 | 2026-02-10 | v7.2 | fix | **WCAG-Kontrast komplett überarbeitet** - Dark-Theme: --text-muted von #5a5e72 (2.3:1) auf #8890a8 (4.7:1), --text-secondary von #8b8fa3 (4.67:1) auf #a0a4b8 (6.7:1). Light-Theme: --text-muted von #8b8fa3 (3.2:1) auf #656a82 (5.3:1), --text-secondary auf #4a4e62 (7.5:1). Alle Werte erfüllen WCAG 2.2 AA 4.5:1. |
 | 24 | 2026-02-10 | v7.2 | fix | **Menü: Daten-Aktualisierung statt Page-Reload** - F5 "Daten aktualisieren" unter Ansicht → aktualisiert die Daten der aktuellen Ansicht (Netzwerk, Privacy, Explorer, etc.) ohne Datenverlust. Ctrl+Shift+R "Seite neu laden" unter Hilfe für vollständigen Page-Reload. |
 | 25 | 2026-02-10 | v7.2 | improve | **CLAUDE.md: Kundenorientierung** - Neue Regeln: Niemals dem User widersprechen, Tiefenrecherche statt Oberflächenanalyse, Beweislast bei Claude nicht beim User, keine als "fertig" markierten Features ohne echte Funktionsprüfung. |
+| 26 | 2026-02-10 | v7.2 | fix | **Smart Reload (F5)** - F5 macht jetzt einen echten Page-Reload MIT State-Preservation. Zustand (Scan-ID, aktiver Tab, Fortschrittsdaten) wird vor dem Reload in sessionStorage gespeichert und danach wiederhergestellt. Löst das Problem, dass Code-Änderungen (CSS, JS) nie geladen wurden, weil F5 zuvor nur Daten-Refresh machte. Kein Datenverlust, kein manuelles Task-Killing mehr nötig. |
 
 ---
 
@@ -73,3 +74,20 @@
 **Lösung:** `.then()` statt `await` in nicht-async Callbacks verwenden.
 
 **Lehre:** CRITICAL - Immer prüfen ob der umgebende Callback `async` ist bevor `await` verwendet wird.
+
+---
+
+### #3: F5 Daten-Refresh vs. Page-Reload (2026-02-10)
+
+**Problem:** F5 wurde von `role: 'reload'` (Electron Page-Reload) auf einen Custom-Action `refresh-data` geändert, der nur Daten aktualisiert. CSS/JS-Datei-Änderungen wurden dadurch NIEMALS geladen. User sah alte Kontrast-Werte obwohl die CSS-Datei korrekt geändert war.
+
+**Ursache:** Electron-Renderer lädt CSS/JS nur bei Page-Reload. Daten-Refresh (DOM-Manipulation) ändert nicht den geladenen CSS/JS-Code.
+
+**Lösung:** "Smart Reload" - F5 speichert den App-Zustand (Scan-ID, aktiver Tab, Fortschrittsdaten) in `sessionStorage`, führt dann `location.reload()` aus. Nach dem Reload wird der Zustand aus `sessionStorage` wiederhergestellt. So werden Code-Änderungen geladen UND Scan-Daten bleiben erhalten (leben im Main Process).
+
+**Lehre:**
+- CRITICAL: In Electron-Apps müssen Code-Änderungen (CSS, JS) immer durch Page-Reload geladen werden
+- Daten-Refresh allein ist NICHT ausreichend wenn sich Code geändert hat
+- User darf NIEMALS Tasks killen müssen um Änderungen zu sehen
+- `sessionStorage` überlebt `location.reload()` → perfekt für State-Preservation
+- Scan-Daten im Main Process überleben Renderer-Reloads

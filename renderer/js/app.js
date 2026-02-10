@@ -189,34 +189,71 @@ async function init() {
     await updateBatteryUI();
     setInterval(updateBatteryUI, 30000);
 
-    // Check for restored session data after admin elevation restart (pull-based, no race condition)
-    try {
-        const sessions = await window.api.getRestoredSession();
-        if (sessions && sessions.length > 0) {
-            const progress = sessions[0];
-            state.currentScanId = progress.scan_id;
-            state.currentPath = progress.current_path;
-            state.lastScanProgress = progress;
+    // Smart Reload: State wiederherstellen nach F5 (page reload mit State-Preservation)
+    const reloadStateJson = sessionStorage.getItem('speicher-analyse-reload-state');
+    if (reloadStateJson) {
+        sessionStorage.removeItem('speicher-analyse-reload-state');
+        try {
+            const saved = JSON.parse(reloadStateJson);
+            if (Date.now() - saved.timestamp < 30000 && saved.currentScanId && saved.currentPath) {
+                state.currentScanId = saved.currentScanId;
+                state.currentPath = saved.currentPath;
+                state.lastScanProgress = saved.lastScanProgress;
 
-            // Select drive in dropdown WITHOUT starting a new scan
-            const driveLetter = progress.current_path.substring(0, 3).toUpperCase();
-            const opt = [...els.toolbarDriveSelect.options].find(o => o.value.toUpperCase().startsWith(driveLetter));
-            if (opt) els.toolbarDriveSelect.value = opt.value;
+                const driveLetter = saved.currentPath.substring(0, 3).toUpperCase();
+                const opt = [...els.toolbarDriveSelect.options].find(o => o.value.toUpperCase().startsWith(driveLetter));
+                if (opt) els.toolbarDriveSelect.value = opt.value;
 
-            // Show restored scan info
-            els.progressStats.textContent =
-                `Wiederhergestellt: ${formatNumber(progress.dirs_scanned)} Ordner \u00B7 ${formatNumber(progress.files_found)} Dateien \u00B7 ${formatBytes(progress.total_size)}`;
-            els.progressBar.style.width = '100%';
-            els.scanProgress.classList.add('active');
+                if (saved.lastScanProgress) {
+                    els.progressStats.textContent =
+                        `${formatNumber(saved.lastScanProgress.dirs_scanned)} Ordner \u00B7 ${formatNumber(saved.lastScanProgress.files_found)} Dateien \u00B7 ${formatBytes(saved.lastScanProgress.total_size)}`;
+                    els.progressBar.style.width = '100%';
+                    els.scanProgress.classList.add('active');
+                }
 
-            setStatus('Session wiederhergestellt', true);
-            await loadAllViews();
-            setStatus('Bereit (Admin-Modus)');
-            showToast('Scan-Daten wurden wiederhergestellt');
-            setTimeout(() => els.scanProgress.classList.remove('active'), 3000);
+                setStatus('Daten werden geladen...', true);
+                await loadAllViews();
+                if (saved.activeTab) switchToTab(saved.activeTab);
+                setStatus('Bereit');
+                showToast('App aktualisiert', 'success');
+
+                if (saved.lastScanProgress) {
+                    setTimeout(() => els.scanProgress.classList.remove('active'), 3000);
+                }
+            }
+        } catch (err) {
+            console.error('Smart reload restore error:', err);
         }
-    } catch (err) {
-        console.error('Session restore check failed:', err);
+    } else {
+        // Check for restored session data after admin elevation restart (pull-based, no race condition)
+        try {
+            const sessions = await window.api.getRestoredSession();
+            if (sessions && sessions.length > 0) {
+                const progress = sessions[0];
+                state.currentScanId = progress.scan_id;
+                state.currentPath = progress.current_path;
+                state.lastScanProgress = progress;
+
+                // Select drive in dropdown WITHOUT starting a new scan
+                const driveLetter = progress.current_path.substring(0, 3).toUpperCase();
+                const opt = [...els.toolbarDriveSelect.options].find(o => o.value.toUpperCase().startsWith(driveLetter));
+                if (opt) els.toolbarDriveSelect.value = opt.value;
+
+                // Show restored scan info
+                els.progressStats.textContent =
+                    `Wiederhergestellt: ${formatNumber(progress.dirs_scanned)} Ordner \u00B7 ${formatNumber(progress.files_found)} Dateien \u00B7 ${formatBytes(progress.total_size)}`;
+                els.progressBar.style.width = '100%';
+                els.scanProgress.classList.add('active');
+
+                setStatus('Session wiederhergestellt', true);
+                await loadAllViews();
+                setStatus('Bereit (Admin-Modus)');
+                showToast('Scan-Daten wurden wiederhergestellt');
+                setTimeout(() => els.scanProgress.classList.remove('active'), 3000);
+            }
+        } catch (err) {
+            console.error('Session restore check failed:', err);
+        }
     }
 
     // Listen for tray actions
@@ -549,6 +586,18 @@ async function autoLoadTab(tabName) {
     }
 }
 
+function saveStateAndReload() {
+    const saveData = {
+        currentScanId: state.currentScanId,
+        currentPath: state.currentPath,
+        activeTab: state.activeTab,
+        lastScanProgress: state.lastScanProgress,
+        timestamp: Date.now(),
+    };
+    sessionStorage.setItem('speicher-analyse-reload-state', JSON.stringify(saveData));
+    location.reload();
+}
+
 async function refreshCurrentView() {
     const tab = state.activeTab;
     setStatus('Wird aktualisiert...', true);
@@ -755,6 +804,9 @@ function setupContextMenuActions() {
                 break;
             case 'refresh-data':
                 refreshCurrentView();
+                break;
+            case 'smart-reload':
+                saveStateAndReload();
                 break;
             case 'toggle-theme':
                 toggleTheme();

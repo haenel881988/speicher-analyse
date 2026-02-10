@@ -37,9 +37,9 @@ function buildAppMenu(mainWindow) {
             label: 'Ansicht',
             submenu: [
                 {
-                    label: 'Daten aktualisieren',
+                    label: 'Aktualisieren',
                     accelerator: 'F5',
-                    click: () => mainWindow.webContents.send('context-menu-action', { action: 'refresh-data' }),
+                    click: () => mainWindow.webContents.send('context-menu-action', { action: 'smart-reload' }),
                 },
                 { type: 'separator' },
                 {
