@@ -27,6 +27,9 @@ Archiv: [`archiv/aenderungsprotokoll_v7.0-v7.2.md`](archiv/aenderungsprotokoll_v
 | 17 | 2026-02-10 | v7.5 | fix | **PDF Worker-Kontext Polyfill** - toHex/fromHex Polyfill wurde nur im Main-Page-Kontext geladen, aber pdf.js ruft toHex() im Worker auf. Fix: Polyfill wird jetzt direkt in den Worker-Blob injiziert (vor dem pdf.js Worker-Code), damit es im Worker Execution Context verfügbar ist. |
 | 18 | 2026-02-10 | v7.5 | feature | **Speicherfarben konfigurierbar** - Farbliche Hervorhebung großer Dateien/Ordner (rot >1GB, orange >100MB, gelb >10MB) ist jetzt standardmäßig deaktiviert. Neue Preference `showSizeColors` mit Toggle in Einstellungen → Allgemein. |
 | 19 | 2026-02-10 | v7.5 | feature | **Intelligentes Layout** - Panels (Vorschau, Terminal) passen sich automatisch an die Fenstergröße an. <1000px: schmaler, >1400px: breiter. Neue Preference `smartLayout` mit Toggle in Einstellungen. ResizeObserver-basiert, deaktivierbar. |
+| 20 | 2026-02-10 | v7.2.1 | fix | **Session-Restore: minimizeToTray Migration** - Root-Cause: `minimizeToTray` war `true` in bestehenden preferences.json → X-Button minimierte statt zu schließen → `before-quit` feuerte nie → Session wurde nie gespeichert. Fix: Einmalige Migration erzwingt `minimizeToTray: false` für bestehende User mit Flag `_migratedMinimizeToTray`. |
+| 21 | 2026-02-10 | v7.2.1 | improve | **Smart Layout: Sidebar + Content** - Smart Layout erweitert: Sidebar klappt automatisch bei <1000px zu und bei >1400px auf (respektiert manuelle Toggles). CSS-Klassen `smart-layout-narrow`/`smart-layout-wide` auf `#app` steuern Dashboard-Grid (1/2/3 Spalten) und Content-Padding (8/16/20px). |
+| 22 | 2026-02-10 | v7.2.1 | fix | **Versionierung vereinheitlicht** - 3 verschiedene Versionen im Code (v7.2 in index.html, v7.4 in settings.js, 7.5.0 in package.json) auf v7.2.1 vereinheitlicht. Session-Diagnostik-Logging in Load/Save/Restore-Pfaden hinzugefügt. |
 
 ---
 
