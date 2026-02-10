@@ -162,5 +162,52 @@ Asymmetrische Kryptographie (Ed25519):
 
 > **ACHTUNG:** Bitte diesen Scope ignorieren, das ist alles erstmal für später umzusetzen.
 
-Enthält: Collector's Edition (1999 CHF), Scarcity-Strategie, Unboxing-Erlebnis, Founder's Edition.
-Wird erst relevant wenn v1.0.0 (stabiler Release) erreicht ist.
+Hier ist meine Analyse, warum das funktioniert und wie du es noch besser machst (damit sich die 1999.- CHF auch wirklich wertvoll anfühlen):
+
+### 6.1 Warum 100 Stück besser sind als 1000 (Die Scarcity-Strategie)
+Exklusivität: Wenn es 1000 Stück gibt, ist es ein Massenprodukt. Wenn es nur 100 gibt, ist es ein Club.
+
+Deine Zeit: 1000 Briefe von Hand zu schreiben, zu unterschreiben und zur Post zu bringen, ist keine "Freude" mehr, das ist Fließbandarbeit. Du willst, dass jeder Brief "Liebe" ausstrahlt. Bei 100 Stück kannst du dir für jeden Käufer 10 Minuten Zeit nehmen.
+
+Psychologie: "Nur noch 12 verfügbar" treibt den Verkauf stärker an als "Nur noch 840 verfügbar".
+
+### 6.2 Der "Anker-Effekt" (Warum das den Verkauf der günstigen Versionen ankurbelt)
+Selbst wenn niemand die 1999.- Version kauft, ist sie extrem wertvoll für dich.
+
+Das Szenario: Ein User sieht drei Preise:
+
+- Standard: 29.- / Jahr (Wirkt okay)
+- Lifetime: 149.- (Wirkt teuer)
+- Collector's Edition: 1999.- (Wirkt wahnsinnig)
+
+Der Effekt: Plötzlich wirken die 149.- für die Lifetime-Lizenz günstig. "Ich spare 1850 Franken im Vergleich zur VIP-Version!". Das nennt man Price Anchoring. Du verkaufst dadurch mehr von der mittleren Version.
+
+### 6.3 Das "Unboxing"-Erlebnis: Bitte nicht laminieren!
+Hier muss ich ehrlich sein: Für 2000 Franken darfst du kein einlaminiertes Papier verschicken. Das wirkt wie ein Schülerausweis. Wenn jemand so viel Geld hinlegt, erwartet er Luxus.
+
+Gegenvorschlag für die "Founder's Edition":
+
+- **Das Material:** Drucke den Lizenzschlüssel auf dickes Büttenpapier oder eine Metallkarte (lasergraviert, kostet dich ca. 20-30 CHF im Einkauf, wirkt aber wie 500 CHF).
+- **Die Verpackung:** Ein schöner schwarzer Umschlag, versiegelt mit echtem Wachssiegel (rot, mit Schweizer Kreuz oder deinem Logo).
+- **Die Handschrift:** Dein persönlicher Brief dazu ist perfekt. Schreib ihn mit Füller, nicht mit Kugelschreiber.
+- **Das Extra:** Leg etwas Physisches bei. Ein kleines Victorinox Taschenmesser mit deinem Logo? Oder einen hochwertigen USB-Stick (Edelstahl), auf dem die Software bereits vorinstalliert ist ("Air-Gap Ready").
+
+### 6.4 Was der Käufer wirklich kauft (Der "Whale"-Status)
+Wer 2000 Franken für Software zahlt, kauft nicht die Software. Er kauft Status und Einfluss. Gib ihnen mehr als nur Updates:
+
+- **"The Council":** Die 100 Collector-Besitzer kommen in eine exklusive Mailing-Liste oder Discord-Gruppe, wo du sie persönlich nach ihrer Meinung zu neuen Features fragst. "Soll ich erst PDF oder erst KI bauen?" -> Ihre Stimme zählt doppelt.
+- **Credits:** Ihr Name steht (wenn sie wollen) im "Über uns"-Dialog der Software unter "Gründungspaten".
+
+### 6.5 Fazit & Empfehlung
+
+Ja, mach es!
+
+- **Name:** "Founder's Edition" oder "Patron Edition".
+- **Limitierung:** Streng limitiert auf 100 Exemplare. (Nummeriert: 1/100, 2/100...).
+- **Preis:** 1999.- CHF ist mutig, aber als "Statement" genau richtig.
+- **Inhalt:**
+  - Lifetime Updates (Alle Versionen, für immer).
+  - Metall-Lizenzkarte (Lasergraviert).
+  - Handsignierter Brief auf Premium-Papier.
+  - USB-Stick mit der "Offline-Installation".
+  - Nennung in den Credits.
