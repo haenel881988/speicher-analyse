@@ -25,6 +25,7 @@ const DEFAULTS = {
     theme: 'dark',                  // 'dark' | 'light'
     globalHotkey: 'Ctrl+Shift+S',
     language: 'de',
+    minimizeToTray: true,           // X-Button: true = in Tray minimieren, false = App beenden
     startMinimized: false,
     showScanNotification: true,
 

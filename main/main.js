@@ -61,11 +61,40 @@ if (!gotLock) {
             mainWindow.show();
         });
 
-        // Minimize to tray instead of closing (unless quitting)
+        // Minimize to tray or quit (depends on preference)
+        let trayNotified = false;
         mainWindow.on('close', (e) => {
-            if (!isQuitting) {
+            if (isQuitting) return; // App will beenden → durchlassen
+
+            // Preferences erst nach IPC-Register verfügbar - hier lazy laden
+            let minimizeToTray = true;
+            try {
+                const { preferences } = require('./ipc-handlers');
+                minimizeToTray = preferences.get('minimizeToTray');
+            } catch { /* default: true */ }
+
+            if (minimizeToTray) {
                 e.preventDefault();
                 mainWindow.hide();
+
+                // Einmalige Tray-Benachrichtigung beim ersten Minimieren
+                if (!trayNotified) {
+                    trayNotified = true;
+                    try {
+                        const { Notification } = require('electron');
+                        if (Notification.isSupported()) {
+                            new Notification({
+                                title: 'Speicher Analyse',
+                                body: 'App läuft weiter im System-Tray. Rechtsklick auf Tray-Icon → Beenden.',
+                                silent: true,
+                            }).show();
+                        }
+                    } catch { /* ignore */ }
+                }
+            } else {
+                // minimizeToTray deaktiviert → App wirklich beenden
+                isQuitting = true;
+                app.quit();
             }
         });
 

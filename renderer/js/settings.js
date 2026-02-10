@@ -143,6 +143,15 @@ export class SettingsView {
                     <h3 class="settings-section-title">Allgemein</h3>
                     <div class="settings-row">
                         <div class="settings-label">
+                            <strong>In System-Tray minimieren</strong>
+                            <span class="settings-desc">X-Button: App in den Tray minimieren statt beenden. Deaktiviert = App wird beim Schließen beendet.</span>
+                        </div>
+                        <div class="settings-value">
+                            <div class="settings-toggle ${prefs.minimizeToTray ? 'active' : ''}" data-key="minimizeToTray"></div>
+                        </div>
+                    </div>
+                    <div class="settings-row">
+                        <div class="settings-label">
                             <strong>Im System-Tray starten</strong>
                             <span class="settings-desc">App startet minimiert im Hintergrund.</span>
                         </div>
