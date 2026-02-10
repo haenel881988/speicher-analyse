@@ -241,6 +241,27 @@ function setupSidebar() {
             localStorage.setItem('sidebar-expanded', sidebar.classList.contains('expanded'));
         };
     }
+
+    // Collapsible sidebar groups
+    document.querySelectorAll('.sidebar-nav-group').forEach(group => {
+        const groupId = group.dataset.group;
+        const label = group.querySelector('.sidebar-nav-label');
+        const key = 'sidebar-group-' + groupId;
+
+        // Restore saved state (default: collapsed from HTML)
+        const saved = localStorage.getItem(key);
+        if (saved === 'expanded') {
+            group.classList.remove('collapsed');
+        }
+
+        // Toggle on label click
+        if (label) {
+            label.onclick = () => {
+                group.classList.toggle('collapsed');
+                localStorage.setItem(key, group.classList.contains('collapsed') ? 'collapsed' : 'expanded');
+            };
+        }
+    });
 }
 
 // ===== Toolbar =====
@@ -412,6 +433,13 @@ function switchToTab(tabName) {
     document.querySelectorAll('.sidebar-nav-btn[data-tab]').forEach(b => b.classList.remove('active'));
     const navBtn = document.querySelector(`.sidebar-nav-btn[data-tab="${tabName}"]`);
     if (navBtn) navBtn.classList.add('active');
+
+    // Auto-expand parent group of active tab
+    const parentGroup = navBtn?.closest('.sidebar-nav-group');
+    if (parentGroup && parentGroup.classList.contains('collapsed')) {
+        parentGroup.classList.remove('collapsed');
+        localStorage.setItem('sidebar-group-' + parentGroup.dataset.group, 'expanded');
+    }
 
     // Switch content view
     els.tabContent.querySelectorAll('.tab-view').forEach(v => v.classList.remove('active'));

@@ -147,6 +147,24 @@ export class ExplorerView {
 
         this.container.tabIndex = 0;
         this.container.addEventListener('keydown', this._keydownHandler);
+
+        // Click-outside dismisses omnibar search dropdown
+        this._clickOutsideHandler = (e) => {
+            if (!this._omnibarSearching) return;
+            const isInsideDropdown = this.els.omniDropdown?.contains(e.target);
+            const isInsideAddress = this.els.addressBar?.contains(e.target);
+            if (!isInsideDropdown && !isInsideAddress) {
+                this._omnibarSearching = false;
+                this.filteredEntries = null;
+                this._hideOmniDropdown();
+                this._cancelDeepSearch();
+                this.addressMode = 'breadcrumb';
+                this.renderAddressBreadcrumb();
+                this.renderFileList();
+                this.renderStatus({ entries: this.entries });
+            }
+        };
+        document.addEventListener('click', this._clickOutsideHandler);
     }
 
     // ===== Navigation =====
@@ -1133,6 +1151,7 @@ export class ExplorerView {
     dispose() {
         this._cancelDeepSearch();
         this.container.removeEventListener('keydown', this._keydownHandler);
+        if (this._clickOutsideHandler) document.removeEventListener('click', this._clickOutsideHandler);
         this.container.innerHTML = '';
         this.entries = [];
         this.filteredEntries = null;
