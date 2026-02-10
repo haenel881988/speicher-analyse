@@ -29,7 +29,7 @@
     --scrollbar-track: #1a1d27;
     --scrollbar-thumb: #333750;
     --bg-tertiary: #2a2e42;
-    --accent-text: #a78bfa;
+    --accent-text: #c4b5fd;
 }
 
 [data-theme="light"] {
@@ -2987,7 +2987,7 @@ body {
 }
 
 .explorer-col-name.dir-name {
-    color: var(--accent-text);
+    color: var(--text-primary);
 }
 
 .explorer-col-size {
