@@ -943,4 +943,4 @@ function escapeHtml(text) { const d = document.createElement('div'); d.textConte
 function escapeAttr(text) { return text.replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
 
 // ===== Start =====
-init();
+init().catch(e => console.error('[app.js] init() error:', e));
