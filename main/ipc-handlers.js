@@ -537,14 +537,12 @@ function register(mainWindow) {
     });
 
     // === Open in Terminal ===
+    // Sends event to renderer to open embedded terminal at the given path
     ipcMain.handle('open-in-terminal', async (_event, dirPath) => {
-        const { execFile: spawnExec } = require('child_process');
         const resolved = path.resolve(dirPath);
-        // Use execFile with array args to prevent injection; unref to not block app quit
-        const child = spawnExec('powershell', ['-NoExit', '-Command', `Set-Location -LiteralPath '${resolved.replace(/'/g, "''")}'`], {
-            cwd: resolved, windowsHide: false, detached: true, stdio: 'ignore',
-        });
-        child.unref();
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('open-embedded-terminal', { path: resolved });
+        }
         return { success: true };
     });
 
@@ -682,8 +680,12 @@ function register(mainWindow) {
     // === Terminal ===
     const terminal = require('./terminal');
 
-    ipcMain.handle('terminal-create', async (_event, cwd) => {
-        const { id, process: ps } = terminal.createSession(cwd);
+    ipcMain.handle('terminal-get-shells', async () => {
+        return terminal.getAvailableShells();
+    });
+
+    ipcMain.handle('terminal-create', async (_event, cwd, shellType) => {
+        const { id, process: ps } = terminal.createSession(cwd, shellType || 'powershell');
 
         ps.stdout.on('data', (data) => {
             if (mainWindow && !mainWindow.isDestroyed()) {

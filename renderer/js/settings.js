@@ -112,7 +112,7 @@ export class SettingsView {
                             <span class="settings-desc">Disk Space Analyzer & System Optimizer</span>
                         </div>
                         <div class="settings-value">
-                            <span class="settings-version">v7.0</span>
+                            <span class="settings-version">v7.2</span>
                         </div>
                     </div>
                 </div>

@@ -18,6 +18,11 @@
 | 10 | 2026-02-10 | v7.1 | feature | **DOCX-Viewer (mammoth.js)** - Word-Dokumente als formatierte HTML-Vorschau. Überschriften, Tabellen, Bilder werden korrekt dargestellt. Nur Lesen, Button "In Word öffnen". |
 | 11 | 2026-02-10 | v7.1 | feature | **XLSX-Viewer (SheetJS)** - Excel-Dateien als HTML-Tabelle mit Sheet-Tabs. Sticky Header, max 1000 Zeilen mit Warnung. Button "In Excel öffnen". |
 | 12 | 2026-02-10 | v7.1 | feature | **readFileBinary IPC** - Neuer Endpunkt zum Lesen binärer Dateien (ArrayBuffer-Transfer) für PDF/DOCX/XLSX-Viewer. |
+| 13 | 2026-02-10 | v7.2 | feature | **Governance-Datei erstellt** - Qualitätsstandards in `docs/planung/governance.md`: WCAG 2.2 AA Kontrast, Sprache, Performance, Sicherheit, Versionierung, Architektur, UI/UX. Manuelle KI-Prüfung ohne automatisierte Skripte. |
+| 14 | 2026-02-10 | v7.2 | fix | **WCAG 2.2 Kontrast-Fixes** - 6 Kontrastverletzungen behoben: Sidebar-Labels (--text-muted → --text-secondary), aktive Buttons (--accent → --accent-text), Explorer-Header, Breadcrumbs. Neue Variablen: --bg-tertiary (12 fehlende Referenzen), --accent-text (#a78bfa dark / #5b4ccc light). |
+| 15 | 2026-02-10 | v7.2 | fix | **Terminal: Rechtsklick öffnet eingebettetes Terminal** - "Im Terminal öffnen" öffnet jetzt das eingebettete Terminal im Explorer-Tab statt ein externes PowerShell-Fenster. Wechselt automatisch zum Explorer-Tab. |
+| 16 | 2026-02-10 | v7.2 | feature | **Terminal: Multi-Shell Support** - Shell-Selector Dropdown (PowerShell/CMD/WSL). Dynamischer Prompt (PS>/>/\$). WSL-Erkennung, deaktivierte Option wenn nicht installiert. Shell-spezifische cd-Befehle inkl. Windows→WSL Pfadkonvertierung. |
+| 17 | 2026-02-10 | v7.2 | fix | **Versionsnummern korrigiert** - package.json (4.0.0 → 7.2.0), index.html (v7.0 → v7.2), settings.js (v7.0 → v7.2). Konsistente Version an allen Stellen gemäß Governance. |
 
 ---
 

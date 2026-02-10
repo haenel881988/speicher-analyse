@@ -1,8 +1,30 @@
 /**
- * Terminal Panel - Embedded PowerShell terminal below the explorer file list.
+ * Terminal Panel - Embedded multi-shell terminal below the explorer file list.
+ * Supports PowerShell, CMD, and WSL (if installed).
  * Opens with Ctrl+` and auto-navigates to the current explorer folder.
  * Uses main process spawn (no node-pty/xterm.js dependency).
  */
+
+const SHELL_PROMPTS = {
+    powershell: 'PS>',
+    cmd: '>',
+    wsl: '$',
+};
+
+const SHELL_CD_COMMANDS = {
+    powershell: (dir) => `Set-Location -LiteralPath '${dir.replace(/'/g, "''")}'`,
+    cmd: (dir) => `cd /d "${dir}"`,
+    wsl: (dir) => {
+        const wslPath = dir.replace(/^([A-Za-z]):/, (_, d) => `/mnt/${d.toLowerCase()}`).replace(/\\/g, '/');
+        return `cd "${wslPath}"`;
+    },
+};
+
+const SHELL_START_MSG = {
+    powershell: 'PowerShell',
+    cmd: 'CMD',
+    wsl: 'WSL (Bash)',
+};
 
 export class TerminalPanel {
     constructor(parentContainer) {
@@ -10,9 +32,14 @@ export class TerminalPanel {
         this.panel = null;
         this.output = null;
         this.input = null;
+        this.promptEl = null;
+        this.titleEl = null;
+        this.shellSelect = null;
         this.sessionId = null;
         this.visible = false;
         this.currentCwd = 'C:\\';
+        this.currentShell = 'powershell';
+        this.availableShells = [];
         this.history = [];
         this.historyIndex = -1;
     }
@@ -30,12 +57,11 @@ export class TerminalPanel {
         this.visible = true;
 
         if (!this.panel) {
-            this._createDOM();
+            await this._createDOM();
         }
 
         this.panel.style.display = '';
 
-        // Create new session if none exists
         if (!this.sessionId) {
             await this._createSession();
         }
@@ -60,32 +86,59 @@ export class TerminalPanel {
         this.visible = false;
     }
 
-    _createDOM() {
+    async _createDOM() {
+        // Load available shells
+        try {
+            this.availableShells = await window.api.terminalGetShells();
+        } catch {
+            this.availableShells = [{ id: 'powershell', label: 'PowerShell', available: true }];
+        }
+
         this.panel = document.createElement('div');
         this.panel.className = 'terminal-panel';
+
+        // Build shell selector options
+        const shellOptions = this.availableShells.map(s =>
+            `<option value="${s.id}" ${!s.available ? 'disabled' : ''} ${s.id === this.currentShell ? 'selected' : ''}>${s.label}</option>`
+        ).join('');
+
         this.panel.innerHTML = `
             <div class="terminal-header">
-                <span class="terminal-title">Terminal (PowerShell)</span>
+                <span class="terminal-title">Terminal</span>
+                <select class="terminal-shell-select" title="Shell auswählen">${shellOptions}</select>
                 <div class="terminal-controls">
-                    <button class="terminal-btn terminal-btn-clear" title="Ausgabe l\u00F6schen">L\u00F6schen</button>
+                    <button class="terminal-btn terminal-btn-clear" title="Ausgabe löschen">Löschen</button>
                     <button class="terminal-btn terminal-btn-restart" title="Neu starten">Neustart</button>
-                    <button class="terminal-btn terminal-btn-close" title="Schlie\u00DFen (Ctrl+\`)">\u00D7</button>
+                    <button class="terminal-btn terminal-btn-close" title="Schließen (Ctrl+\`)">\u00D7</button>
                 </div>
             </div>
             <div class="terminal-output"></div>
             <div class="terminal-input-row">
-                <span class="terminal-prompt">PS&gt;</span>
+                <span class="terminal-prompt">${SHELL_PROMPTS[this.currentShell]}</span>
                 <input type="text" class="terminal-input" placeholder="Befehl eingeben..." spellcheck="false" autocomplete="off">
             </div>
         `;
 
         this.output = this.panel.querySelector('.terminal-output');
         this.input = this.panel.querySelector('.terminal-input');
+        this.promptEl = this.panel.querySelector('.terminal-prompt');
+        this.titleEl = this.panel.querySelector('.terminal-title');
+        this.shellSelect = this.panel.querySelector('.terminal-shell-select');
 
         // Wire events
         this.panel.querySelector('.terminal-btn-close').onclick = () => this.hide();
         this.panel.querySelector('.terminal-btn-clear').onclick = () => { this.output.textContent = ''; };
         this.panel.querySelector('.terminal-btn-restart').onclick = () => this._restart();
+
+        // Shell selector change
+        this.shellSelect.onchange = async () => {
+            const newShell = this.shellSelect.value;
+            if (newShell !== this.currentShell) {
+                this.currentShell = newShell;
+                this.promptEl.textContent = SHELL_PROMPTS[newShell];
+                await this._restart();
+            }
+        };
 
         this.input.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
@@ -108,15 +161,15 @@ export class TerminalPanel {
         // Prevent terminal keyboard events from reaching explorer
         this.panel.addEventListener('keydown', (e) => e.stopPropagation());
 
-        // Insert at end of parent container
         this.parentContainer.appendChild(this.panel);
     }
 
     async _createSession() {
         try {
-            const result = await window.api.terminalCreate(this.currentCwd);
+            const result = await window.api.terminalCreate(this.currentCwd, this.currentShell);
             this.sessionId = result.id;
-            this._appendOutput(`PowerShell gestartet in: ${this.currentCwd}\n`, 'info');
+            const shellLabel = SHELL_START_MSG[this.currentShell] || this.currentShell;
+            this._appendOutput(`${shellLabel} gestartet in: ${this.currentCwd}\n`, 'info');
 
             window.api.onTerminalData(({ id, data }) => {
                 if (id === this.sessionId) {
@@ -138,12 +191,12 @@ export class TerminalPanel {
     async _sendCommand(cmd) {
         if (!cmd.trim()) return;
 
-        // Add to history
         this.history.push(cmd);
         if (this.history.length > 100) this.history.shift();
         this.historyIndex = this.history.length;
 
-        this._appendOutput(`PS> ${cmd}\n`, 'cmd');
+        const prompt = SHELL_PROMPTS[this.currentShell] || '>';
+        this._appendOutput(`${prompt} ${cmd}\n`, 'cmd');
 
         if (!this.sessionId) {
             await this._createSession();
@@ -159,7 +212,7 @@ export class TerminalPanel {
         const span = document.createElement('span');
         span.textContent = text;
         if (type === 'error') span.style.color = 'var(--danger)';
-        else if (type === 'info') span.style.color = 'var(--accent)';
+        else if (type === 'info') span.style.color = 'var(--accent-text)';
         else if (type === 'cmd') span.style.color = 'var(--success)';
         this.output.appendChild(span);
         this.output.scrollTop = this.output.scrollHeight;
@@ -190,7 +243,10 @@ export class TerminalPanel {
     async changeCwd(cwd) {
         this.currentCwd = cwd;
         if (this.sessionId && this.visible) {
-            await window.api.terminalWrite(this.sessionId, `Set-Location -LiteralPath '${cwd.replace(/'/g, "''")}'\n`);
+            const cdFn = SHELL_CD_COMMANDS[this.currentShell];
+            if (cdFn) {
+                await window.api.terminalWrite(this.sessionId, cdFn(cwd) + '\n');
+            }
         }
     }
 }

@@ -129,6 +129,12 @@ document.addEventListener('show-toast', (e) => {
     showToast(e.detail.message, e.detail.type);
 });
 
+// Wire embedded terminal events from main process
+window.api.onOpenEmbeddedTerminal(({ path }) => {
+    switchToTab('explorer');
+    dualPanel.openTerminal(path);
+});
+
 // Wire context menu callbacks
 treeView.onContextMenu = handleContextMenu;
 treemapView.onContextMenu = handleContextMenu;
@@ -693,7 +699,10 @@ function setupContextMenuActions() {
                 if (path) window.api.copyToClipboard(path);
                 break;
             case 'open-in-terminal':
-                if (path) window.api.openInTerminal(path);
+                if (path) {
+                    switchToTab('explorer');
+                    dualPanel.openTerminal(path);
+                }
                 break;
             case 'open-with':
                 if (path) window.api.openWithDialog(path);

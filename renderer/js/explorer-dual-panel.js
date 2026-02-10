@@ -92,6 +92,10 @@ export class ExplorerDualPanel {
         return tabBar ? tabBar.getActiveExplorer() : null;
     }
 
+    openTerminal(cwd) {
+        this.terminal.show(cwd || this.getActiveExplorer()?.currentPath || 'C:\\');
+    }
+
     // ===== Internal =====
 
     _build() {

@@ -190,7 +190,8 @@ contextBridge.exposeInMainWorld('api', {
     getGlobalHotkey: () => ipcRenderer.invoke('get-global-hotkey'),
 
     // === Terminal ===
-    terminalCreate: (cwd) => ipcRenderer.invoke('terminal-create', cwd),
+    terminalGetShells: () => ipcRenderer.invoke('terminal-get-shells'),
+    terminalCreate: (cwd, shellType) => ipcRenderer.invoke('terminal-create', cwd, shellType),
     terminalWrite: (id, data) => ipcRenderer.invoke('terminal-write', id, data),
     terminalDestroy: (id) => ipcRenderer.invoke('terminal-destroy', id),
     onTerminalData: (callback) => {
@@ -200,6 +201,10 @@ contextBridge.exposeInMainWorld('api', {
     onTerminalExit: (callback) => {
         ipcRenderer.removeAllListeners('terminal-exit');
         ipcRenderer.on('terminal-exit', (_e, data) => callback(data));
+    },
+    onOpenEmbeddedTerminal: (callback) => {
+        ipcRenderer.removeAllListeners('open-embedded-terminal');
+        ipcRenderer.on('open-embedded-terminal', (_e, data) => callback(data));
     },
 
     // === Privacy Dashboard ===
