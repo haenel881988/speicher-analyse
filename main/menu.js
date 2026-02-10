@@ -41,11 +41,6 @@ function buildAppMenu(mainWindow) {
                     accelerator: 'CmdOrCtrl+T',
                     click: () => mainWindow.webContents.send('context-menu-action', { action: 'toggle-theme' }),
                 },
-                {
-                    label: 'Aktualisieren',
-                    accelerator: 'F5',
-                    click: () => mainWindow.webContents.send('context-menu-action', { action: 'refresh' }),
-                },
                 { type: 'separator' },
                 { label: 'Entwicklertools', role: 'toggleDevTools' },
                 { label: 'Vollbild', role: 'togglefullscreen' },
@@ -54,6 +49,17 @@ function buildAppMenu(mainWindow) {
         {
             label: 'Hilfe',
             submenu: [
+                {
+                    label: 'Aktualisieren',
+                    accelerator: 'F5',
+                    role: 'reload',
+                },
+                {
+                    label: 'Vollständig neu laden',
+                    accelerator: 'CmdOrCtrl+Shift+R',
+                    role: 'forceReload',
+                },
+                { type: 'separator' },
                 {
                     label: 'Über Speicher Analyse',
                     click: () => mainWindow.webContents.send('context-menu-action', { action: 'about' }),

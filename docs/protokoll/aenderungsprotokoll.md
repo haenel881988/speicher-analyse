@@ -24,6 +24,7 @@
 | 16 | 2026-02-10 | v7.2 | feature | **Terminal: Multi-Shell Support** - Shell-Selector Dropdown (PowerShell/CMD/WSL). Dynamischer Prompt (PS>/>/\$). WSL-Erkennung, deaktivierte Option wenn nicht installiert. Shell-spezifische cd-Befehle inkl. Windows→WSL Pfadkonvertierung. |
 | 17 | 2026-02-10 | v7.2 | fix | **Versionsnummern korrigiert** - package.json (4.0.0 → 7.2.0), index.html (v7.0 → v7.2), settings.js (v7.0 → v7.2). Konsistente Version an allen Stellen gemäß Governance. |
 | 18 | 2026-02-10 | v7.2 | improve | **Visionen + Projektplan aktualisiert** - Visionen.md reorganisiert mit Status-Legende (Umgesetzt/Teilweise/Geplant/Offen/Ignoriert), 6 thematische Kategorien. Projektplan: v7.1 + v7.2 Sektionen hinzugefügt, v7.3 (WCAG-Vertiefung, Resizable Panels, xterm.js) geplant, v9.0 (KI-Integration BYOB) als Vision, Modul-Struktur auf v7.2 aktualisiert, 5 neue User-Feedbacks im Tracker. |
+| 19 | 2026-02-10 | v7.2 | fix | **Menü: Aktualisieren → Hilfe + echtes Page-Reload** - "Aktualisieren" von "Ansicht" nach "Hilfe" verschoben. F5 macht jetzt echtes Electron `role: 'reload'` (vorher nur Explorer-Dateiliste-Refresh). Ctrl+Shift+R = Force-Reload ohne Cache. Behebt das Problem, dass Code-Änderungen erst nach Prozess-Kill sichtbar waren. |
 
 ---
 
