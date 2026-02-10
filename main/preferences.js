@@ -29,6 +29,12 @@ const DEFAULTS = {
     startMinimized: false,
     showScanNotification: true,
 
+    // Explorer
+    showSizeColors: false,          // Farbliche Hervorhebung großer Dateien/Ordner im Explorer
+
+    // Layout
+    smartLayout: true,              // Intelligentes Panel-Layout basierend auf Fenstergröße
+
     // Terminal
     terminalShell: 'powershell',
     terminalFontSize: 13,

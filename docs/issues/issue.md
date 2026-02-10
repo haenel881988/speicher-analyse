@@ -43,11 +43,17 @@ Wurde NICHT behoben!!!
 
 ![alt text](image.png)
 
+**Fünfte Iteration: Fix implementiert**
+Root Cause: Der toHex-Polyfill (index.html) lief nur im Main-Page-Kontext. pdf.js ruft toHex() aber im WORKER auf (separater Execution Context). Fix: Polyfill wird jetzt direkt in den Worker-Blob-Code injiziert (preview.js:_loadPdfjs). Warte auf Simons Bestätigung.
+
 ## Fenster
 
 Die Fenster sollen individuell angepasst werden können mittels drag und drop.
 
 **Zweite Iteration: Keine Umsetzung**
+
+**Dritte Iteration: Fix implementiert**
+Preview-Panel hat jetzt Drag-Resize (v7.5). Zusätzlich: Intelligentes Layout implementiert — Panels passen sich automatisch an die Fenstergröße an. Konfigurierbar in Einstellungen → Allgemein → "Intelligentes Layout". Warte auf Simons Bestätigung.
 
 ## Feedback von der KI:
 

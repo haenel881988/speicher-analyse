@@ -82,6 +82,7 @@ export class ExplorerView {
         // Scan-based folder sizes
         this._folderSizes = null;
         this._parentFolderSize = 0;
+        this._showSizeColors = false;
     }
 
     async init() {
@@ -226,6 +227,12 @@ export class ExplorerView {
                 } catch { /* kein Scan-Daten verfügbar → weiter ohne */ }
             }
         }
+
+        // Size-color preference laden
+        try {
+            const prefs = await window.api.getPreferences();
+            this._showSizeColors = !!prefs.showSizeColors;
+        } catch { this._showSizeColors = false; }
 
         this.renderFileList();
         this.renderStatus(result);
@@ -725,8 +732,8 @@ export class ExplorerView {
                 sizeStr = formatBytes(entry.size);
             }
 
-            // Size color coding (folders + files when size > 0)
-            const sizeClass = entry.size > 0 ? getSizeClass(entry.size) : '';
+            // Size color coding (folders + files when size > 0) — nur wenn in Einstellungen aktiviert
+            const sizeClass = (this._showSizeColors && entry.size > 0) ? getSizeClass(entry.size) : '';
             // Temp file detection
             const isTemp = !entry.isDirectory && isTempFile(entry.name, entry.extension);
             // Empty folder detection

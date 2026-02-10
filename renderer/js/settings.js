@@ -180,6 +180,24 @@ export class SettingsView {
                             </div>
                         </div>
                     </div>
+                    <div class="settings-row">
+                        <div class="settings-label">
+                            <strong>Speichergrößen farblich hervorheben</strong>
+                            <span class="settings-desc">Markiert große Dateien und Ordner im Explorer farblich (rot >1GB, orange >100MB, gelb >10MB).</span>
+                        </div>
+                        <div class="settings-value">
+                            <div class="settings-toggle ${prefs.showSizeColors ? 'active' : ''}" data-key="showSizeColors"></div>
+                        </div>
+                    </div>
+                    <div class="settings-row">
+                        <div class="settings-label">
+                            <strong>Intelligentes Layout</strong>
+                            <span class="settings-desc">Passt Panels (Vorschau, Terminal) automatisch an die Fenstergröße an.</span>
+                        </div>
+                        <div class="settings-value">
+                            <div class="settings-toggle ${prefs.smartLayout ? 'active' : ''}" data-key="smartLayout"></div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Sektion 4: Globaler Hotkey -->
@@ -284,6 +302,7 @@ export class SettingsView {
     async _setPref(key, value) {
         this.prefs[key] = value;
         await window.api.setPreference(key, value);
+        document.dispatchEvent(new CustomEvent('settings-pref-change', { detail: { key, value } }));
     }
 
     _wireEvents() {

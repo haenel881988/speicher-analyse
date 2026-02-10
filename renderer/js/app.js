@@ -190,6 +190,7 @@ async function init() {
     setupKeyboardShortcuts();
     setupPreviewToggle();
     setupPreviewResize();
+    setupSmartLayout();
     setupTopFilesFilters();
     await registryView.init();
     await autostartView.init();
@@ -1151,6 +1152,59 @@ function setupPreviewResize() {
         document.body.style.userSelect = 'none';
         document.addEventListener('mousemove', onMouseMove);
         document.addEventListener('mouseup', onMouseUp);
+    });
+}
+
+// ===== Smart Layout (intelligente Fensteranordnung) =====
+function setupSmartLayout() {
+    const previewPanel = document.getElementById('preview-panel');
+    const terminalGlobal = document.getElementById('terminal-global');
+    let smartLayoutEnabled = true;
+
+    // Preference laden
+    window.api.getPreferences().then(prefs => {
+        smartLayoutEnabled = prefs.smartLayout !== false;
+        if (smartLayoutEnabled) applySmartLayout();
+    }).catch(() => {});
+
+    // Auf Einstellungs-Änderungen reagieren
+    document.addEventListener('settings-pref-change', (e) => {
+        if (e.detail?.key === 'smartLayout') {
+            smartLayoutEnabled = e.detail.value;
+            if (smartLayoutEnabled) applySmartLayout();
+        }
+    });
+
+    const applySmartLayout = () => {
+        if (!smartLayoutEnabled) return;
+        const w = window.innerWidth;
+
+        // Preview Panel Breite anpassen (nur wenn sichtbar)
+        if (previewPanel && previewPanel.style.display !== 'none') {
+            if (w < 1000) {
+                previewPanel.style.width = '280px';
+            } else if (w < 1400) {
+                previewPanel.style.width = '320px';
+            } else {
+                previewPanel.style.width = '400px';
+            }
+        }
+
+        // Terminal max-height anpassen
+        const termPanel = terminalGlobal?.querySelector('.terminal-panel');
+        if (termPanel) {
+            if (w < 1000) {
+                termPanel.style.maxHeight = '30vh';
+            } else if (w < 1400) {
+                termPanel.style.maxHeight = '35vh';
+            } else {
+                termPanel.style.maxHeight = '40vh';
+            }
+        }
+    };
+
+    window.addEventListener('resize', () => {
+        if (smartLayoutEnabled) applySmartLayout();
     });
 }
 

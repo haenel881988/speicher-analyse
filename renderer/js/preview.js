@@ -239,6 +239,15 @@ export class EditorPanel {
             // Remove trailing ESM export (invalid syntax in classic Worker context)
             // The worker already sets globalThis.pdfjsWorker for classic mode
             workerCode = workerCode.replace(/;\s*export\s*\{[^}]*\}\s*$/, ';');
+
+            // Polyfill: Uint8Array.toHex/fromHex (Chrome 132+, nicht in Electron 33/Chrome 130)
+            // MUSS im Worker-Kontext verfügbar sein, da pdf.js v5.4 diese Methoden intern nutzt
+            const polyfill = `
+if(!Uint8Array.prototype.toHex){Uint8Array.prototype.toHex=function(){const h=[];for(let i=0;i<this.length;i++)h.push(this[i].toString(16).padStart(2,'0'));return h.join('')};}
+if(!Uint8Array.fromHex){Uint8Array.fromHex=function(s){const b=new Uint8Array(s.length/2);for(let i=0;i<s.length;i+=2)b[i/2]=parseInt(s.substring(i,i+2),16);return b};}
+`;
+            workerCode = polyfill + workerCode;
+
             const blob = new Blob([workerCode], { type: 'text/javascript' });
             this._pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(blob);
 

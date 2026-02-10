@@ -24,6 +24,9 @@ Archiv: [`archiv/aenderungsprotokoll_v7.0-v7.2.md`](archiv/aenderungsprotokoll_v
 | 14 | 2026-02-10 | v7.5 | fix | **X-Button beendet App** - `minimizeToTray` Default von `true` auf `false` geändert. Hardcoded Fallback in main.js ebenfalls auf `false`. Tray-Minimize-Handler prüft jetzt Preference. X = Beenden, Minimize = Minimieren (wie erwartet). |
 | 15 | 2026-02-10 | v7.5 | fix | **Session-Restore: kein CPU-Spike + korrekter Tab** - `runPostScanAnalysis()` wird bei Session-Restore übersprungen (vermeidet 5 parallele Hintergrund-Scans + `switchToTab('dashboard')`). Explorer navigiert zum gespeicherten `activePath`. |
 | 16 | 2026-02-10 | v7.5 | fix | **PDF toHex Polyfill** - pdf.js v5.4 nutzt `Uint8Array.prototype.toHex()` das in Chrome 130 (Electron 33) nicht existiert. Polyfill in index.html eingefügt. Zusätzlich Worker Blob-URL-Fix für file:// Protokoll. |
+| 17 | 2026-02-10 | v7.5 | fix | **PDF Worker-Kontext Polyfill** - toHex/fromHex Polyfill wurde nur im Main-Page-Kontext geladen, aber pdf.js ruft toHex() im Worker auf. Fix: Polyfill wird jetzt direkt in den Worker-Blob injiziert (vor dem pdf.js Worker-Code), damit es im Worker Execution Context verfügbar ist. |
+| 18 | 2026-02-10 | v7.5 | feature | **Speicherfarben konfigurierbar** - Farbliche Hervorhebung großer Dateien/Ordner (rot >1GB, orange >100MB, gelb >10MB) ist jetzt standardmäßig deaktiviert. Neue Preference `showSizeColors` mit Toggle in Einstellungen → Allgemein. |
+| 19 | 2026-02-10 | v7.5 | feature | **Intelligentes Layout** - Panels (Vorschau, Terminal) passen sich automatisch an die Fenstergröße an. <1000px: schmaler, >1400px: breiter. Neue Preference `smartLayout` mit Toggle in Einstellungen. ResizeObserver-basiert, deaktivierbar. |
 
 ---
 
