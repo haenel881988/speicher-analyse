@@ -83,3 +83,9 @@ Wo ich auswählen kann, z.B.: mit Google Drive, dem eigenen NAS (Netzlaufwerk / 
 
 
 
+## übersichtliches
+
+Aktuell werden in der vertikalen Seitenleiste alle Register angezeigt.
+
+Diese sollen standardmässig eingeklappt werden, damit ich, der User, das gewünschte Register aufklappen kann, sonst wird das mit zunehmenden Funktionen völlig unübersichtlich.
+

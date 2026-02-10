@@ -253,26 +253,14 @@ class DiskScanner {
             try { regex = new RegExp(query.slice(1, -1), 'i'); } catch { regex = null; }
         }
 
-        // Build prefix variants for fuzzy matching (longest first)
-        const minLen = Math.max(3, Math.ceil(queryLower.length * 0.4));
-        const prefixes = [];
-        if (!isRegex) {
-            for (let len = queryLower.length; len >= minLen; len--) {
-                prefixes.push({ prefix: queryLower.substring(0, len), quality: len / queryLower.length });
-            }
-        }
+        const WORD_BOUNDARY = new Set(['_', '-', '.', ' ']);
 
         for (const [nameLower, dirPaths] of this.nameIndex) {
             let matchQuality = 0;
             if (regex) {
                 matchQuality = regex.test(nameLower) ? 1.0 : 0;
             } else {
-                for (const p of prefixes) {
-                    if (nameLower.includes(p.prefix)) {
-                        matchQuality = p.quality;
-                        break;
-                    }
-                }
+                matchQuality = this._scoreMatch(nameLower, queryLower, WORD_BOUNDARY);
             }
             if (matchQuality === 0) continue;
 
@@ -282,14 +270,56 @@ class DiskScanner {
                     dirPath,
                     fullPath: path.join(dirPath, nameLower),
                     matchQuality,
+                    isDir: false,
                 });
                 if (results.length >= maxResults) break;
             }
             if (results.length >= maxResults) break;
         }
-        // Sort: exact matches first
-        results.sort((a, b) => b.matchQuality - a.matchQuality);
+        // Sort: quality descending, then alphabetical
+        results.sort((a, b) => b.matchQuality - a.matchQuality || a.name.localeCompare(b.name, 'de'));
         return results;
+    }
+
+    /**
+     * Relevance-based scoring for search matches.
+     * Returns 0 for no match, up to 1.0 for exact match.
+     */
+    _scoreMatch(nameLower, queryLower, wordBoundary) {
+        // Exact name match (ignoring extension)
+        const dotIdx = nameLower.lastIndexOf('.');
+        const base = dotIdx > 0 ? nameLower.substring(0, dotIdx) : nameLower;
+        if (base === queryLower) return 1.0;
+
+        // Full query: name starts with it
+        if (nameLower.startsWith(queryLower)) return 0.95;
+
+        // Full query: contained in name
+        const fullIdx = nameLower.indexOf(queryLower);
+        if (fullIdx > 0) {
+            return wordBoundary.has(nameLower[fullIdx - 1]) ? 0.9 : 0.8;
+        }
+
+        // Progressive prefix matching (min 60% of query, at least 3 chars)
+        const minLen = Math.max(3, Math.ceil(queryLower.length * 0.6));
+        for (let len = queryLower.length - 1; len >= minLen; len--) {
+            const prefix = queryLower.substring(0, len);
+            const idx = nameLower.indexOf(prefix);
+            if (idx < 0) continue;
+
+            const ratio = len / queryLower.length;
+
+            // Starts with prefix
+            if (idx === 0) return 0.7 * ratio;
+
+            // At word boundary
+            if (wordBoundary.has(nameLower[idx - 1])) return 0.5 * ratio;
+
+            // Mid-word: only if prefix is very close to full query
+            if (ratio >= 0.8) return 0.25 * ratio;
+        }
+
+        return 0;
     }
 
     getNameIndexInfo() {

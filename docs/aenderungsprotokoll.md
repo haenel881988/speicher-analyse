@@ -9,6 +9,7 @@
 | 1 | 2026-02-10 | v7.0 | fix | **Eingefrorene UI behoben** - Single-Instance-Lock (`app.requestSingleInstanceLock()`) verhindert mehrere Electron-Instanzen. Ursache: Minimize-to-Tray + erneuter Start = zweite Instanz, GPU-Cache gesperrt ("Zugriff verweigert"), Renderer zeigt nur statisches Bild. Zusätzlich `--disable-gpu-shader-disk-cache` gesetzt. |
 | 2 | 2026-02-10 | v7.0 | fix | **Debug-Code entfernt** - DevTools, Click-Test-Button, Console-Forwarding und Debug-Logging aus main.js, index.html, app.js entfernt. |
 | 3 | 2026-02-10 | v7.0 | improve | **Omnibar-Suche: Ergebnisse gruppiert** - Ordner werden vor Dateien angezeigt, mit visuellen Gruppenheadern. Innerhalb jeder Gruppe: Qualität absteigend, dann alphabetisch. |
+| 4 | 2026-02-10 | v7.0 | improve | **Omnibar-Suche: Relevanz-Algorithmus** - Neuer `scoreMatch()`-Algorithmus ersetzt naive Prefix-Suche. Positionsbasiertes Scoring (Name startet mit > Wortgrenze > irgendwo). Min. Prefix-Länge von 40% auf 60% erhöht. Mid-Word-Matches nur bei ≥80% Übereinstimmung. Eliminiert irrelevante Treffer wie "api-kosten" bei Suche nach "steuern". |
 
 ---
 

@@ -19,8 +19,56 @@ const SKIP_DIRS = new Set([
     'windows', 'boot',
 ]);
 
-// Build matcher with progressive prefix fallback for typo tolerance
-// "steuren" → tries "steuren", "steure", "steur", "steu" → matches "Steuererklärung"
+// ===== Relevance-based scoring =====
+// Scoring priorities:
+//   1.0  = exact name match (ignoring extension)
+//   0.95 = name starts with full query
+//   0.9  = full query at word boundary (_-. )
+//   0.8  = full query contained anywhere
+//   0.7x = prefix starts name (x = prefix/query ratio)
+//   0.5x = prefix at word boundary
+//   0.25x = prefix mid-word (only if prefix >= 80% of query)
+//   0    = no match
+const WORD_BOUNDARY = new Set(['_', '-', '.', ' ']);
+
+function scoreMatch(nameLower, queryLower) {
+    // Exact name match (ignoring extension)
+    const dotIdx = nameLower.lastIndexOf('.');
+    const base = dotIdx > 0 ? nameLower.substring(0, dotIdx) : nameLower;
+    if (base === queryLower) return 1.0;
+
+    // Full query: name starts with it
+    if (nameLower.startsWith(queryLower)) return 0.95;
+
+    // Full query: contained in name
+    const fullIdx = nameLower.indexOf(queryLower);
+    if (fullIdx > 0) {
+        return WORD_BOUNDARY.has(nameLower[fullIdx - 1]) ? 0.9 : 0.8;
+    }
+
+    // Progressive prefix matching (min 60% of query, at least 3 chars)
+    const minLen = Math.max(3, Math.ceil(queryLower.length * 0.6));
+    for (let len = queryLower.length - 1; len >= minLen; len--) {
+        const prefix = queryLower.substring(0, len);
+        const idx = nameLower.indexOf(prefix);
+        if (idx < 0) continue;
+
+        const ratio = len / queryLower.length;
+
+        // Starts with prefix
+        if (idx === 0) return 0.7 * ratio;
+
+        // At word boundary
+        if (WORD_BOUNDARY.has(nameLower[idx - 1])) return 0.5 * ratio;
+
+        // Mid-word: only if prefix is very close to full query
+        if (ratio >= 0.8) return 0.25 * ratio;
+    }
+
+    return 0;
+}
+
+// Build matcher
 let matcher;
 if (useRegex) {
     try {
@@ -32,23 +80,7 @@ if (useRegex) {
     }
 } else {
     const queryLower = query.toLowerCase();
-    const minLen = Math.max(3, Math.ceil(queryLower.length * 0.4));
-    // Pre-compute all prefix variants (longest first)
-    const prefixes = [];
-    for (let len = queryLower.length; len >= minLen; len--) {
-        prefixes.push(queryLower.substring(0, len));
-    }
-
-    matcher = (name) => {
-        const nameLower = name.toLowerCase();
-        for (let i = 0; i < prefixes.length; i++) {
-            if (nameLower.includes(prefixes[i])) {
-                // Quality: 1.0 for full match, decreasing for shorter prefixes
-                return prefixes[i].length / queryLower.length;
-            }
-        }
-        return 0;
-    };
+    matcher = (name) => scoreMatch(name.toLowerCase(), queryLower);
 }
 
 function searchRecursive(dirPath, depth) {
