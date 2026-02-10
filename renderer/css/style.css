@@ -3089,7 +3089,7 @@ body {
     border-color: var(--accent);
 }
 .omni-dropdown-results {
-    max-height: 240px;
+    max-height: 360px;
     overflow-y: auto;
 }
 .omni-results-count {
@@ -3128,14 +3128,24 @@ body {
     overflow: hidden;
     text-overflow: ellipsis;
 }
-.omni-results-separator {
+.omni-results-group-header {
     padding: 4px 8px;
     font-size: 10px;
-    font-weight: 600;
-    color: var(--warning);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--accent);
     background: var(--bg-primary);
     border-top: 1px solid var(--border);
     border-bottom: 1px solid var(--border);
+}
+.omni-results-separator {
+    padding: 3px 8px;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: var(--bg-primary);
+    border-bottom: 1px solid rgba(128,128,128,0.1);
 }
 .omni-result-fuzzy .omni-result-name {
     font-weight: 400;

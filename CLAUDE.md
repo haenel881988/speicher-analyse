@@ -126,24 +126,24 @@ Ergebnisse erscheinen im Dashboard als klickbare Karten.
 - **Security:** Registry-Operationen: BLOCKED_PATHS in `registry.js` beachten
 - **Windows-only:** Autostart, Services, Registry sind Windows-spezifisch (Platform-Check eingebaut)
 - **static/ Ordner:** Alter v1.0 FastAPI-Code, wird nicht mehr verwendet
-- **GPU Cache Fehler:** Chromium-Warnungen beim Start sind harmlos
+- **Single-Instance:** `app.requestSingleInstanceLock()` ist aktiv - verhindert GPU-Cache-Konflikte bei Tray-Betrieb
+- **GPU Cache:** `--disable-gpu-shader-disk-cache` aktiv - keine GPU-Dateisperren möglich
 
-## Features (v4.0)
-1. **Ribbon-UI Navigation** (wie Word/CCleaner: Start, Analyse, Bereinigung, System, Einstellungen)
-2. Festplatten-Scan mit Verzeichnisbaum, Treemap, Dateitypen-Chart, Top 100
+## Änderungsprotokoll
+→ [`docs/aenderungsprotokoll.md`](docs/aenderungsprotokoll.md) (max. 30 Einträge, dann archivieren)
+
+## Features (v7.0)
+1. Festplatten-Scan mit Verzeichnisbaum, Treemap, Dateitypen-Chart, Top 100
+2. Explorer mit Dual-Panel, Tabs, Omnibar-Suche (3 Ebenen), Batch-Rename
 3. Multi-Select + Dateioperationen (Umbenennen/Löschen/Verschieben/Kopieren)
 4. Duplikat-Finder (pre-filtered, 128KB Buffer, ETA-Anzeige)
-5. Alte-Dateien-Finder
-6. Bereinigungskategorien (Temp, Caches, Logs, etc.)
-7. Scan-Vergleich (Speichern/Laden)
-8. Dateivorschau (Bilder, Text, PDF, Eigenschaften)
-9. Registry-Cleaner (automatisches Backup vor Bereinigung)
-10. Autostart-Manager (Registry Run Keys, Startup-Ordner, Aufgabenplanung)
-11. Windows-Dienste-Viewer (Start/Stop, Starttyp ändern)
-12. Dashboard (automatische Übersicht nach Scan)
-13. **Bloatware-Erkennung** (Ampel-System, Silent-Uninstall, 25+ bekannte PUPs)
-14. **System-Optimierung** (Hardware/Privacy/Performance-Empfehlungen)
-15. **Update-Manager** (Windows Updates, Software via winget, Treiber-Check)
+5. Bereinigungskategorien (Temp, Caches, Logs, etc.)
+6. Registry-Cleaner + Autostart-Manager + Dienste-Viewer
+7. Bloatware-Erkennung, System-Optimierung, Update-Manager
+8. Privacy-Dashboard, Netzwerk-Monitor, Software-Audit
+9. S.M.A.R.T. Festplatten-Gesundheit, System-Score
+10. System-Tray, Globaler Hotkey, Datei-Tags, Shell-Integration
+11. Eingebettetes PowerShell-Terminal
 
 ## Projektplanung
 Die vollständige v4.0 Roadmap mit allen geplanten Features befindet sich in:

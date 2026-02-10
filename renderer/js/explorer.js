@@ -419,33 +419,45 @@ export class ExplorerView {
         const resultsEl = this.els.omniDropdown?.querySelector('.omni-dropdown-results');
         if (!resultsEl) return;
 
-        // Sort: exact matches first (quality 1.0), then by quality descending
-        results.sort((a, b) => (b.matchQuality || 1) - (a.matchQuality || 1));
+        // Sort: quality descending, then alphabetical
+        const sortFn = (a, b) => {
+            const qa = a.matchQuality || 1, qb = b.matchQuality || 1;
+            if (qa !== qb) return qb - qa;
+            return a.name.localeCompare(b.name, 'de');
+        };
+
+        // Split into folders and files
+        const folders = results.filter(r => r.isDir).sort(sortFn);
+        const files = results.filter(r => !r.isDir).sort(sortFn);
 
         let html = `<div class="omni-results-count">${countText}</div>`;
-        let lastQualityGroup = null;
-        for (const r of results) {
-            const quality = r.matchQuality || 1;
-            const isExact = quality >= 1.0;
-            const isFuzzy = quality < 1.0;
 
-            // Show separator between exact and fuzzy results
-            if (isFuzzy && lastQualityGroup !== 'fuzzy') {
-                html += '<div class="omni-results-separator">\u00C4hnliche Treffer</div>';
-                lastQualityGroup = 'fuzzy';
-            } else if (isExact && lastQualityGroup === null) {
-                lastQualityGroup = 'exact';
+        // Render a group (folders or files) with header + fuzzy separator
+        const renderGroup = (items, header) => {
+            if (items.length === 0) return;
+            html += `<div class="omni-results-group-header">${header} (${items.length})</div>`;
+            let showedFuzzy = false;
+            for (const r of items) {
+                const quality = r.matchQuality || 1;
+                const isFuzzy = quality < 1.0;
+                if (isFuzzy && !showedFuzzy) {
+                    html += '<div class="omni-results-separator">\u00C4hnliche Treffer</div>';
+                    showedFuzzy = true;
+                }
+                const dirShort = this._shortenPath(r.dirPath);
+                const icon = r.isDir ? '\uD83D\uDCC1' : '\uD83D\uDCC4';
+                const fuzzyClass = isFuzzy ? ' omni-result-fuzzy' : '';
+                html += `<div class="omni-result-item${fuzzyClass}" data-path="${this.escAttr(r.fullPath || r.path)}" data-dir="${this.escAttr(r.dirPath)}">
+                    <span class="omni-result-icon">${icon}</span>
+                    <span class="omni-result-name">${this.esc(r.name)}</span>
+                    <span class="omni-result-dir" title="${this.escAttr(r.dirPath)}">${this.esc(dirShort)}</span>
+                </div>`;
             }
+        };
 
-            const dirShort = this._shortenPath(r.dirPath);
-            const icon = r.isDir ? '\uD83D\uDCC1' : '\uD83D\uDCC4';
-            const fuzzyClass = isFuzzy ? ' omni-result-fuzzy' : '';
-            html += `<div class="omni-result-item${fuzzyClass}" data-path="${this.escAttr(r.fullPath || r.path)}" data-dir="${this.escAttr(r.dirPath)}">
-                <span class="omni-result-icon">${icon}</span>
-                <span class="omni-result-name">${this.esc(r.name)}</span>
-                <span class="omni-result-dir" title="${this.escAttr(r.dirPath)}">${this.esc(dirShort)}</span>
-            </div>`;
-        }
+        renderGroup(folders, '\uD83D\uDCC1 Ordner');
+        renderGroup(files, '\uD83D\uDCC4 Dateien');
+
         resultsEl.innerHTML = html;
         this._wireOmniResults(resultsEl);
 
@@ -517,12 +529,7 @@ export class ExplorerView {
             this._deepSearchRunning = false;
             if (stopBtn) stopBtn.style.display = 'none';
 
-            // Re-render sorted: exact matches first, then fuzzy, alphabetical within groups
-            collected.sort((a, b) => {
-                const qa = a.matchQuality || 1, qb = b.matchQuality || 1;
-                if (qa !== qb) return qb - qa;
-                return a.name.localeCompare(b.name, 'de');
-            });
+            // Re-render grouped and sorted (folders first, then files)
             this._renderOmniResults(collected.slice(0, 200),
                 `${data.resultCount} Treffer in ${data.dirsScanned} Ordnern`);
         });
