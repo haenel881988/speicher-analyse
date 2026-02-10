@@ -742,7 +742,25 @@ export class ExplorerView {
                 if (row.dataset.isDir === 'true') {
                     this.navigateTo(row.dataset.path);
                 } else {
-                    window.api.openFile(row.dataset.path);
+                    // Previewbare Dateien in der App öffnen (PDF, DOCX, XLSX, Bilder, Code)
+                    const ext = (row.dataset.name || '').includes('.')
+                        ? '.' + (row.dataset.name || '').split('.').pop().toLowerCase()
+                        : '';
+                    const PREVIEW_EXTS = new Set([
+                        '.pdf', '.docx', '.xlsx', '.xls',
+                        '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.svg',
+                        '.txt', '.md', '.json', '.js', '.ts', '.py', '.html', '.css',
+                        '.xml', '.yaml', '.yml', '.csv', '.ini', '.cfg', '.log',
+                        '.bat', '.cmd', '.ps1', '.sh', '.sql', '.java', '.c', '.cpp',
+                        '.cs', '.rs', '.go', '.rb', '.php', '.lua',
+                    ]);
+                    if (PREVIEW_EXTS.has(ext)) {
+                        document.dispatchEvent(new CustomEvent('open-in-preview', {
+                            detail: { path: row.dataset.path }
+                        }));
+                    } else {
+                        window.api.openFile(row.dataset.path);
+                    }
                 }
             };
 

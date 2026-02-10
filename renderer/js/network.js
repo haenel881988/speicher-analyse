@@ -18,25 +18,49 @@ export class NetworkView {
     }
 
     async init() {
-        if (this._loaded) return;
-        this._loaded = true;
         this.container.innerHTML = '<div class="loading-state">Netzwerk wird analysiert...</div>';
         await this.refresh();
+        this._loaded = true;
     }
 
     async refresh() {
         try {
-            const [connections, bandwidth, summary] = await Promise.all([
-                window.api.getConnections(),
-                window.api.getBandwidth(),
-                window.api.getNetworkSummary(),
-            ]);
-            this.connections = connections || [];
-            this.bandwidth = bandwidth || [];
+            // Sequentiell laden um PowerShell-Parallelprobleme zu vermeiden
+            const summary = await window.api.getNetworkSummary();
             this.summary = summary;
+
+            const connections = await window.api.getConnections();
+            this.connections = connections || [];
+
+            const bandwidth = await window.api.getBandwidth();
+            this.bandwidth = bandwidth || [];
+
+            this._lastError = null;
             this.render();
         } catch (err) {
-            this.container.innerHTML = `<div class="error-state">Fehler: ${err.message}</div>`;
+            console.error('Netzwerk-Monitor Fehler:', err);
+            this._lastError = err.message;
+            this.container.innerHTML = `
+                <div class="network-page">
+                    <div class="network-header"><h2>Netzwerk-Monitor</h2></div>
+                    <div class="error-state" style="padding:24px">
+                        <p><strong>Fehler beim Laden der Netzwerkdaten:</strong></p>
+                        <p style="color:var(--text-secondary);margin:8px 0">${this._esc(err.message)}</p>
+                        <p style="color:var(--text-muted);font-size:12px;margin:8px 0">
+                            Mögliche Ursachen: PowerShell-Berechtigungen, Netzwerk-Cmdlets nicht verfügbar, oder Timeout.
+                            Versuche es erneut oder starte die App als Administrator.
+                        </p>
+                        <button class="network-btn" id="network-retry" style="margin-top:12px">Erneut versuchen</button>
+                    </div>
+                </div>`;
+            const retryBtn = this.container.querySelector('#network-retry');
+            if (retryBtn) {
+                retryBtn.onclick = async () => {
+                    retryBtn.disabled = true;
+                    retryBtn.textContent = 'Wird geladen...';
+                    await this.refresh();
+                };
+            }
         }
     }
 

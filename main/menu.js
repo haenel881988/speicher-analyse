@@ -37,6 +37,12 @@ function buildAppMenu(mainWindow) {
             label: 'Ansicht',
             submenu: [
                 {
+                    label: 'Daten aktualisieren',
+                    accelerator: 'F5',
+                    click: () => mainWindow.webContents.send('context-menu-action', { action: 'refresh-data' }),
+                },
+                { type: 'separator' },
+                {
                     label: 'Theme wechseln',
                     accelerator: 'CmdOrCtrl+T',
                     click: () => mainWindow.webContents.send('context-menu-action', { action: 'toggle-theme' }),
@@ -50,12 +56,7 @@ function buildAppMenu(mainWindow) {
             label: 'Hilfe',
             submenu: [
                 {
-                    label: 'Aktualisieren',
-                    accelerator: 'F5',
-                    role: 'reload',
-                },
-                {
-                    label: 'Vollständig neu laden',
+                    label: 'Seite neu laden',
                     accelerator: 'CmdOrCtrl+Shift+R',
                     role: 'forceReload',
                 },

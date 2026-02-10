@@ -135,6 +135,14 @@ window.api.onOpenEmbeddedTerminal(({ path }) => {
     dualPanel.openTerminal(path);
 });
 
+// Wire open-in-preview events from explorer (PDF, DOCX, etc.)
+document.addEventListener('open-in-preview', (e) => {
+    const filePath = e.detail.path;
+    if (filePath) {
+        editorPanel.show(filePath);
+    }
+});
+
 // Wire context menu callbacks
 treeView.onContextMenu = handleContextMenu;
 treemapView.onContextMenu = handleContextMenu;
@@ -527,9 +535,9 @@ async function autoLoadTab(tabName) {
             setStatus('Bereit');
             break;
         case 'network':
-            tabLoaded.network = true;
             setStatus('Netzwerk wird analysiert...', true);
             await networkView.init();
+            tabLoaded.network = true;
             setStatus('Bereit');
             break;
         case 'system-score':
@@ -539,6 +547,67 @@ async function autoLoadTab(tabName) {
             setStatus('Bereit');
             break;
     }
+}
+
+async function refreshCurrentView() {
+    const tab = state.activeTab;
+    setStatus('Wird aktualisiert...', true);
+    showToast('Daten werden aktualisiert...', 'info');
+
+    try {
+        // Lade-Flag zurücksetzen damit autoLoadTab neu laden kann
+        if (tabLoaded[tab] !== undefined) {
+            tabLoaded[tab] = false;
+        }
+
+        switch (tab) {
+            case 'explorer':
+                dualPanel.getActiveExplorer()?.refresh();
+                break;
+            case 'tree':
+            case 'treemap':
+                if (state.currentScanId) {
+                    treeView.invalidateCache(state.currentPath);
+                    treeView.loadRoot();
+                    treemapView.render(treemapView.rootPath);
+                }
+                break;
+            case 'types':
+                if (state.currentScanId) await fileTypeChart.init(state.currentScanId);
+                break;
+            case 'top100':
+                if (state.currentScanId) await loadTopFiles();
+                break;
+            case 'network':
+                networkView._loaded = false;
+                await networkView.init();
+                break;
+            case 'privacy':
+                privacyView._loaded = false;
+                await privacyView.init();
+                break;
+            case 'smart':
+                smartView._loaded = false;
+                await smartView.init();
+                break;
+            case 'software-audit':
+                softwareAuditView._loaded = false;
+                await softwareAuditView.init();
+                break;
+            case 'system-score':
+                await calculateAndShowSystemScore();
+                break;
+            default:
+                // Für alle anderen Tabs: autoLoadTab aufrufen
+                await autoLoadTab(tab);
+                break;
+        }
+        showToast('Daten aktualisiert', 'success');
+    } catch (err) {
+        console.error('Refresh error:', err);
+        showToast('Fehler beim Aktualisieren: ' + err.message, 'error');
+    }
+    setStatus('Bereit');
 }
 
 async function loadTopFiles() {
@@ -683,6 +752,9 @@ function setupContextMenuActions() {
                 break;
             case 'refresh':
                 refresh();
+                break;
+            case 'refresh-data':
+                refreshCurrentView();
                 break;
             case 'toggle-theme':
                 toggleTheme();

@@ -162,10 +162,14 @@ Historische Pläne: siehe [`archiv/projektplan_v3-v5.md`](archiv/projektplan_v3-
 | Feature | Beschreibung |
 |---------|-------------|
 | **Governance** | Qualitätsstandards in `docs/planung/governance.md`: WCAG 2.2 AA, Sprache, Performance, Sicherheit, Versionierung. |
-| **WCAG Kontrast-Fixes** | 6 Kontrastverletzungen behoben. Neue CSS-Variablen: `--bg-tertiary`, `--accent-text`. |
-| **Terminal Multi-Shell** | Shell-Selector (PowerShell/CMD/WSL). Dynamische Prompts, WSL-Pfadkonvertierung. |
+| **WCAG Kontrast-Fixes** | Komplett überarbeitet: --text-muted 2.3:1→4.7:1, --text-secondary 4.67:1→6.7:1 (Dark), --text-muted 3.2:1→5.3:1 (Light). Alle WCAG 2.2 AA 4.5:1 konform. |
+| **Terminal Multi-Shell** | Shell-Selector (PowerShell/CMD/WSL). Dynamische Prompts, WSL-Pfadkonvertierung. PTY-Erkennung für interaktive Befehle (claude, ssh). |
 | **Terminal-Kontextmenü** | "Im Terminal öffnen" → eingebettetes Terminal statt externes Fenster. |
 | **Versions-Fix** | Konsistente Version 7.2 in package.json, index.html, settings.js. |
+| **Netzwerk-Monitor Fix** | Timeout 10s→30s, sequentielle PS-Aufrufe, Retry-Button bei Fehler, Fehler-Feedback. |
+| **Datei-Vorschau im Explorer** | Doppelklick auf PDF/DOCX/XLSX/Bilder/Code öffnet integrierte Vorschau statt externes Programm. |
+| **Menü: Daten-Aktualisierung** | F5 = Daten der aktuellen Ansicht aktualisieren (kein Page-Reload). Ctrl+Shift+R = Page-Reload. |
+| **Kundenorientierung (CLAUDE.md)** | Regeln: Niemals User widersprechen, Tiefenrecherche, Beweislast bei Claude. |
 
 ---
 

@@ -2,7 +2,7 @@
 
 const { runPS, runSafe, isSafeShellArg } = require('./cmd-utils');
 
-const PS_TIMEOUT = 10000;
+const PS_TIMEOUT = 30000;
 const PS_OPTS = { timeout: PS_TIMEOUT, maxBuffer: 10 * 1024 * 1024 };
 
 // ---------------------------------------------------------------------------

@@ -26,6 +26,12 @@ const SHELL_START_MSG = {
     wsl: 'WSL (Bash)',
 };
 
+// Befehle die ein echtes PTY (Pseudo-Terminal) benötigen und in Pipes nicht funktionieren
+const PTY_REQUIRED_COMMANDS = new Set([
+    'claude', 'ssh', 'nano', 'vim', 'vi', 'less', 'more', 'top', 'htop',
+    'python', 'python3', 'node', 'irb', 'ghci', 'julia',
+]);
+
 export class TerminalPanel {
     constructor(parentContainer) {
         this.parentContainer = parentContainer;
@@ -197,6 +203,19 @@ export class TerminalPanel {
 
         const prompt = SHELL_PROMPTS[this.currentShell] || '>';
         this._appendOutput(`${prompt} ${cmd}\n`, 'cmd');
+
+        // Prüfe ob der Befehl ein echtes Terminal (PTY) benötigt
+        const baseCmd = cmd.trim().split(/\s+/)[0].toLowerCase().replace(/\.exe$/, '');
+        if (PTY_REQUIRED_COMMANDS.has(baseCmd)) {
+            this._appendOutput(
+                `\nHinweis: "${baseCmd}" benötigt ein echtes Terminal (PTY).\n` +
+                `Das eingebettete Terminal verwendet Pipes und unterstützt keine interaktiven Programme.\n` +
+                `→ Verwende ein externes Terminal (Windows Terminal, PowerShell) für "${baseCmd}".\n` +
+                `→ Vollständige Terminal-Emulation (xterm.js) ist für eine zukünftige Version geplant.\n\n`,
+                'info'
+            );
+            // Trotzdem versuchen auszuführen - manche Programme geben nicht-interaktive Ausgabe
+        }
 
         if (!this.sessionId) {
             await this._createSession();

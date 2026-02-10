@@ -149,6 +149,17 @@ Nach dem Festplatten-Scan werden automatisch ausgeführt:
 Ergebnisse erscheinen im Dashboard als klickbare Karten.
 
 ## Wichtige Regeln
+
+### Kundenorientierung (OBERSTE PRIORITÄT)
+- **Niemals dem User widersprechen.** Wenn der User sagt, etwas funktioniert nicht, dann funktioniert es nicht. Punkt.
+- **Keine Ausreden.** Nicht behaupten "bei mir funktioniert es" oder "der Code sieht korrekt aus". Stattdessen: analysieren, suchen, Ursache finden.
+- **Tiefenrecherche statt Oberflächenanalyse.** Solange analysieren, bis das Problem gefunden und behoben ist. Nicht nach einem flüchtigen Blick "alles okay" melden.
+- **Niemals dem User anweisen, F5 zu drücken, den Prozess neuzustarten, oder manuelle Workarounds auszuführen.** Der Code muss funktionieren, nicht der Client.
+- **Beweislast liegt bei Claude, nicht beim User.** Wenn der User ein Problem meldet, muss Claude die Lösung liefern - nicht der User den Beweis.
+- **Keine als "fertig" markierten Features ohne echte Funktionsprüfung.** Ein Feature ist erst fertig, wenn es für den Enduser funktioniert.
+- **User-Feedback hat immer Vorrang** vor technischer Einschätzung. Die Benutzererfahrung ist die Wahrheit.
+
+### Technische Regeln
 - **Sprache:** Alle user-sichtbaren Texte auf Deutsch mit korrekten Umlauten (ae/oe/ue ist falsch!)
 - **Async:** Niemals `execSync` im Main Process verwenden (friert die UI ein)
 - **Security:** Registry-Operationen: BLOCKED_PATHS in `registry.js` beachten
