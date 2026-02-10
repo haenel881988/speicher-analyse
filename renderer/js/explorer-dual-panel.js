@@ -1,5 +1,4 @@
 import { ExplorerTabBar } from './explorer-tabs.js';
-import { TerminalPanel } from './terminal-panel.js';
 
 /**
  * ExplorerDualPanel - Commander-style two-pane explorer with optional split view.
@@ -15,7 +14,6 @@ export class ExplorerDualPanel {
         this.rightPanel = null;
         this.activePanel = 'left';
         this.isDualMode = false;
-        this.terminal = null;
 
         this._build();
         this._wireKeyboard();
@@ -94,7 +92,8 @@ export class ExplorerDualPanel {
     }
 
     openTerminal(cwd) {
-        this.terminal.show(cwd || this.getActiveExplorer()?.currentPath || 'C:\\');
+        const path = cwd || this.getActiveExplorer()?.currentPath || 'C:\\';
+        document.dispatchEvent(new CustomEvent('toggle-global-terminal', { detail: { cwd: path } }));
     }
 
     // ===== Internal =====
@@ -123,9 +122,6 @@ export class ExplorerDualPanel {
         dualContainer.appendChild(this.splitHandle);
         dualContainer.appendChild(this.rightPanelEl);
         this.container.appendChild(dualContainer);
-
-        // Terminal panel (below dual container)
-        this.terminal = new TerminalPanel(this.container);
 
         // Create left ExplorerTabBar
         this.leftPanel = new ExplorerTabBar(this.leftPanelEl, {
@@ -218,10 +214,6 @@ export class ExplorerDualPanel {
             } else if (e.ctrlKey && e.key === 'd') {
                 e.preventDefault();
                 this.toggleDualPanel();
-            } else if (e.ctrlKey && e.key === '`') {
-                e.preventDefault();
-                const cwd = this.getActiveExplorer()?.currentPath || 'C:\\';
-                this.terminal.toggle(cwd);
             }
         });
     }

@@ -3681,7 +3681,25 @@ body {
     color: var(--accent-text);
 }
 
-/* ===== v6.3: Terminal Panel ===== */
+/* ===== v7.3: Global Terminal Panel (VS Code style) ===== */
+#terminal-global {
+    flex-shrink: 0;
+    position: relative;
+}
+.terminal-resize-handle {
+    position: absolute;
+    top: -3px;
+    left: 0;
+    right: 0;
+    height: 6px;
+    cursor: ns-resize;
+    z-index: 10;
+}
+.terminal-resize-handle:hover,
+.terminal-resize-handle.active {
+    background: var(--accent);
+    opacity: 0.5;
+}
 .terminal-panel {
     border-top: 2px solid var(--accent);
     background: var(--bg-primary);
@@ -3689,7 +3707,7 @@ body {
     flex-direction: column;
     height: 250px;
     min-height: 120px;
-    max-height: 400px;
+    max-height: 50vh;
 }
 .terminal-header {
     display: flex;

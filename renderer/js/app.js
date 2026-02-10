@@ -28,6 +28,7 @@ import { SmartView } from './smart.js';
 import { SoftwareAuditView } from './software-audit.js';
 import { NetworkView } from './network.js';
 import { SystemScoreView } from './system-score.js';
+import { TerminalPanel } from './terminal-panel.js';
 
 // ===== State =====
 const state = {
@@ -119,6 +120,9 @@ const softwareAuditView = new SoftwareAuditView(document.getElementById('view-so
 const networkView = new NetworkView(document.getElementById('view-network'));
 const systemScoreView = new SystemScoreView(document.getElementById('view-system-score'));
 
+// Global Terminal Panel (VS Code style, accessible from any tab via Ctrl+`)
+const globalTerminal = new TerminalPanel(document.getElementById('terminal-global'));
+
 // Refresh explorer after batch rename
 document.addEventListener('batch-rename-complete', () => {
     dualPanel.getActiveExplorer()?.refresh();
@@ -129,10 +133,15 @@ document.addEventListener('show-toast', (e) => {
     showToast(e.detail.message, e.detail.type);
 });
 
-// Wire embedded terminal events from main process
+// Wire embedded terminal events from main process (opens global terminal)
 window.api.onOpenEmbeddedTerminal(({ path }) => {
-    switchToTab('explorer');
-    dualPanel.openTerminal(path);
+    globalTerminal.show(path);
+});
+
+// Wire toggle-global-terminal event (from explorer-dual-panel delegation)
+document.addEventListener('toggle-global-terminal', (e) => {
+    const cwd = e.detail?.cwd || dualPanel.getActiveExplorer()?.currentPath || 'C:\\';
+    globalTerminal.toggle(cwd);
 });
 
 // Wire open-in-preview events from explorer (PDF, DOCX, etc.)
@@ -893,6 +902,15 @@ function setupContextMenuActions() {
 // ===== Keyboard Shortcuts =====
 function setupKeyboardShortcuts() {
     document.addEventListener('keydown', (e) => {
+        // Global Ctrl+` → Toggle Terminal (works from ANY tab, even in input fields)
+        if (e.ctrlKey && e.key === '`') {
+            e.preventDefault();
+            e.stopPropagation();
+            const cwd = dualPanel.getActiveExplorer()?.currentPath || 'C:\\';
+            globalTerminal.toggle(cwd);
+            return;
+        }
+
         if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
 
         // Global Ctrl+F → switch to Explorer + activate search

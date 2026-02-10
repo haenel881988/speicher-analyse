@@ -1,7 +1,7 @@
 /**
- * Terminal Panel - Embedded multi-shell terminal below the explorer file list.
+ * Terminal Panel - Global embedded multi-shell terminal (VS Code style).
  * Supports PowerShell, CMD, and WSL (if installed).
- * Opens with Ctrl+` and auto-navigates to the current explorer folder.
+ * Opens with Ctrl+` from ANY tab and auto-navigates to the current explorer folder.
  * Uses main process spawn (no node-pty/xterm.js dependency).
  */
 
@@ -67,6 +67,8 @@ export class TerminalPanel {
             await this._createDOM();
         }
 
+        // Parent-Container sichtbar machen (für globales #terminal-global)
+        this.parentContainer.style.display = '';
         this.panel.style.display = '';
 
         if (!this.sessionId) {
@@ -79,6 +81,8 @@ export class TerminalPanel {
     hide() {
         this.visible = false;
         if (this.panel) this.panel.style.display = 'none';
+        // Parent-Container ausblenden
+        this.parentContainer.style.display = 'none';
     }
 
     async destroy() {
@@ -91,6 +95,7 @@ export class TerminalPanel {
             this.panel = null;
         }
         this.visible = false;
+        this.parentContainer.style.display = 'none';
     }
 
     async _createDOM() {
@@ -100,6 +105,12 @@ export class TerminalPanel {
         } catch {
             this.availableShells = [{ id: 'powershell', label: 'PowerShell', available: true }];
         }
+
+        // Resize handle (drag to resize, like VS Code)
+        this.resizeHandle = document.createElement('div');
+        this.resizeHandle.className = 'terminal-resize-handle';
+        this.parentContainer.appendChild(this.resizeHandle);
+        this._wireResize();
 
         this.panel = document.createElement('div');
         this.panel.className = 'terminal-panel';
@@ -165,10 +176,40 @@ export class TerminalPanel {
             e.stopPropagation();
         });
 
-        // Prevent terminal keyboard events from reaching explorer
+        // Prevent terminal keyboard events from reaching other components
         this.panel.addEventListener('keydown', (e) => e.stopPropagation());
 
         this.parentContainer.appendChild(this.panel);
+    }
+
+    _wireResize() {
+        let startY = 0;
+        let startHeight = 0;
+
+        const onMouseMove = (e) => {
+            const delta = startY - e.clientY;
+            const newHeight = Math.max(120, Math.min(window.innerHeight * 0.5, startHeight + delta));
+            if (this.panel) this.panel.style.height = newHeight + 'px';
+        };
+
+        const onMouseUp = () => {
+            this.resizeHandle.classList.remove('active');
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+        };
+
+        this.resizeHandle.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            startY = e.clientY;
+            startHeight = this.panel ? this.panel.offsetHeight : 250;
+            this.resizeHandle.classList.add('active');
+            document.body.style.cursor = 'ns-resize';
+            document.body.style.userSelect = 'none';
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+        });
     }
 
     async _createSession() {
