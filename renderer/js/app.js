@@ -123,6 +123,16 @@ const systemScoreView = new SystemScoreView(document.getElementById('view-system
 // Global Terminal Panel (VS Code style, accessible from any tab via Ctrl+`)
 const globalTerminal = new TerminalPanel(document.getElementById('terminal-global'));
 
+// Terminal toggle button in status bar
+const terminalToggleBtn = document.getElementById('terminal-toggle-btn');
+if (terminalToggleBtn) {
+    terminalToggleBtn.onclick = () => {
+        const cwd = dualPanel.getActiveExplorer()?.currentPath || 'C:\\';
+        globalTerminal.toggle(cwd);
+        terminalToggleBtn.classList.toggle('active', globalTerminal.visible);
+    };
+}
+
 // Refresh explorer after batch rename
 document.addEventListener('batch-rename-complete', () => {
     dualPanel.getActiveExplorer()?.refresh();
@@ -142,6 +152,7 @@ window.api.onOpenEmbeddedTerminal(({ path }) => {
 document.addEventListener('toggle-global-terminal', (e) => {
     const cwd = e.detail?.cwd || dualPanel.getActiveExplorer()?.currentPath || 'C:\\';
     globalTerminal.toggle(cwd);
+    if (terminalToggleBtn) terminalToggleBtn.classList.toggle('active', globalTerminal.visible);
 });
 
 // Wire open-in-preview events from explorer (PDF, DOCX, etc.)
@@ -908,6 +919,7 @@ function setupKeyboardShortcuts() {
             e.stopPropagation();
             const cwd = dualPanel.getActiveExplorer()?.currentPath || 'C:\\';
             globalTerminal.toggle(cwd);
+            if (terminalToggleBtn) terminalToggleBtn.classList.toggle('active', globalTerminal.visible);
             return;
         }
 

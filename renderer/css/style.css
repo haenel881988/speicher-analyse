@@ -1142,6 +1142,37 @@ body {
     flex-shrink: 0;
     min-height: 24px;
 }
+.status-bar-right {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.status-bar-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 1px 8px;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 11px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+.status-bar-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+.status-bar-btn.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+}
+.status-bar-btn svg {
+    flex-shrink: 0;
+}
 
 .battery-badge {
     display: inline-flex;

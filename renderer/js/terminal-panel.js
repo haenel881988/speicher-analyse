@@ -83,6 +83,9 @@ export class TerminalPanel {
         if (this.panel) this.panel.style.display = 'none';
         // Parent-Container ausblenden
         this.parentContainer.style.display = 'none';
+        // Status-Bar-Button aktualisieren
+        const btn = document.getElementById('terminal-toggle-btn');
+        if (btn) btn.classList.remove('active');
     }
 
     async destroy() {
