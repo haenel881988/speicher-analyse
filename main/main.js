@@ -67,11 +67,11 @@ if (!gotLock) {
             if (isQuitting) return; // App will beenden → durchlassen
 
             // Preferences erst nach IPC-Register verfügbar - hier lazy laden
-            let minimizeToTray = true;
+            let minimizeToTray = false; // Default: X = App beenden
             try {
                 const { preferences } = require('./ipc-handlers');
                 minimizeToTray = preferences.get('minimizeToTray');
-            } catch { /* default: true */ }
+            } catch { /* default: false = App beenden */ }
 
             if (minimizeToTray) {
                 e.preventDefault();

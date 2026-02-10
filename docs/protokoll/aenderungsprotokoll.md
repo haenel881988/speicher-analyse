@@ -21,6 +21,9 @@ Archiv: [`archiv/aenderungsprotokoll_v7.0-v7.2.md`](archiv/aenderungsprotokoll_v
 | 11 | 2026-02-10 | v7.5 | fix | **Explorer-Refresh nach Session-Restore** - Race Condition: ExplorerView.init() navigierte VOR Session-Restore → Ordnergrößen waren nicht sichtbar. Fix: Explorer wird nach Session-Restore, Smart Reload (F5) und Scan-Abschluss automatisch refreshed. |
 | 12 | 2026-02-10 | v7.5 | fix | **PDF-Viewer: file:// Module Worker Bug** - Chromium blockiert Module Workers (.mjs) von file:// URLs. Fix: Worker-Script wird per fetch() geladen, ESM-Export entfernt, und als Classic Worker via Blob-URL gestartet. Zusätzlich: readFileBinary Buffer-Pooling-Fix (ArrayBuffer.slice für saubere Daten). |
 | 13 | 2026-02-10 | v7.5 | feature | **Preview-Panel Resize** - Preview-Panel kann per Drag & Drop in der Breite verändert werden. Resize-Handle am linken Rand (6px, cursor:col-resize). Min 250px, Max 70vw. Folgt dem Terminal-Panel-Resize-Pattern. |
+| 14 | 2026-02-10 | v7.5 | fix | **X-Button beendet App** - `minimizeToTray` Default von `true` auf `false` geändert. Hardcoded Fallback in main.js ebenfalls auf `false`. Tray-Minimize-Handler prüft jetzt Preference. X = Beenden, Minimize = Minimieren (wie erwartet). |
+| 15 | 2026-02-10 | v7.5 | fix | **Session-Restore: kein CPU-Spike + korrekter Tab** - `runPostScanAnalysis()` wird bei Session-Restore übersprungen (vermeidet 5 parallele Hintergrund-Scans + `switchToTab('dashboard')`). Explorer navigiert zum gespeicherten `activePath`. |
+| 16 | 2026-02-10 | v7.5 | fix | **PDF toHex Polyfill** - pdf.js v5.4 nutzt `Uint8Array.prototype.toHex()` das in Chrome 130 (Electron 33) nicht existiert. Polyfill in index.html eingefügt. Zusätzlich Worker Blob-URL-Fix für file:// Protokoll. |
 
 ---
 

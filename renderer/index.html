@@ -7,6 +7,27 @@
     <title>Speicher Analyse</title>
     <link rel="stylesheet" href="lib/xterm/xterm.css">
     <link rel="stylesheet" href="css/style.css">
+    <!-- Polyfill: Uint8Array.toHex/fromHex (nicht in Chrome 130 / Electron 33, benötigt von pdf.js v5.4) -->
+    <script>
+    if (!Uint8Array.prototype.toHex) {
+        Uint8Array.prototype.toHex = function() {
+            const hex = [];
+            for (let i = 0; i < this.length; i++) {
+                hex.push(this[i].toString(16).padStart(2, '0'));
+            }
+            return hex.join('');
+        };
+    }
+    if (!Uint8Array.fromHex) {
+        Uint8Array.fromHex = function(hexString) {
+            const bytes = new Uint8Array(hexString.length / 2);
+            for (let i = 0; i < hexString.length; i += 2) {
+                bytes[i / 2] = parseInt(hexString.substring(i, i + 2), 16);
+            }
+            return bytes;
+        };
+    }
+    </script>
     <script src="lib/chart.min.js"></script>
     <script src="lib/html2pdf.bundle.min.js"></script>
     <script src="lib/monaco/vs/loader.js"></script>

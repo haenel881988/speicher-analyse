@@ -255,7 +255,8 @@ async function init() {
                 }
 
                 setStatus('Daten werden geladen...', true);
-                await loadAllViews();
+                // skipPostAnalysis=true: Smart Reload soll keine neuen Scans starten
+                await loadAllViews(true);
                 if (saved.activeTab) switchToTab(saved.activeTab);
 
                 // Refresh Explorer so it picks up scan data (folder sizes)
@@ -298,19 +299,24 @@ async function init() {
                 els.scanProgress.classList.add('active');
 
                 setStatus('Session wiederhergestellt', true);
-                await loadAllViews();
+                // skipPostAnalysis=true: Keine 5 Hintergrund-Scans, kein switchToTab('dashboard')
+                await loadAllViews(true);
 
                 // Restore UI state (activeTab) if available from persistent session
                 if (restored.ui && restored.ui.activeTab) {
                     switchToTab(restored.ui.activeTab);
                 }
 
-                // Refresh Explorer so it picks up scan data (folder sizes)
-                // The Explorer was initialized BEFORE session restore, so it has no scan context
+                // Navigate Explorer to restored path AND refresh for folder sizes
                 try {
                     const activeExplorer = dualPanel.getActiveExplorer();
-                    if (activeExplorer && activeExplorer.currentPath) {
-                        activeExplorer.refresh();
+                    if (activeExplorer) {
+                        const restorePath = restored.ui?.activePath || progress.current_path;
+                        if (restorePath) {
+                            await activeExplorer.navigateTo(restorePath);
+                        } else if (activeExplorer.currentPath) {
+                            activeExplorer.refresh();
+                        }
                     }
                 } catch { /* explorer might not be ready yet */ }
 
@@ -521,7 +527,8 @@ function onScanError(error) {
 }
 
 // ===== Load Views =====
-async function loadAllViews() {
+// skipPostAnalysis: true bei Session-Restore (vermeidet CPU-Spike + Tab-Wechsel)
+async function loadAllViews(skipPostAnalysis = false) {
     els.treeContent.style.display = 'block';
     els.welcomeState.style.display = 'none';
     treeView.init(state.currentScanId, state.currentPath);
@@ -537,9 +544,14 @@ async function loadAllViews() {
     cleanupView.init(state.currentScanId);
     scanCompareView.init(state.currentScanId);
 
-    // Init dashboard and run post-scan analysis
+    // Init dashboard
     dashboardView.init(state.currentScanId, state.lastScanProgress || {});
-    runPostScanAnalysis();
+
+    // Post-scan analysis: nur bei frischem Scan, NICHT bei Session-Restore
+    // (vermeidet CPU-Spike beim Start + ungewollten Tab-Wechsel zu Dashboard)
+    if (!skipPostAnalysis) {
+        runPostScanAnalysis();
+    }
 }
 
 async function runPostScanAnalysis() {

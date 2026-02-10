@@ -46,13 +46,20 @@ function createTray(mainWindow) {
         }
     });
 
-    // Minimize to tray instead of taskbar
+    // Minimize to tray only if preference is enabled
     mainWindow.on('minimize', (e) => {
-        // Only minimize to tray if user has opted in (check stored setting)
-        // Default: minimize to tray is ON
-        e.preventDefault();
-        mainWindow.hide();
-        tray.setToolTip('Speicher Analyse (minimiert)');
+        let minimizeToTray = false;
+        try {
+            const { preferences } = require('./ipc-handlers');
+            minimizeToTray = preferences.get('minimizeToTray');
+        } catch { /* default: false = normal minimize */ }
+
+        if (minimizeToTray) {
+            e.preventDefault();
+            mainWindow.hide();
+            tray.setToolTip('Speicher Analyse (minimiert)');
+        }
+        // else: normal minimize to taskbar (default)
     });
 
     // Update tray tooltip when window is shown

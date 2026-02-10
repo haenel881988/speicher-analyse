@@ -4,23 +4,47 @@ Diese Datei dient dazu um die Issues festzuhalten damit die KI diese abarbeiten 
 
 Für sämtliche Issues sollen jeweils eine tiefenanalyse und tiefenrecherche gemacht werden, bevor die Planungen gemacht wird. Danach soll die Planung durchgeführt werden und dann das ganze implementiert, gefixt werden.
 
+# Schliess Funktion
+
+Wenn ich aufs rechte obere kreuz klicke wird die Anwendung nur minimiert!
+Das ist ein NOGO!!! Die Anwendung muss zwingend beendet werden.
+
+Minimieren ist zum minieren da, maximieren zum maximieren und schliessen zum schliessen!!!
+
+DIESE LOGIK MÜSSTE DOCH LOGISCH SEIN!!!! ODER WARUM ZUR HÖLLE IST SCHLIESSEN = MINIMIEREN??? WTF????
+
+
 
 ## Scandaten
 Die Scandaten werden nicht wiederhergestellt aus der vorherigen Session.
 Eine akribische und minutiöse tiefenanalyse und tiefenrecherche ist zwingend nötig, suchen bis gefunden. Und erst dann darf geplant werden.
 
+**dritte Iteration: Erneuter Versuch**
+Sobald ich die App öffne, beginnt die App zu scannen! Lüfter drehen hoch - die Daten werden NICHT wiederhergestellt!!!
+
 ## Speichergrösse Verzeichnisse
 Die Verzeichnisse werden nicht mit der jeweiligen Grösse angezeigt, obwohl Simon die KI gebeten hat, dies zu implementieren.
 Eine akribische und minutiöse tiefenanalyse und tiefenrecherche ist zwingend nötig, suchen bis gefunden. Und erst dann darf geplant werden.
+
+**Dritte Iterration: Erneuter Versuch:**
+Die Ordnergrössen werden noch immer NICHT angezeigt!!! 
 
 ## PDF
 Die PDFs können nicht mal gelesen werden. Die PDF soll direkt in der App geöffnet werden können.
 Die PDFs sollen bearbeitbar sein.
 Die PDFs sollen kommentierbar sein.
 
+**Zweite Iteration**
+PDFs noch immer nicht lesbar!
+PDF-Fehler: a.toHex is not a function
+
+Wurde NICHT behoben!!!
+
 ## Fenster
 
 Die Fenster sollen individuell angepasst werden können mittels drag und drop.
+
+**Zweite Iteration: Keine Umsetzung**
 
 ## Feedback von der KI:
 
