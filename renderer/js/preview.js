@@ -229,10 +229,22 @@ export class EditorPanel {
         if (this._pdfjsLib) return this._pdfjsLib;
         try {
             this._pdfjsLib = await import('../lib/pdfjs/pdf.min.mjs');
-            this._pdfjsLib.GlobalWorkerOptions.workerSrc = 'lib/pdfjs/pdf.worker.min.mjs';
+
+            // Electron file:// protocol does NOT support module Workers (.mjs).
+            // Chromium blocks: new Worker(fileUrl, { type: 'module' }) from file:// origin.
+            // Fix: Fetch the worker script, strip ESM export, create blob URL (classic Worker).
+            const workerUrl = new URL('../lib/pdfjs/pdf.worker.min.mjs', import.meta.url);
+            const resp = await fetch(workerUrl);
+            let workerCode = await resp.text();
+            // Remove trailing ESM export (invalid syntax in classic Worker context)
+            // The worker already sets globalThis.pdfjsWorker for classic mode
+            workerCode = workerCode.replace(/;\s*export\s*\{[^}]*\}\s*$/, ';');
+            const blob = new Blob([workerCode], { type: 'text/javascript' });
+            this._pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(blob);
+
             return this._pdfjsLib;
         } catch (err) {
-            console.warn('pdf.js laden fehlgeschlagen, Fallback auf iframe:', err);
+            console.warn('pdf.js laden fehlgeschlagen:', err);
             return null;
         }
     }
@@ -242,9 +254,12 @@ export class EditorPanel {
 
         const pdfjsLib = await this._loadPdfjs();
         if (!pdfjsLib) {
-            // Fallback: iframe
-            const fileUrl = 'file:///' + filePath.replace(/\\/g, '/').replace(/ /g, '%20');
-            this.container.innerHTML = `<iframe class="preview-pdf" src="${fileUrl}"></iframe>`;
+            // Fallback: extern öffnen + Hinweis
+            this.container.innerHTML = `
+                <div class="preview-error">
+                    <p>PDF-Vorschau nicht verfügbar (pdf.js konnte nicht geladen werden).</p>
+                    <button class="pdf-btn" onclick="window.api.openFile('${filePath.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}')">PDF extern öffnen</button>
+                </div>`;
             return;
         }
 

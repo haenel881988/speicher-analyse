@@ -381,7 +381,10 @@ function register(mainWindow) {
     ipcMain.handle('read-file-binary', async (_event, filePath) => {
         try {
             const buffer = await fs.promises.readFile(filePath);
-            return { data: buffer.buffer, error: null };
+            // Node.js Buffer uses memory pooling — buffer.buffer may contain OTHER buffers' data.
+            // Slice to get a clean ArrayBuffer of exactly the file's size.
+            const data = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+            return { data, error: null };
         } catch (err) {
             return { data: null, error: err.message };
         }

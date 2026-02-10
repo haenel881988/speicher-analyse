@@ -1380,11 +1380,28 @@ body {
 /* ===== Preview Panel ===== */
 #preview-panel {
     width: 350px;
-    min-width: 350px;
+    min-width: 250px;
+    max-width: 70vw;
     background: var(--bg-secondary);
     border-left: 1px solid var(--border);
     flex-direction: column;
     overflow: hidden;
+    position: relative;
+}
+
+.preview-resize-handle {
+    position: absolute;
+    top: 0;
+    left: -3px;
+    width: 6px;
+    height: 100%;
+    cursor: col-resize;
+    z-index: 10;
+}
+.preview-resize-handle:hover,
+.preview-resize-handle.active {
+    background: var(--accent);
+    opacity: 0.5;
 }
 
 .preview-header {
@@ -2133,7 +2150,7 @@ body {
     }
     #preview-panel {
         width: 280px;
-        min-width: 280px;
+        min-width: 250px;
     }
 }
 

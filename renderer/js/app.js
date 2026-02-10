@@ -189,6 +189,7 @@ async function init() {
     setupContextMenuActions();
     setupKeyboardShortcuts();
     setupPreviewToggle();
+    setupPreviewResize();
     setupTopFilesFilters();
     await registryView.init();
     await autostartView.init();
@@ -1103,6 +1104,42 @@ function setupExport() {
 // ===== Preview Toggle =====
 function setupPreviewToggle() {
     els.previewToggle.onclick = () => editorPanel.toggle();
+}
+
+// ===== Preview Panel Resize (Drag) =====
+function setupPreviewResize() {
+    const handle = document.getElementById('preview-resize-handle');
+    const panel = document.getElementById('preview-panel');
+    if (!handle || !panel) return;
+
+    let startX = 0;
+    let startWidth = 0;
+
+    const onMouseMove = (e) => {
+        // Ziehen nach links = Panel wird breiter (startX - e.clientX > 0)
+        const delta = startX - e.clientX;
+        const newWidth = Math.max(250, Math.min(window.innerWidth * 0.7, startWidth + delta));
+        panel.style.width = newWidth + 'px';
+    };
+
+    const onMouseUp = () => {
+        handle.classList.remove('active');
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+    };
+
+    handle.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        startX = e.clientX;
+        startWidth = panel.offsetWidth;
+        handle.classList.add('active');
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+    });
 }
 
 // ===== Properties Modal =====

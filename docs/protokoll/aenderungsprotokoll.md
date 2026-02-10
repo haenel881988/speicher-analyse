@@ -18,6 +18,9 @@ Archiv: [`archiv/aenderungsprotokoll_v7.0-v7.2.md`](archiv/aenderungsprotokoll_v
 | 8 | 2026-02-10 | v7.4 | improve | **Theme-Integration** - Theme-Wechsel aus Einstellungen-Seite, bidirektionale Synchronisation mit Toolbar-Button. localStorage → Preferences Migration (einmalig). Theme wird persistent gespeichert. |
 | 9 | 2026-02-10 | v7.5 | feature | **Explorer-Ordnergrößen aus Scan-Daten** - Nach einem Scan zeigt der Explorer Ordnergrößen (rekursiv) in der GRÖSSE-Spalte an. Proportionsbalken visualisieren den Anteil am Elternordner. Neuer Bulk-IPC-Handler `get-folder-sizes-bulk` mit O(1) Map-Lookup pro Pfad. Farbcodierung auch für Ordner (>10MB gelb, >100MB orange, >1GB rot). Status-Bar zeigt Gesamtgröße + "Scan"-Hinweis. Graceful Degradation: ohne Scan bleiben Ordner leer. |
 | 10 | 2026-02-10 | v7.5 | fix | **Session UI-State-Persistenz** - Main Process hatte keinen Zugriff auf Renderer-State (activeTab, activePath). Neuer IPC-Handler `update-ui-state` empfängt den State vom Renderer. `pushUiState()` wird bei Tab-Wechsel und nach Scan-Abschluss aufgerufen. Auto-Save nach Scan und Before-Quit nutzen jetzt `lastKnownUiState` statt leeres `{}`. |
+| 11 | 2026-02-10 | v7.5 | fix | **Explorer-Refresh nach Session-Restore** - Race Condition: ExplorerView.init() navigierte VOR Session-Restore → Ordnergrößen waren nicht sichtbar. Fix: Explorer wird nach Session-Restore, Smart Reload (F5) und Scan-Abschluss automatisch refreshed. |
+| 12 | 2026-02-10 | v7.5 | fix | **PDF-Viewer: file:// Module Worker Bug** - Chromium blockiert Module Workers (.mjs) von file:// URLs. Fix: Worker-Script wird per fetch() geladen, ESM-Export entfernt, und als Classic Worker via Blob-URL gestartet. Zusätzlich: readFileBinary Buffer-Pooling-Fix (ArrayBuffer.slice für saubere Daten). |
+| 13 | 2026-02-10 | v7.5 | feature | **Preview-Panel Resize** - Preview-Panel kann per Drag & Drop in der Breite verändert werden. Resize-Handle am linken Rand (6px, cursor:col-resize). Min 250px, Max 70vw. Folgt dem Terminal-Panel-Resize-Pattern. |
 
 ---
 
@@ -42,3 +45,23 @@ Siehe auch: [`archiv/aenderungsprotokoll_v7.0-v7.2.md`](archiv/aenderungsprotoko
 **Lösung:** Synchrone Variante: `zlib.gzipSync()` + `fs.writeFileSync()` direkt im before-quit Handler. Die async Variante wird nur für after-scan und manuelles Speichern verwendet.
 
 **Lehre:** Electron Lifecycle-Events (before-quit, will-quit) sind synchron. Für Cleanup-Code immer synchrone APIs verwenden.
+
+---
+
+### #6: Chromium file:// blockiert Module Workers (2026-02-10)
+
+**Problem:** pdf.js Worker-Datei ist `.mjs` → pdf.js erstellt `new Worker(url, { type: 'module' })`. Chromium blockiert Module Workers von `file://` URLs (null origin, CORS-Check fehlschlägt).
+
+**Lösung:** Worker-Script per `fetch()` laden, `export{}` Statement entfernen (ungültig in Classic Worker), als `Blob` + `URL.createObjectURL()` laden. CSP erlaubt `worker-src blob:`.
+
+**Lehre:** In Electron (file:// Protokoll) niemals Module Workers (.mjs) verwenden. Immer Classic Workers via Blob-URL oder .js-Dateien nutzen.
+
+---
+
+### #7: Node.js Buffer.buffer enthält Pool-Daten (2026-02-10)
+
+**Problem:** `fs.readFile()` gibt Buffer zurück. `buffer.buffer` ist der unterliegende ArrayBuffer, der bei kleinen Dateien den GESAMTEN Pool enthält (8KB+). `new Uint8Array(buffer.buffer)` enthält dann Müll-Daten.
+
+**Lösung:** `buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)` für sauberen ArrayBuffer.
+
+**Lehre:** NIEMALS `buffer.buffer` direkt über IPC senden. Immer `.slice()` für einen sauberen ArrayBuffer verwenden.
