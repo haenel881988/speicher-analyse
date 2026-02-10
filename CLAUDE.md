@@ -50,6 +50,20 @@ Wenn der User ein Problem meldet und die KI die Ursache nicht im Quellcode finde
 
 ---
 
+## DIREKTIVE: Tiefenanalyse vor jeder Aktion (UNVERHANDELBAR)
+
+**Für JEDES gemeldete Problem gilt:**
+
+1. **Akribische Tiefenanalyse ZUERST.** Bevor auch nur eine Zeile Code geändert wird, muss der vollständige Datenfluss (Main → IPC → Preload → Renderer) Schritt für Schritt nachvollzogen und jede mögliche Fehlerquelle identifiziert werden.
+
+2. **Kein Feature darf als "erledigt" markiert werden**, weder im Chat noch im Projektplan noch im Änderungsprotokoll, bis Simon dies explizit bestätigt hat — im Chat oder in der Issue-Datei (`docs/issues/issue.md`).
+
+3. **Einmal melden reicht.** Simon darf niemals dasselbe Problem zweimal melden müssen. Beim ersten Mal wird die Wurzelursache gefunden und behoben.
+
+4. **Issue-Tracking:** Offene Issues werden in `docs/issues/issue.md` verwaltet. Nur Simon darf Issues als erledigt markieren.
+
+---
+
 # Git Workflow
 
 **Immer ausführen, nach jeder Änderung.:**

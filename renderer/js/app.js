@@ -256,6 +256,15 @@ async function init() {
                 setStatus('Daten werden geladen...', true);
                 await loadAllViews();
                 if (saved.activeTab) switchToTab(saved.activeTab);
+
+                // Refresh Explorer so it picks up scan data (folder sizes)
+                try {
+                    const activeExplorer = dualPanel.getActiveExplorer();
+                    if (activeExplorer && activeExplorer.currentPath) {
+                        activeExplorer.refresh();
+                    }
+                } catch { /* explorer might not be ready yet */ }
+
                 setStatus('Bereit');
                 showToast('App aktualisiert', 'success');
 
@@ -294,6 +303,15 @@ async function init() {
                 if (restored.ui && restored.ui.activeTab) {
                     switchToTab(restored.ui.activeTab);
                 }
+
+                // Refresh Explorer so it picks up scan data (folder sizes)
+                // The Explorer was initialized BEFORE session restore, so it has no scan context
+                try {
+                    const activeExplorer = dualPanel.getActiveExplorer();
+                    if (activeExplorer && activeExplorer.currentPath) {
+                        activeExplorer.refresh();
+                    }
+                } catch { /* explorer might not be ready yet */ }
 
                 setStatus('Bereit');
                 showToast('Scan-Daten wurden wiederhergestellt');
@@ -477,6 +495,15 @@ async function onScanComplete(progress) {
     pushUiState(); // Ensure UI state is saved before auto-session-save
     setStatus('Daten werden geladen...', true);
     await loadAllViews();
+
+    // Refresh Explorer so it picks up scan data (folder sizes + proportions)
+    try {
+        const activeExplorer = dualPanel.getActiveExplorer();
+        if (activeExplorer && activeExplorer.currentPath) {
+            activeExplorer.refresh();
+        }
+    } catch { /* ignore */ }
+
     setStatus('Bereit');
 
     setTimeout(() => els.scanProgress.classList.remove('active'), 3000);
