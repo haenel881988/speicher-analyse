@@ -23,11 +23,10 @@ Eine akribische und minutiöse tiefenanalyse und tiefenrecherche ist zwingend n�
 Sobald ich die App öffne, beginnt die App zu scannen! Lüfter drehen hoch - die Daten werden NICHT wiederhergestellt!!!
 
 ## Speichergrösse Verzeichnisse
-Die Verzeichnisse werden nicht mit der jeweiligen Grösse angezeigt, obwohl Simon die KI gebeten hat, dies zu implementieren.
-Eine akribische und minutiöse tiefenanalyse und tiefenrecherche ist zwingend nötig, suchen bis gefunden. Und erst dann darf geplant werden.
+Die Speicherfarben sollen standardmässig deaktiviert sein, nur die Speichergrösse, die Zahlen sollen angezeigt werden. Dies soll in den Einstellungen aktivierbar werden.
 
 **Dritte Iterration: Erneuter Versuch:**
-Die Ordnergrössen werden noch immer NICHT angezeigt!!! 
+Die Ordnergrössen werden endlich angezeigt.
 
 ## PDF
 Die PDFs können nicht mal gelesen werden. Die PDF soll direkt in der App geöffnet werden können.
@@ -39,6 +38,10 @@ PDFs noch immer nicht lesbar!
 PDF-Fehler: a.toHex is not a function
 
 Wurde NICHT behoben!!!
+
+**Vierte Iteration: Nicht behoben**
+
+![alt text](image.png)
 
 ## Fenster
 
