@@ -89,3 +89,168 @@ Aktuell werden in der vertikalen Seitenleiste alle Register angezeigt.
 
 Diese sollen standardmässig eingeklappt werden, damit ich, der User, das gewünschte Register aufklappen kann, sonst wird das mit zunehmenden Funktionen völlig unübersichtlich.
 
+
+
+## Experimentelles
+
+1. Die "Bring Your Own Brain" (BYOB) Strategie
+Statt eine eigene KI "einzubauen" (was Serverkosten verursacht und Datenschutzfragen aufwirft), baust du nur die Schnittstellen.
+
+A. Die Cloud-Option (Für Bequeme):
+
+Feature: Der User meldet sich via cli / powershell einfach an, und z.B.: gemini oder claude cli fragt den rest.
+
+Vorteil: Du hast 0 Euro Serverkosten. Der User zahlt seine API- / Usage Nutzung selbst.
+
+Datenschutz: Der API-Key wird lokal im Electron safeStorage (verschlüsselt) gespeichert. Die App sendet den Prompt direkt vom PC an die API (kein Proxy über deinen Server).
+
+B. Die Local-Option (Für "Paranoide" & Profis):
+
+Integration: Du setzt auf Ollama (der aktuelle Standard für lokale LLMs).
+
+Workflow:
+
+Deine App prüft beim Start: "Läuft ein Server auf localhost:11434?"
+
+Falls ja: Zeige im Dropdown automatisch die installierten Modelle (z.B. Llama 3, Mistral).
+
+Falls nein: Biete einen Button "Lokale KI einrichten" -> Öffnet dein Terminal-Modul und zeigt den Befehl zur Installation (winget install ollama).
+
+Der Clou: Damit hast du eine 100% offline fähige KI, die Dokumente zusammenfassen, Mails schreiben oder Code erklären kann, ohne dass ein einziges Byte den PC verlässt.
+
+2. Das "Notion-Modul" mit KI-Power
+Du baust nicht nur ein Notiz-Tool, du baust ein "Active Knowledge Board".
+
+Der "KI-Assistent" Button: Neben jedem Textblock (wie in Notion) ist ein kleines Icon.
+
+Funktionen:
+
+"Fasse diesen PDF-Anhang zusammen" (Liest den Text aus deinem PDF-Modul, sendet ihn an Llama 3 lokal).
+
+"Erkläre diesen Registry-Key" (Nimmt den Key aus deiner Registry-Analyse).
+
+"Schreibe diese Notiz professioneller".
+
+3. Das "Offline-Lizenzierungs-System" (Der Trust-Anchor)
+Das ist technisch absolut machbar und für deine Zielgruppe ("Schweizer Datenschutz") entscheidend.
+
+Das Konzept: Asymmetrische Kryptographie (RSA/ECC)
+
+Der Server (Dein Shop):
+
+Hat den Private Key (Geheim!).
+
+Wenn User kauft: Generiert eine Lizenz-Datei (lizenz.key).
+
+Inhalt: {"email": "user@mail.com", "type": "LIFETIME", "features": ["AI", "PDF", "CLEAN"], "signature": "X9F3..."}.
+
+Diese Datei wird per Mail versendet.
+
+Der Client (Deine App):
+
+Hat den Public Key (im Code fest verbaut).
+
+Der User zieht die lizenz.key per Drag & Drop in die App.
+
+Die App prüft offline mathematisch: "Wurde diese Signatur mit Simons Private Key erstellt?"
+
+Ergebnis: Ja -> App wird freigeschaltet. Nein -> Fehler.
+
+Vorteil:
+
+Die App muss niemals "nach Hause telefonieren", um die Lizenz zu prüfen.
+
+Selbst wenn deine Server in 10 Jahren offline gehen, funktioniert die gekaufte Software weiter. Das ist wahres "Lifetime".
+
+4. Zusammenfassung der User Journey (Story)
+Stell dir vor, wie du das verkaufst:
+
+"Andere Tools zwingen dich in die Cloud. Wir geben dir das Schwert in die Hand.
+
+Lade es herunter.
+
+Kappe das Internet. (Ja, wirklich!)
+
+Installiere deine Lizenz. (Funktioniert offline).
+
+Nutze KI. (Verbinde deine lokale Llama-Instanz).
+
+Bearbeite sensible PDFs.
+
+Alles bleibt auf deinem Rechner. Dein PC. Deine Regeln. Schweizer Code."
+
+Technischer Rat zur Umsetzung (High-Speed)
+Da du Claude Code nutzt, hier die Prompts/Begriffe für die Umsetzung:
+
+Für die Lizenz: "Implementiere ein License-Verification Modul in Node.js mit crypto library. Nutze ed25519 für die Signatur-Prüfung. Lese Public Key aus einer Datei."
+
+Für die KI: "Erstelle einen Service AiProvider, der abstrakt ist. Implementiere OllamaProvider (Fetch auf localhost:11434/api/generate) und OpenAiProvider. Biete Streaming-Responses für das Chat-Fenster."
+
+
+
+
+## Marketing Vision:
+
+
+Hier ist meine Analyse, warum das funktioniert und wie du es noch besser machst (damit sich die 1999.- CHF auch wirklich wertvoll anfühlen):
+
+1. Warum 100 Stück besser sind als 1000 (Die Scarcity-Strategie)
+Exklusivität: Wenn es 1000 Stück gibt, ist es ein Massenprodukt. Wenn es nur 100 gibt, ist es ein Club.
+
+Deine Zeit: 1000 Briefe von Hand zu schreiben, zu unterschreiben und zur Post zu bringen, ist keine "Freude" mehr, das ist Fließbandarbeit. Du willst, dass jeder Brief "Liebe" ausstrahlt. Bei 100 Stück kannst du dir für jeden Käufer 10 Minuten Zeit nehmen.
+
+Psychologie: "Nur noch 12 verfügbar" treibt den Verkauf stärker an als "Nur noch 840 verfügbar".
+
+2. Der "Anker-Effekt" (Warum das den Verkauf der günstigen Versionen ankurbelt)
+Selbst wenn niemand die 1999.- Version kauft, ist sie extrem wertvoll für dich.
+
+Das Szenario: Ein User sieht drei Preise:
+
+Standard: 29.- / Jahr (Wirkt okay)
+
+Lifetime: 149.- (Wirkt teuer)
+
+Collector's Edition: 1999.- (Wirkt wahnsinnig)
+
+Der Effekt: Plötzlich wirken die 149.- für die Lifetime-Lizenz günstig. "Ich spare 1850 Franken im Vergleich zur VIP-Version!". Das nennt man Price Anchoring. Du verkaufst dadurch mehr von der mittleren Version.
+
+3. Das "Unboxing"-Erlebnis: Bitte nicht laminieren!
+Hier muss ich ehrlich sein: Für 2000 Franken darfst du kein einlaminiertes Papier verschicken. Das wirkt wie ein Schülerausweis. Wenn jemand so viel Geld hinlegt, erwartet er Luxus.
+
+Mein Gegenvorschlag für die "Founder's Edition":
+
+Das Material: Drucke den Lizenzschlüssel auf dickes Büttenpapier oder eine Metallkarte (lasergraviert, kostet dich ca. 20-30 CHF im Einkauf, wirkt aber wie 500 CHF).
+
+Die Verpackung: Ein schöner schwarzer Umschlag, versiegelt mit echtem Wachssiegel (rot, mit Schweizer Kreuz oder deinem Logo).
+
+Die Handschrift: Dein persönlicher Brief dazu ist perfekt. Schreib ihn mit Füller, nicht mit Kugelschreiber.
+
+Das Extra: Leg etwas Physisches bei. Ein kleines Victorinox Taschenmesser mit deinem Logo? Oder einen hochwertigen USB-Stick (Edelstahl), auf dem die Software bereits vorinstalliert ist ("Air-Gap Ready").
+
+4. Was der Käufer wirklich kauft (Der "Whale"-Status)
+Wer 2000 Franken für Software zahlt, kauft nicht die Software. Er kauft Status und Einfluss. Gib ihnen mehr als nur Updates:
+
+"The Council": Die 100 Collector-Besitzer kommen in eine exklusive Mailing-Liste oder Discord-Gruppe, wo du sie persönlich nach ihrer Meinung zu neuen Features fragst. "Soll ich erst PDF oder erst KI bauen?" -> Ihre Stimme zählt doppelt.
+
+Credits: Ihr Name steht (wenn sie wollen) im "Über uns"-Dialog der Software unter "Gründungspaten".
+
+Fazit & Empfehlung
+Ja, mach es!
+
+Name: "Founder's Edition" oder "Patron Edition".
+
+Limitierung: Streng limitiert auf 100 Exemplare. (Nummeriert: 1/100, 2/100...).
+
+Preis: 1999.- CHF ist mutig, aber als "Statement" genau richtig.
+
+Inhalt:
+
+Lifetime Updates (Alle Versionen, für immer).
+
+Metall-Lizenzkarte (Lasergraviert).
+
+Handsignierter Brief auf Premium-Papier.
+
+USB-Stick mit der "Offline-Installation".
+
+Nennung in den Credits.

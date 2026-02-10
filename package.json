@@ -12,6 +12,10 @@
   "license": "MIT",
   "devDependencies": {
     "electron": "^33.0.0",
-    "electron-builder": "^25.0.0"
+    "electron-builder": "^25.0.0",
+    "mammoth": "^1.11.0",
+    "monaco-editor": "^0.55.1",
+    "pdfjs-dist": "^5.4.624",
+    "xlsx": "^0.18.5"
   }
 }

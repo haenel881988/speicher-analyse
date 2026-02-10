@@ -1437,6 +1437,16 @@ body {
     text-align: center;
 }
 
+/* Monaco Editor inside preview panel */
+.preview-content:has(.monaco-editor-container) {
+    padding: 0;
+    overflow: hidden;
+}
+.monaco-editor-container {
+    width: 100%;
+    height: 100%;
+}
+
 .preview-empty {
     color: var(--text-muted);
     padding: 40px 20px;
@@ -1458,6 +1468,145 @@ body {
     font-weight: 600;
     margin-bottom: 16px;
     word-break: break-all;
+}
+
+/* ===== PDF Viewer ===== */
+.pdf-toolbar, .docx-toolbar, .xlsx-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+.pdf-btn {
+    background: var(--bg-hover);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    padding: 3px 8px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 12px;
+    transition: background var(--transition);
+}
+.pdf-btn:hover { background: var(--accent-light); }
+.pdf-page-info, .pdf-zoom-info {
+    font-size: 11px;
+    color: var(--text-secondary);
+    min-width: 40px;
+    text-align: center;
+}
+.pdf-canvas-wrap {
+    flex: 1;
+    overflow: auto;
+    display: flex;
+    justify-content: center;
+    padding: 8px;
+    background: var(--bg-primary);
+}
+.pdf-canvas-wrap canvas {
+    max-width: 100%;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+.preview-content:has(.pdf-toolbar),
+.preview-content:has(.docx-toolbar),
+.preview-content:has(.xlsx-toolbar) {
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+/* ===== DOCX Viewer ===== */
+.docx-info {
+    font-size: 11px;
+    color: var(--text-muted);
+    flex: 1;
+}
+.docx-content {
+    flex: 1;
+    overflow: auto;
+    padding: 16px;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-primary);
+}
+.docx-content h1 { font-size: 20px; margin: 16px 0 8px; }
+.docx-content h2 { font-size: 17px; margin: 14px 0 6px; }
+.docx-content h3 { font-size: 15px; margin: 12px 0 4px; }
+.docx-content p { margin: 0 0 8px; }
+.docx-content table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 8px 0;
+}
+.docx-content table td,
+.docx-content table th {
+    border: 1px solid var(--border);
+    padding: 4px 8px;
+    font-size: 12px;
+}
+.docx-content img { max-width: 100%; }
+
+/* ===== XLSX Viewer ===== */
+.xlsx-tabs {
+    display: flex;
+    gap: 2px;
+    flex: 1;
+    overflow-x: auto;
+}
+.xlsx-tab {
+    background: var(--bg-hover);
+    border: 1px solid var(--border);
+    border-bottom: none;
+    color: var(--text-secondary);
+    padding: 3px 10px;
+    font-size: 11px;
+    cursor: pointer;
+    border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+    transition: background var(--transition);
+    white-space: nowrap;
+}
+.xlsx-tab.active {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-weight: 600;
+}
+.xlsx-tab:hover { background: var(--accent-light); }
+.xlsx-table-wrap {
+    flex: 1;
+    overflow: auto;
+}
+.xlsx-table {
+    border-collapse: collapse;
+    width: max-content;
+    min-width: 100%;
+    font-size: 11px;
+}
+.xlsx-table th {
+    background: var(--bg-hover);
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+.xlsx-table td, .xlsx-table th {
+    border: 1px solid var(--border);
+    padding: 3px 8px;
+    white-space: nowrap;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.xlsx-table tr:hover td {
+    background: var(--bg-hover);
+}
+.xlsx-truncated {
+    padding: 8px 12px;
+    font-size: 11px;
+    color: var(--warning);
+    text-align: center;
 }
 
 /* ===== Tool Views (shared) ===== */

@@ -314,6 +314,35 @@ function register(mainWindow) {
         return readFilePreview(filePath, maxLines);
     });
 
+    // === Editor ===
+    ipcMain.handle('read-file-content', async (_event, filePath) => {
+        try {
+            const content = await fs.promises.readFile(filePath, 'utf8');
+            return { content, error: null };
+        } catch (err) {
+            return { content: null, error: err.message };
+        }
+    });
+
+    ipcMain.handle('write-file-content', async (_event, filePath, content) => {
+        try {
+            await fs.promises.writeFile(filePath, content, 'utf8');
+            return { success: true, error: null };
+        } catch (err) {
+            return { success: false, error: err.message };
+        }
+    });
+
+    // === Binary File Read (for DOCX/XLSX/PDF) ===
+    ipcMain.handle('read-file-binary', async (_event, filePath) => {
+        try {
+            const buffer = await fs.promises.readFile(filePath);
+            return { data: buffer.buffer, error: null };
+        } catch (err) {
+            return { data: null, error: err.message };
+        }
+    });
+
     // === Registry ===
     ipcMain.handle('scan-registry', async () => {
         return registry.scanAll();

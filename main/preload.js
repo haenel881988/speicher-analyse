@@ -91,6 +91,11 @@ contextBridge.exposeInMainWorld('api', {
     // === Preview ===
     readFilePreview: (filePath, maxLines) => ipcRenderer.invoke('read-file-preview', filePath, maxLines),
 
+    // === Editor ===
+    readFileContent: (filePath) => ipcRenderer.invoke('read-file-content', filePath),
+    writeFileContent: (filePath, content) => ipcRenderer.invoke('write-file-content', filePath, content),
+    readFileBinary: (filePath) => ipcRenderer.invoke('read-file-binary', filePath),
+
     // === Registry ===
     scanRegistry: () => ipcRenderer.invoke('scan-registry'),
     exportRegistryBackup: (entries) => ipcRenderer.invoke('export-registry-backup', entries),

@@ -12,7 +12,7 @@ import { OldFilesView } from './old-files.js';
 import { DuplicatesView } from './duplicates.js';
 import { CleanupView } from './cleanup.js';
 import { ScanCompareView } from './scan-compare.js';
-import { PreviewPanel } from './preview.js';
+import { EditorPanel } from './preview.js';
 import { RegistryView } from './registry.js';
 import { DashboardView } from './dashboard.js';
 import { AutostartView } from './autostart.js';
@@ -93,7 +93,7 @@ const els = {
 const treeView = new TreeView(els.treeContainer, els.treeBreadcrumb);
 const treemapView = new TreemapView(els.treemapContainer, els.treemapBreadcrumb, els.treemapTooltip);
 const fileTypeChart = new FileTypeChart(els.donutChart, els.typeTableBody);
-const previewPanel = new PreviewPanel(els.previewContent, els.previewTitle, els.previewClose);
+const editorPanel = new EditorPanel(els.previewContent, els.previewTitle, els.previewClose);
 
 // Tool views
 const oldFilesView = new OldFilesView(document.getElementById('view-old-files'));
@@ -122,6 +122,11 @@ const systemScoreView = new SystemScoreView(document.getElementById('view-system
 // Refresh explorer after batch rename
 document.addEventListener('batch-rename-complete', () => {
     dualPanel.getActiveExplorer()?.refresh();
+});
+
+// Wire toast events from EditorPanel
+document.addEventListener('show-toast', (e) => {
+    showToast(e.detail.message, e.detail.type);
 });
 
 // Wire context menu callbacks
@@ -593,8 +598,8 @@ function renderTopFiles(files) {
             window.api.openFile(row.dataset.path);
         };
         row.onclick = () => {
-            if (previewPanel.isVisible()) {
-                previewPanel.show(row.dataset.path);
+            if (editorPanel.isVisible()) {
+                editorPanel.show(row.dataset.path);
             }
         };
     });
@@ -799,7 +804,7 @@ function setupKeyboardShortcuts() {
             if (treeView.selectAll) treeView.selectAll();
         } else if (e.key === 'p' && e.ctrlKey) {
             e.preventDefault();
-            previewPanel.toggle();
+            editorPanel.toggle();
         } else if (e.key === 'F2' && selected) {
             e.preventDefault();
             treeView.startInlineRename(selected);
@@ -842,6 +847,7 @@ function toggleTheme() {
     localStorage.setItem('speicher-analyse-theme', next);
     updateThemeIcons();
     fileTypeChart.updateTheme();
+    editorPanel.setTheme(next);
 }
 
 function updateThemeIcons() {
@@ -864,7 +870,7 @@ function setupExport() {
 
 // ===== Preview Toggle =====
 function setupPreviewToggle() {
-    els.previewToggle.onclick = () => previewPanel.toggle();
+    els.previewToggle.onclick = () => editorPanel.toggle();
 }
 
 // ===== Properties Modal =====

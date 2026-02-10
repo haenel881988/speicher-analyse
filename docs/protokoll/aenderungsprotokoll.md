@@ -11,6 +11,13 @@
 | 3 | 2026-02-10 | v7.0 | improve | **Omnibar-Suche: Ergebnisse gruppiert** - Ordner werden vor Dateien angezeigt, mit visuellen Gruppenheadern. Innerhalb jeder Gruppe: Qualität absteigend, dann alphabetisch. |
 | 4 | 2026-02-10 | v7.0 | improve | **Omnibar-Suche: Relevanz-Algorithmus** - Neuer `scoreMatch()`-Algorithmus ersetzt naive Prefix-Suche. Positionsbasiertes Scoring (Name startet mit > Wortgrenze > irgendwo). Min. Prefix-Länge von 40% auf 60% erhöht. Mid-Word-Matches nur bei ≥80% Übereinstimmung. Eliminiert irrelevante Treffer wie "api-kosten" bei Suche nach "steuern". |
 | 5 | 2026-02-10 | v7.0 | refactor | **docs/ Verzeichnisstruktur reorganisiert** - Nummernpräfixe (00_, 01_) entfernt. Neue thematische Struktur: `planung/` (Projektplan + Visionen + archiv/), `protokoll/` (Änderungsprotokoll + archiv/). Jeder Bereich verwaltet sein eigenes Archiv (Option A: dezentral). Claude ist verantwortlich für die Verwaltung der docs/-Struktur. Regeln in CLAUDE.md hinterlegt. |
+| 6 | 2026-02-10 | v7.1 | fix | **Omnibar-Suche: Click-Outside schließt Dropdown** - Document-Level Click-Listener hinzugefügt. Klick außerhalb der Adressleiste/Dropdown schließt die Suche und stellt die Dateiliste wieder her. |
+| 7 | 2026-02-10 | v7.1 | feature | **Sidebar: Einklappbare Gruppen** - 6 Navigationsgruppen (Start, Analyse, Bereinigung, System, Sicherheit, Extras) standardmäßig eingeklappt. Klick auf Label klappt um (Chevron-Animation). Aktive Gruppe klappt automatisch auf. Zustand wird per localStorage gespeichert. |
+| 8 | 2026-02-10 | v7.1 | feature | **Monaco Editor integriert** - VS Code Editor-Kern für Text-/Code-Dateien. Syntax-Highlighting für 30+ Sprachen. Bearbeitung + Speichern (Ctrl+S) mit Dirty-Flag. Theme-Sync (Dark/Light). Fallback auf Plaintext wenn Monaco nicht lädt. |
+| 9 | 2026-02-10 | v7.1 | feature | **PDF-Viewer (pdf.js)** - Canvas-basiertes PDF-Rendering mit Seitennavigation (vor/zurück), Zoom (+/-), Seitenanzeige. Fallback auf iframe wenn pdf.js nicht lädt. Button "Extern öffnen". |
+| 10 | 2026-02-10 | v7.1 | feature | **DOCX-Viewer (mammoth.js)** - Word-Dokumente als formatierte HTML-Vorschau. Überschriften, Tabellen, Bilder werden korrekt dargestellt. Nur Lesen, Button "In Word öffnen". |
+| 11 | 2026-02-10 | v7.1 | feature | **XLSX-Viewer (SheetJS)** - Excel-Dateien als HTML-Tabelle mit Sheet-Tabs. Sticky Header, max 1000 Zeilen mit Warnung. Button "In Excel öffnen". |
+| 12 | 2026-02-10 | v7.1 | feature | **readFileBinary IPC** - Neuer Endpunkt zum Lesen binärer Dateien (ArrayBuffer-Transfer) für PDF/DOCX/XLSX-Viewer. |
 
 ---
 
