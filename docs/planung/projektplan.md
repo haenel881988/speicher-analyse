@@ -12,10 +12,14 @@
 | v6.0 | Fertig | Explorer Phase 1: Adressleiste, Navigation, Dateiliste, Sortierung, Quick-Access, Kontextmenüs |
 | v6.1 | Fertig | Sicherheits-Audit (55 Fixes), Graceful Degradation (Win10/11), Batterie-Awareness |
 | v6.2 | Fertig | Explorer Phase 2: Dual-Panel, Tabs, Omnibar-Suche (3 Ebenen), Batch-Rename |
-| v6.3 | Fertig | Explorer Phase 3: Terminal, System-Tray, Globaler Hotkey, Datei-Tags, Shell-Integration, Einstellungen |
+| v6.3 | Fertig | Explorer Phase 3: Terminal, System-Tray, Globaler Hotkey, Datei-Tags, Shell-Integration |
 | v7.0 | Fertig | Netzwerk-Monitor, Privacy-Dashboard, Software-Audit, S.M.A.R.T., System-Score |
-| v8.0 | Geplant | Automatisierung, Browser-Bereinigung, Einstellungs-Sync, Backup |
-| v1.0.0 | Vision | Erster stabiler Release (Semver), Installer, Auto-Update |
+| v7.1 | Fertig | Monaco Editor, PDF/DOCX/XLSX-Viewer, Sidebar-Gruppen, Omnibar-Fixes |
+| v7.2 | Fertig | Governance, WCAG-Kontrast-Fixes, Terminal Multi-Shell, Versions-Fix |
+| v7.3 | Geplant | WCAG-Vertiefung, Resizable Panels, Terminal-Emulation (xterm.js) |
+| v8.0 | Geplant | Automatisierung, Browser-Bereinigung, Backup, Undo-Log |
+| v9.0 | Vision | KI-Integration (BYOB: Cloud + Ollama), Notion-Modul |
+| v1.0.0 | Vision | Erster stabiler Release (Semver), Installer, Auto-Update, Lizenzierung |
 | v1.5.0 | Vision | Plugin-System (externe Module laden) |
 
 Historische Pläne: siehe [`archiv/projektplan_v3-v5.md`](archiv/projektplan_v3-v5.md)
@@ -67,138 +71,138 @@ Historische Pläne: siehe [`archiv/projektplan_v3-v5.md`](archiv/projektplan_v3-
 
 ---
 
-## v6.2 - Explorer Phase 2: Power-Features (Nächste)
+## v6.2 - Explorer Phase 2: Power-Features (Fertig)
 
-### Kern-Features
+### Umgesetzt
 
-| Feature | Beschreibung | Aufwand |
-|---------|-------------|---------|
-| **Dual-Panel** | Zwei-Fenster-Ansicht (Commander-Stil), F6 zum Wechseln | Mittel |
-| **Tab-Browsing** | Mehrere Ordner in Tabs, Ctrl+T neu, Ctrl+W schließen, Drag-Reorder | Mittel |
-| **Hybrid-Suche (3 Ebenen)** | Ordner-Filter + Scan-Index + optionale Deep Search, kein Hintergrund-Indexer | Mittel |
-| **Batch-Rename** | Mehrere Dateien umbenennen mit Muster (z.B. `IMG_{counter}.jpg`) | Mittel |
-
-### Technische Umsetzung
-- Dual-Panel: Zweites `ExplorerView`-Instanz, geteilter Container mit Resize-Handle
-- Tabs: Tab-Bar über der Dateiliste, State pro Tab (Pfad, Sortierung, Scroll-Position)
-- Batch-Rename: Modal mit Vorschau (Alt → Neu), Pattern-Parser
+| Feature | Beschreibung |
+|---------|-------------|
+| **Dual-Panel** | Zwei-Fenster-Ansicht (Commander-Stil), F6 zum Wechseln |
+| **Tab-Browsing** | Mehrere Ordner in Tabs, Ctrl+T neu, Ctrl+W schließen, Drag-Reorder |
+| **Hybrid-Suche (3 Ebenen)** | Ordner-Filter + Scan-Index + optionale Deep Search, kein Hintergrund-Indexer |
+| **Batch-Rename** | Mehrere Dateien umbenennen mit Muster (z.B. `IMG_{counter}.jpg`) |
 
 ### Hybrid-Suche: 3-Ebenen-Architektur (kein Hintergrund-Indexer!)
 
 | Ebene | Was | Wann | Kosten |
 |-------|-----|------|--------|
 | **1. Ordner-Filter** | Filtert die aktuelle Dateiliste im Browser | Sofort beim Tippen (Debounce 150ms) | Null |
-| **2. Scan-Index** | `Map<filename, fullPath[]>` wird beim Disk-Scan mitaufgebaut | Nach Scan verfuegbar | Minimal (kein extra I/O) |
-| **3. Deep Search** | Rekursive Suche ab aktuellem Ordner (Worker Thread) | On-Demand per Button | Mittel (nur wenn gewuenscht) |
-
-**Warum kein Windows-Search-Stil-Index:**
-- Kein Hintergrund-Dienst, kein FileSystemWatcher, kein permanenter CPU/RAM-Verbrauch
-- Scanner traversiert bereits alle Dateien → Index als Nebenprodukt (marginale Kosten)
-- Index-Aktualitaet = letzter Scan (Hinweis "Index vom [Datum]" in UI)
-- Regex-Support in allen 3 Ebenen
+| **2. Scan-Index** | `Map<filename, fullPath[]>` wird beim Disk-Scan mitaufgebaut | Nach Scan verfügbar | Minimal (kein extra I/O) |
+| **3. Deep Search** | Rekursive Suche ab aktuellem Ordner (Worker Thread) | On-Demand per Button | Mittel (nur wenn gewünscht) |
 
 ---
 
-## v6.3 - Explorer Phase 3: System-Integration
+## v6.3 - Explorer Phase 3: System-Integration (Fertig)
 
-| Feature | Beschreibung | Aufwand |
-|---------|-------------|---------|
-| **Terminal-Integration** | Eingebettete PowerShell im aktuellen Ordner (xterm.js) | Mittel |
-| **System-Tray** | Tray-Icon mit Quick-Clean, Speicherplatz-Warnung, Minimize-to-Tray | Klein |
-| **Globaler Hotkey** | Konfigurierbarer Hotkey zum Starten/Fokussieren der App | Klein |
-| **Datei-Tags** | Eigene Farb-Labels/Tags für Dateien (gespeichert in lokaler DB) | Mittel |
-| **Standard-Handler** | Registry-Eintrag: "Ordner öffnen mit Speicher Analyse" | Klein |
+### Umgesetzt
 
-### Terminal-Integration: Technischer Ansatz
-- `xterm.js` + `node-pty` für echtes Terminal-Emulation
-- Panel unterhalb der Dateiliste (aufklappbar, Ctrl+`)
-- Automatisch im aktuellen Explorer-Ordner geöffnet
-- PowerShell als Standard, CMD als Fallback
+| Feature | Beschreibung |
+|---------|-------------|
+| **Terminal-Integration** | Eingebettete PowerShell im aktuellen Ordner, Ctrl+` Toggle |
+| **System-Tray** | Tray-Icon mit Quick-Scan, Duplikate prüfen, Minimize-to-Tray |
+| **Globaler Hotkey** | Konfigurierbarer Hotkey (Standard: Ctrl+Shift+S) |
+| **Datei-Tags** | Farb-Labels für Dateien (JSON in %APPDATA%) |
+| **Shell-Integration** | "Mit Speicher Analyse öffnen" im Windows-Kontextmenü (HKCU) |
 
 ---
 
-## v7.0 - Netzwerk-Monitor, Software-Audit & Trust
+## v7.0 - Netzwerk-Monitor, Software-Audit & Trust (Fertig)
 
-### Netzwerk-Monitor (Gamechanger)
+### Netzwerk-Monitor
 
-Eigene Lösung mit direktem Kernel-Zugriff via Node.js:
-
-| Komponente | Ansatz | Beschreibung |
-|------------|--------|--------------|
-| **Verbindungen** | `Get-NetTCPConnection` + `Get-Process` | Aktive TCP-Verbindungen pro Prozess mit Remote-IP |
-| **DNS-Abfragen** | ETW (Event Tracing for Windows) | DNS-Queries live mitlesen via `netsh trace` |
-| **Bandbreite** | Performance Counter API | Bytes/s pro Netzwerk-Interface |
-| **Prozess-Traffic** | `Get-NetTCPConnection` + Periodic Polling | Zuordnung Prozess → Verbindung → Datenmenge |
-| **GeoIP** | Lokale MaxMind DB (kostenlos) | IP → Land/Stadt Auflösung für Ziel-Adressen |
-| **Firewall-Regeln** | `Get-NetFirewallRule` | Bestehende Regeln anzeigen + neue erstellen |
-
-**UI-Konzept:**
-- Live-Tabelle: Prozess | Remote-IP | Land | Port | Bytes gesendet/empfangen
-- Farbcodierung: Bekannte Microsoft/CDN-IPs grün, unbekannte gelb, blockierte rot
-- "Blockieren"-Button pro Prozess (erstellt Firewall-Regel)
-- Aggregierte Statistik: Top-10 Datenverbraucher
-
-**Technische Basis:**
-- PowerShell `Get-NetTCPConnection` für Verbindungsliste (kein Drittanbieter nötig)
-- `netstat -b` als Fallback
-- ETW Consumer via `child_process` für Echtzeit-DNS
-- Performance Counter via `typeperf` oder WMI für Bandbreite
-- Polling-Intervall: 2-5 Sekunden (konfigurierbar)
+| Komponente | Beschreibung |
+|------------|--------------|
+| **Verbindungen** | Aktive TCP-Verbindungen pro Prozess mit Remote-IP (`Get-NetTCPConnection`) |
+| **Bandbreite** | Bytes/s pro Netzwerk-Interface (Performance Counter) |
+| **Firewall-Regeln** | Bestehende Regeln anzeigen + neue erstellen (`Get-NetFirewallRule`) |
 
 ### Privacy-Dashboard
+- 12 Windows-Telemetrie-Einstellungen (Registry-Abfrage)
+- One-Click-Privacy (alle Telemetrie reduzieren)
+- Privacy-Score (0-100)
+- Scheduled Tasks Audit
 
-| Feature | Beschreibung | Aufwand |
-|---------|-------------|---------|
-| **Telemetrie-Übersicht** | Alle Windows-Telemetrie-Einstellungen anzeigen (Registry-Abfrage) | Mittel |
-| **One-Click-Privacy** | Alle Telemetrie mit einem Klick reduzieren/deaktivieren | Klein |
-| **Privacy-Score** | Bewertung 0-100 basierend auf aktuellen Einstellungen | Klein |
-| **Scheduled Tasks Audit** | Identifiziere Microsoft/OEM Telemetrie-Tasks | Klein |
+### Software-Audit
+- Programm-Inventar (Registry Uninstall-Keys + winget)
+- Korrelations-Engine (Programme ↔ Registry ↔ Autostart ↔ Dienste)
+- Verwaiste Einträge mit Ursprungs-Software-Zuordnung
+- Müll-Zuordnung pro Software mit Ampel-Bewertung
 
-### Software-Audit (Vision: "Programme und Features")
-
-Vereinte Sicht auf alle installierten Programme + deren Spuren im System:
-
-| Komponente | Beschreibung | Aufwand |
-|------------|-------------|---------|
-| **Programm-Inventar** | Alle installierten Programme aus Registry `Uninstall`-Keys + winget list | Klein |
-| **Korrelations-Engine** | Verbindet Programme mit ihren Registry-Einträgen, Autostart-Entries, Diensten | Mittel |
-| **Verwaiste Einträge** | Registry-Reste von deinstallierten Programmen erkennen + Ursprungs-Software zuordnen | Mittel |
-| **Müll-Zuordnung** | Pro Software anzeigen: welche Einträge, Dateien, Autostart-Reste sie hinterlässt | Mittel |
-
-**Technischer Ansatz:**
-- Baut auf bestehenden Modulen auf: `registry.js`, `bloatware.js`, `autostart.js`
-- Neue Korrelations-Logik: Registry `DisplayName` ↔ Autostart `name` ↔ Service `DisplayName`
-- Uninstall-Key-Pfad (`InstallLocation`) prüfen ob Ordner noch existiert
-- Ergebnis: Tabelle mit Ampel pro Programm (Grün = sauber, Gelb = Reste, Rot = viel Müll)
-
-### Trust-System (Vision: "Vertrauen")
-
-Querschnittsthema: Nutzer sollen jedem Ergebnis vertrauen können.
-
-| Aspekt | Beschreibung | Aufwand |
-|--------|-------------|---------|
-| **Begründung** | Jedes Ergebnis zeigt WARUM es geflaggt wurde (z.B. "Key zeigt auf Pfad X - existiert nicht") | Mittel |
-| **Risiko-Ampel** | Grün = sicher löschbar, Gelb = prüfen empfohlen, Rot = System-relevant, Vorsicht | Klein |
-| **Vorschau (Dry-Run)** | Vor jeder Aktion zeigen was genau passiert + was betroffen ist | Mittel |
-| **Undo-Log** | Protokoll aller Aktionen mit Wiederherstellungsmöglichkeit (Registry-Backup, Papierkorb) | Mittel |
-| **Quellen-Transparenz** | Anzeige woher Daten stammen (Registry-Pfad, WMI-Klasse, Dateisystem) | Klein |
-
-**Schrittweise Einführung:**
-- Phase 1 (v7.0): Begründung + Risiko-Ampel für Registry-Cleaner und Software-Audit
-- Phase 2 (v7.0): Vorschau/Dry-Run für alle Lösch-Aktionen
-- Phase 3 (v8.0): Vollständiges Undo-Log mit Wiederherstellung
+### Trust-System (Phase 1+2)
+- Begründung pro Ergebnis (WARUM geflaggt)
+- Risiko-Ampel (Grün/Gelb/Rot)
+- Vorschau/Dry-Run vor Aktionen
 
 ### Weitere Features
-
-| Feature | Beschreibung | Aufwand |
-|---------|-------------|---------|
-| **S.M.A.R.T.** | Festplatten-Gesundheit (via `Get-PhysicalDisk` + `Get-StorageReliabilityCounter`) | Mittel |
-| **Prozess-Manager** | Erweiterter Task-Manager mit CPU/RAM/Disk pro Prozess | Groß |
-| **System-Score** | Gesundheitspunktzahl 0-100 basierend auf allen Analysen | Klein |
+- **S.M.A.R.T.** — Festplatten-Gesundheit (Temperatur, Wear, Fehler, Betriebsstunden)
+- **System-Score** — Gesundheitspunktzahl 0-100 (gewichtete Kategorien)
 
 ---
 
-## v8.0 - Automatisierung & Erweiterte Features
+## v7.1 - Monaco Editor & Dokument-Viewer (Fertig)
+
+### Umgesetzt
+
+| Feature | Beschreibung |
+|---------|-------------|
+| **Monaco Editor** | VS Code Editor-Kern für Text-/Code-Dateien. Syntax-Highlighting für 30+ Sprachen, Bearbeitung + Speichern (Ctrl+S), Theme-Sync. |
+| **PDF-Viewer** | Canvas-basiertes Rendering (pdf.js). Seitennavigation, Zoom, Button "Extern öffnen". |
+| **DOCX-Viewer** | Word-Dokumente als formatierte HTML-Vorschau (mammoth.js). Überschriften, Tabellen, Bilder. |
+| **XLSX-Viewer** | Excel-Dateien als HTML-Tabelle (SheetJS). Sheet-Tabs, Sticky Header, max 1000 Zeilen. |
+| **readFileBinary IPC** | ArrayBuffer-Transfer für binäre Dateien (PDF/DOCX/XLSX). |
+| **Sidebar-Gruppen** | 6 Navigationsgruppen standardmäßig eingeklappt. Chevron-Animation, localStorage-Persistenz. |
+| **Omnibar-Fixes** | Click-Outside schließt Dropdown. Relevanz-Algorithmus mit positionsbasiertem Scoring. |
+
+---
+
+## v7.2 - Governance, WCAG & Terminal (Fertig)
+
+### Umgesetzt
+
+| Feature | Beschreibung |
+|---------|-------------|
+| **Governance** | Qualitätsstandards in `docs/planung/governance.md`: WCAG 2.2 AA, Sprache, Performance, Sicherheit, Versionierung. |
+| **WCAG Kontrast-Fixes** | 6 Kontrastverletzungen behoben. Neue CSS-Variablen: `--bg-tertiary`, `--accent-text`. |
+| **Terminal Multi-Shell** | Shell-Selector (PowerShell/CMD/WSL). Dynamische Prompts, WSL-Pfadkonvertierung. |
+| **Terminal-Kontextmenü** | "Im Terminal öffnen" → eingebettetes Terminal statt externes Fenster. |
+| **Versions-Fix** | Konsistente Version 7.2 in package.json, index.html, settings.js. |
+
+---
+
+## v7.3 - WCAG-Vertiefung & Panel-Customizing (Geplant)
+
+### WCAG 2.2 Vertiefung
+
+User meldet: Kontrast stimmt noch immer nicht überall. Umfassender Audit nötig.
+
+| Aufgabe | Beschreibung | Aufwand |
+|---------|-------------|---------|
+| **Vollständiger WCAG-Audit** | Alle Views systematisch prüfen (Dashboard, Duplikate, Registry, etc.) | Mittel |
+| **Fokus-Ringe** | Sichtbare Keyboard-Focus-Indikatoren für alle interaktiven Elemente | Klein |
+| **aria-Attribute** | Screen-Reader-Support für dynamische Inhalte (live regions, labels) | Klein |
+| **Farbenblindheit** | Kontrast-Prüfung auch für Deuteranopie/Protanopie-Szenarien | Klein |
+
+### Resizable Panels (Vision: Fenster-Individualisierung)
+
+| Feature | Beschreibung | Aufwand |
+|---------|-------------|---------|
+| **Terminal-Resize** | Drag-Handle zum Vergrößern/Verkleinern des Terminal-Panels | Klein |
+| **Dual-Panel-Resize** | Resize-Handle zwischen linkem und rechtem Panel | Klein |
+| **Explorer-Sidebar-Resize** | Breitenverstellung der Sidebar per Drag | Klein |
+| **Panel-Collapse** | Panels komplett ein-/ausklappbar mit Animation | Klein |
+
+### Terminal-Emulation (xterm.js + node-pty)
+
+| Feature | Beschreibung | Aufwand |
+|---------|-------------|---------|
+| **xterm.js** | Echte Terminal-Emulation (ANSI-Farben, Cursor-Steuerung, Scrollback) | Mittel |
+| **node-pty** | Pseudo-Terminal für native Shell-Sitzung | Mittel |
+| **Claude CLI** | Automatisch verfügbar durch echte Shell (wenn installiert) | Null |
+| **Interaktive Befehle** | Programme wie `npm`, `git`, `top` funktionieren korrekt | Null |
+
+---
+
+## v8.0 - Automatisierung & Erweiterte Features (Geplant)
 
 | Feature | Beschreibung | Aufwand |
 |---------|-------------|---------|
@@ -207,22 +211,41 @@ Querschnittsthema: Nutzer sollen jedem Ergebnis vertrauen können.
 | **Einstellungs-Sync** | Export als JSON-Datei in OneDrive/NAS-Ordner → automatische Synchronisierung ohne Backend | Klein |
 | **Portable Modus** | App von USB-Stick startbar (Settings im App-Ordner statt %APPDATA%) | Klein |
 | **Backup / Sicherung** | Dateien/Ordner auf Netzlaufwerk, OneDrive, Google Drive Sync-Ordner sichern | Mittel |
+| **Undo-Log** | Trust-System Phase 3: Protokoll aller Aktionen mit Wiederherstellungsmöglichkeit | Mittel |
 
 ### Einstellungs-Sync: Technischer Ansatz
-Kein Backend nötig. Einfacher Dateiaustausch:
-- Settings werden als `speicher-analyse-settings.json` gespeichert
+- Settings als `speicher-analyse-settings.json` exportierbar
 - Speicherort wählbar: OneDrive-Ordner, NAS-Pfad, beliebiger Sync-Ordner
-- Import/Export über UI-Button
 - Enthält: Theme, Sidebar-Status, Favoriten, Tags, Scan-Einstellungen
 - Beim Start: prüfe ob Sync-Datei neuer ist → Import-Angebot
 
 ### Backup / Sicherung: Technischer Ansatz
-Kein Cloud-Backend nötig. Direkte Dateikopie:
 - Zielordner wählbar: lokaler Pfad, Netzlaufwerk (UNC), OneDrive/Google Drive Sync-Ordner
 - Inkrementelles Backup: nur geänderte Dateien (via Änderungsdatum + Dateigröße)
 - Node.js `fs.copyFile` / Streams für große Dateien
 - Zeitplanung optional via Windows Task Scheduler (`schtasks`)
 - Backup-Log mit Statistik (kopierte Dateien, Größe, Dauer)
+
+---
+
+## v9.0 - KI-Integration (Vision)
+
+Basierend auf User-Vision "Bring Your Own Brain" (BYOB):
+
+| Feature | Beschreibung | Aufwand |
+|---------|-------------|---------|
+| **KI-Provider-Abstraktion** | `AiProvider` Interface mit austauschbaren Backends | Mittel |
+| **Cloud-Option** | OpenAI/Claude/Gemini API (Key in Electron safeStorage) | Mittel |
+| **Local-Option (Ollama)** | localhost:11434, automatische Modell-Erkennung | Mittel |
+| **Chat-UI** | Streaming-Responses, Kontext-Aktionen ("Erkläre diesen Registry-Key") | Groß |
+| **Notion-Modul** | Active Knowledge Board mit KI-Assistent pro Textblock | Groß |
+
+### Technischer Ansatz
+- Abstrakte `AiProvider`-Klasse mit `OllamaProvider` und `CloudProvider`
+- Beim Start: Prüfe ob Ollama läuft → Dropdown mit installierten Modellen
+- Falls nein: Button "Lokale KI einrichten" → Terminal-Modul
+- API-Keys verschlüsselt in Electron `safeStorage`
+- Streaming-Responses für Chat-UI
 
 ---
 
@@ -237,6 +260,7 @@ Ab hier Umstellung auf Semantic Versioning (Major.Minor.Patch):
 | **Crash-Reporter** | Lokale Crash-Logs (kein Cloud-Upload) |
 | **Changelog** | Automatisch generiert aus Git-Commits |
 | **Code-Signing** | Optional: EV-Zertifikat gegen SmartScreen-Warnung |
+| **Offline-Lizenzierung** | Ed25519 Signatur-Prüfung (lizenz.key, offline-fähig) |
 
 ---
 
@@ -269,11 +293,11 @@ Modulare Erweiterbarkeit für externe Entwickler:
 - Worker threads für Hintergrund-Operationen
 - PowerShell + WMI/CIM für System-Abfragen (kein wmic)
 
-### Aktuelle Modul-Struktur (Stand v6.1)
+### Aktuelle Modul-Struktur (Stand v7.2)
 ```
 main/
 ├── scanner.js + scanner-worker.js    # Disk-Scanner (Worker Thread)
-├── explorer.js                       # Datei-Navigator
+├── deep-search-worker.js             # Deep Search Worker (Ebene 3)
 ├── file-ops.js                       # Dateioperationen (Trash, Delete, Copy, Move)
 ├── duplicates.js + duplicate-worker.js  # Duplikat-Finder
 ├── old-files.js                      # Alte Dateien
@@ -291,9 +315,19 @@ main/
 ├── cmd-utils.js                      # Zentrale Befehlsausführung
 ├── menu.js                           # Kontextmenüs
 ├── export.js                         # CSV/PDF Export
-├── preview.js                        # Datei-Vorschau
+├── preview.js                        # Datei-Vorschau (Monaco/PDF/DOCX/XLSX)
 ├── scan-compare.js                   # Scan-Vergleich
 ├── exclusions.js                     # Smart Exclusions
+├── file-tags.js                      # Farb-Labels (JSON in %APPDATA%)
+├── tray.js                           # System-Tray Icon + Kontextmenü
+├── global-hotkey.js                  # Globaler Hotkey
+├── shell-integration.js              # Windows-Kontextmenü (HKCU)
+├── terminal.js                       # Multi-Shell Terminal (PS/CMD/WSL)
+├── privacy.js                        # Privacy-Dashboard
+├── smart.js                          # S.M.A.R.T. Festplatten-Gesundheit
+├── software-audit.js                 # Software-Audit + Korrelation
+├── network.js                        # Netzwerk-Monitor
+├── system-score.js                   # System-Score (0-100)
 ├── main.js                           # Electron Entry
 ├── ipc-handlers.js                   # IPC-Hub
 └── preload.js                        # Context Bridge
@@ -306,6 +340,8 @@ main/
 4. **Anpassbar** - Themes, Layouts, Shortcuts konfigurierbar
 5. **Dual-Panel** - Commander-Style für Power-User
 6. **Netzwerk-Sichtbarkeit** - Sehen welcher Prozess wohin Daten sendet
+7. **Code-Editor** - Monaco Editor für Text-/Code-Dateien direkt im Explorer
+8. **Dokument-Viewer** - PDF, DOCX, XLSX Vorschau ohne externe Programme
 
 ---
 
@@ -349,3 +385,18 @@ main/
 
 > "Explorer-Navigation nachbauen, aber besser?"
 > → Umgesetzt in v6.0 (Datei-Navigator mit Kontextmenüs, Farbcodierung, Leere-Ordner)
+
+> "Dunkelblaue Schrift auf dunkelblauem Hintergrund, anstrengend zu lesen"
+> → Adressiert in v7.2 (6 WCAG-Kontrast-Fixes, neue CSS-Variablen). Weitere Vertiefung in v7.3 geplant.
+
+> "Terminal öffnen per Rechtsklick funktioniert nicht"
+> → Gelöst in v7.2 (eingebettetes Terminal statt externes Fenster)
+
+> "PowerShell im Tool? Linux-Ubuntu Shell möglich?"
+> → Gelöst in v7.2 (Multi-Shell: PowerShell/CMD/WSL)
+
+> "Fenster statisch, Vergrößern/Verkleinern nicht möglich"
+> → Geplant in v7.3 (Resizable Panels)
+
+> "Terminal noch sehr rudimentär, nahtlose Integration gewünscht"
+> → Geplant in v7.3 (xterm.js + node-pty)

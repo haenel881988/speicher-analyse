@@ -1,256 +1,166 @@
-# Allgemeines
+# Visionen
 
-Dieses Dokument ist für den User da um seine Visionen festzuhalten.
-Dabei sollen die Visionen geprüft werden durch die KI, validiert und in die Projektplanung ([projektplan.md](projektplan.md)) übertragen werden für die Umsetzung.
+> Dieses Dokument ist für den User da um seine Visionen festzuhalten.
+> Visionen werden durch die KI geprüft, validiert und in die Projektplanung ([projektplan.md](projektplan.md)) übertragen.
+> Simon bittet die KI, diese Datei zu sortieren und aktuell zu halten (was umgesetzt wurde, was nicht).
 
+---
 
-## Visionen
+## Status-Legende
 
+| Symbol | Bedeutung |
+|--------|-----------|
+| Umgesetzt | In einer Version implementiert |
+| Teilweise | Grundlage vorhanden, Erweiterung nötig |
+| Geplant | Im Projektplan eingeplant |
+| Offen | Noch nicht eingeplant, Evaluation nötig |
+| Ignoriert | Vom User bewusst zurückgestellt |
 
+---
 
+## 1. Customizing & UI
 
-1. Die Vision: "Eigene Betriebssystem-Oberfläche"
-Du beschreibst im Grunde einen Custom Shell Replacement oder ein Power User Overlay. Das ist eine absolut valide Nische. Windows 11 wird immer "klick-bunter" und versteckt Profi-Funktionen (wie du sagst: 95% braucht man nicht).
+### 1.1 WCAG Kontrast — Teilweise (v7.2)
 
-Warum deine Idee (Explorer + IDE-Ansatz) genial sein kann:
+WCAG / Kontrastverhältnis stimmt noch immer nicht überein. Das muss vertieft werden. Der Kontrast muss zwingend WCAG 2.2 Konform sein.
 
-Der "Kontext-Bruch" nervt: Aktuell arbeite ich im Explorer, dann wechsle ich in VS Code, dann in die Konsole.
+**Status:** 6 Kontrastverletzungen in v7.2 behoben. Governance-Datei mit WCAG 2.2 AA Pflicht erstellt. User meldet: Kontrast muss weiter vertieft werden.
 
-Deine Lösung: Wenn dein "Speicher Analyse" Tool (v6.0) zum zentralen Hub wird, wo ich Dateien verwalte und direkt Code-Snippets bearbeiten oder Terminals öffnen kann (wie in deinem Projektplan "Terminal-Integration" angedeutet), dann ist das ein massiver Workflow-Booster.
+**→ Projektplan:** v7.3 — Umfassender WCAG-Audit aller Views
 
-Vorbild: Denk an Tools wie Total Commander auf Steroiden oder Directory Opus, aber modern und mit Web-Technologien (Electron).
+### 1.2 Resizable Panels / Fenster-Individualisierung — Offen
 
-2. Die Gefahr: "Feature Creep" vs. Architektur
-Du hast die Gefahr der "zu vielen Features" selbst erkannt. Wenn du extrem schnell bist, produzierst du extrem viel Code. Das Problem ist nicht das Schreiben, sondern das Warten (Maintenance).
+Aktuell werden die Fenster statisch angezeigt. Eine Umplatzierung der Fenster, also z.B.: Powershell / Terminal, das Vergrössern, Verkleinern der jeweiligen Sub-Fenster ist aktuell nicht möglich.
+Für eine Individualisierung soll hier eine Möglichkeit evaluiert werden um das Ganze zu individualisieren.
 
-Mein Rat für deinen "High-Speed-Mode": Baue keine monolithische App, sondern eine Plattform.
+**→ Projektplan:** v8.0+ — Resizable Panels (Drag-Resize für Terminal, Dual-Panel, Explorer-Bereiche)
 
-Statt alles fest in die main.js und renderer.js zu hämmern, solltest du jetzt (bevor du die IDE/OS-Features baust) die Architektur modularisieren.
+### 1.3 Sidebar einklappbar — Umgesetzt (v7.1)
 
-Der Core: Verwaltet nur Fenster, Updates (Winget), Sicherheit (Admin-Rechte) und das Dateisystem.
+> ~~Aktuell werden in der vertikalen Seitenleiste alle Register angezeigt. Diese sollen standardmässig eingeklappt werden.~~
 
-Die Module:
+**Erledigt:** 6 Navigationsgruppen, standardmässig eingeklappt, Zustand per localStorage gespeichert.
 
-Cleaner-Modul (Das hast du schon: v5.2)
+---
 
-Explorer-Modul (Dein v6.0 Plan)
+## 2. Terminal & Shell
 
-Dev-Modul (Deine IDE-Idee)
+### 2.1 PowerShell-Integration — Teilweise (v7.2)
 
-Backup-Modul (Restic/Kopia Integration)
+Powershell also das Terminal ist noch sehr rudimentär, es soll hierfür eine nahtlose Integration vom Powershell von Windows implementiert werden.
 
-Warum? Wenn du an der IDE schraubst und einen Bug einbaust, darf der Cleaner nicht abstürzen. User, die nur aufräumen wollen, laden das "Dev-Modul" gar nicht erst (spart RAM).
+**Status:** Multi-Shell Support (PowerShell/CMD/WSL) in v7.2 implementiert. Shell-Selector, dynamische Prompts, Rechtsklick "Im Terminal öffnen" funktioniert. Aber: Terminal ist noch textbasiert (Zeile-für-Zeile), keine echte Terminal-Emulation.
 
+**→ Projektplan:** v8.0+ — xterm.js + node-pty für echte Terminal-Emulation (Farben, Cursor, Interaktivität)
 
+### 2.2 Claude CLI im Terminal — Offen
 
+Wenn ich eintippe: Claude soll dann auch Claude gestartet werden, da ich im Windows Powershell bereits Claude über CLI / Powershell installiert habe. Dies wäre ein weiterer hoher nützlicher Mehrwert.
 
-# Programme und Features
+**→ Projektplan:** Hängt von 2.1 ab (xterm.js). Mit echtem Terminal-Emulator wird Claude CLI automatisch funktionieren, da der eingebettete Terminal dann eine echte Shell-Sitzung ist.
 
-Eine Funktion sollen alle Programme auflisten. Dabei soll anhand der installierten Programme auf dem System, die Registry, autostart etc. geprüft werden.
+---
 
-Wenn z.B.: in der Registry eine App, oder rückstände auftauchen, von nicht installierten Programmen soll dies in der Registry angezeigt werden, dafür ist eine Logik nötig, damit man auch genau nachvollziehen kann, welche Software sozusagen müll produziert.
-Dabei sollen Bezug auf die verwaisten Registry Einträge gemacht werden.
+## 3. Programme & System
 
-**→ Umgesetzt im Projektplan:** Siehe [projektplan.md](projektplan.md) → v7.0 → "Software-Audit"
+### 3.1 Software-Audit — Umgesetzt (v7.0)
+
+> ~~Eine Funktion soll alle Programme auflisten. Dabei soll anhand der installierten Programme auf dem System die Registry, Autostart etc. geprüft werden. Wenn z.B. in der Registry Rückstände auftauchen von nicht installierten Programmen, soll dies angezeigt werden.~~
+
+**Erledigt:**
 - Programm-Inventar (Registry Uninstall-Keys + winget)
 - Korrelations-Engine (Programme ↔ Registry ↔ Autostart ↔ Dienste)
 - Verwaiste Einträge mit Ursprungs-Software-Zuordnung
 - Müll-Zuordnung pro Software mit Ampel-Bewertung
 
-## Vertrauen / Trust
+### 3.2 Vertrauen / Trust — Teilweise (v7.0)
 
-Viele Anwender wie mich fragen sich, kann ich den Ergebnissen vom Speicher Analysier den trauen?
-Hierfür soll die KI mir ein Konzept in der Projektplanung vorschlagen und hier in dieser Datei, in diesem Abschnitt zum scope verlinken.
+Viele Anwender fragen sich, kann ich den Ergebnissen vom Speicher Analysierer trauen?
 
-**→ Umgesetzt im Projektplan:** Siehe [projektplan.md](projektplan.md) → v7.0 → "Trust-System"
-- Begründung pro Ergebnis (WARUM geflaggt)
-- Risiko-Ampel (Grün/Gelb/Rot)
-- Vorschau vor Aktionen (Dry-Run)
-- Undo-Log mit Wiederherstellung
-- Quellen-Transparenz (woher kommen die Daten)
+**Status:** Phase 1 umgesetzt (Begründung + Risiko-Ampel für Registry-Cleaner und Software-Audit). Vorschau/Dry-Run für Lösch-Aktionen. Fehlt noch: vollständiges Undo-Log mit Wiederherstellung.
 
-## Backup / Sicherungslösung
+**→ Projektplan:** v8.0 — Undo-Log (Phase 3 des Trust-Systems)
 
-Wäre es möglich direkt in der App eine Sicherung einzurichten?
-Wo ich auswählen kann, z.B.: mit Google Drive, dem eigenen NAS (Netzlaufwerk / Pfad angeben)?
+### 3.3 Backup / Sicherung — Geplant (v8.0)
 
-**→ Bewertung:** Machbar! Kein Cloud-Backend nötig. Ansatz:
+Wäre es möglich direkt in der App eine Sicherung einzurichten? Wo ich auswählen kann, z.B.: mit Google Drive, dem eigenen NAS (Netzlaufwerk / Pfad angeben)?
+
+**Bewertung:** Machbar! Kein Cloud-Backend nötig.
 - Zielordner wählbar (lokaler Pfad, Netzlaufwerk, OneDrive/Google Drive Sync-Ordner)
-- App kopiert Dateien/Ordner direkt dorthin (Node.js `fs.copyFile` / Streams)
-- Inkrementelles Backup möglich (nur geänderte Dateien, via Änderungsdatum/Hash)
+- Inkrementelles Backup (nur geänderte Dateien)
 - Zeitplanung optional (Windows Task Scheduler)
-- Bereits eingeplant als Teil von v8.0 "Automatisierung" - kann auch als eigener Meilenstein priorisiert werden
 
+**→ Projektplan:** v8.0 — Backup-Modul
 
+---
 
-## übersichtliches
+## 4. Architektur-Vision: "Eigene Betriebssystem-Oberfläche" — Langfristig
 
-Aktuell werden in der vertikalen Seitenleiste alle Register angezeigt.
+Die Vision: Custom Shell Replacement / Power User Overlay. Windows 11 wird immer "klick-bunter" und versteckt Profi-Funktionen.
 
-Diese sollen standardmässig eingeklappt werden, damit ich, der User, das gewünschte Register aufklappen kann, sonst wird das mit zunehmenden Funktionen völlig unübersichtlich.
+Wenn das "Speicher Analyse" Tool zum zentralen Hub wird, wo man Dateien verwaltet und direkt Code-Snippets bearbeiten oder Terminals öffnen kann, dann ist das ein massiver Workflow-Booster.
 
+Vorbild: Total Commander auf Steroiden oder Directory Opus, aber modern mit Web-Technologien (Electron).
 
+### Architektur-Empfehlung: Plattform statt Monolith
 
-## Experimentelles
+Statt alles fest in die main.js und renderer.js zu hämmern → Architektur modularisieren:
 
-1. Die "Bring Your Own Brain" (BYOB) Strategie
-Statt eine eigene KI "einzubauen" (was Serverkosten verursacht und Datenschutzfragen aufwirft), baust du nur die Schnittstellen.
+- **Core:** Fenster, Updates, Sicherheit, Dateisystem
+- **Cleaner-Modul** (v5.2 — vorhanden)
+- **Explorer-Modul** (v6.0 — vorhanden)
+- **Dev-Modul** (Monaco Editor — v7.1 Basis vorhanden)
+- **Backup-Modul** (v8.0 geplant)
 
-A. Die Cloud-Option (Für Bequeme):
+**→ Projektplan:** v1.5.0 — Plugin-System (modulare Architektur)
 
-Feature: Der User meldet sich via cli / powershell einfach an, und z.B.: gemini oder claude cli fragt den rest.
+---
 
-Vorteil: Du hast 0 Euro Serverkosten. Der User zahlt seine API- / Usage Nutzung selbst.
+## 5. Experimentelles — KI-Integration
 
-Datenschutz: Der API-Key wird lokal im Electron safeStorage (verschlüsselt) gespeichert. Die App sendet den Prompt direkt vom PC an die API (kein Proxy über deinen Server).
+### 5.1 "Bring Your Own Brain" (BYOB) — Offen
 
-B. Die Local-Option (Für "Paranoide" & Profis):
+Statt eine eigene KI einzubauen, nur die Schnittstellen bauen:
 
-Integration: Du setzt auf Ollama (der aktuelle Standard für lokale LLMs).
+**A. Cloud-Option (Für Bequeme):**
+- User meldet sich via CLI/Powershell an (Claude, Gemini, etc.)
+- 0 Euro Serverkosten, User zahlt eigene API-Nutzung
+- API-Key lokal in Electron `safeStorage` verschlüsselt
+- Direkte Verbindung PC → API (kein Proxy)
 
-Workflow:
+**B. Local-Option (Für Profis):**
+- Integration mit Ollama (localhost:11434)
+- App prüft beim Start ob Ollama läuft
+- Falls ja: Dropdown mit installierten Modellen (Llama 3, Mistral, etc.)
+- Falls nein: Button "Lokale KI einrichten" → Terminal-Modul
+- 100% offline fähige KI
 
-Deine App prüft beim Start: "Läuft ein Server auf localhost:11434?"
+**→ Projektplan:** v9.0+ — KI-Integration (BYOB)
 
-Falls ja: Zeige im Dropdown automatisch die installierten Modelle (z.B. Llama 3, Mistral).
+### 5.2 "Notion-Modul" mit KI-Power — Offen
 
-Falls nein: Biete einen Button "Lokale KI einrichten" -> Öffnet dein Terminal-Modul und zeigt den Befehl zur Installation (winget install ollama).
+"Active Knowledge Board" — Neben jedem Textblock ein KI-Assistent:
+- "Fasse diesen PDF-Anhang zusammen" (via PDF-Modul + Llama 3)
+- "Erkläre diesen Registry-Key" (via Registry-Analyse)
+- "Schreibe diese Notiz professioneller"
 
-Der Clou: Damit hast du eine 100% offline fähige KI, die Dokumente zusammenfassen, Mails schreiben oder Code erklären kann, ohne dass ein einziges Byte den PC verlässt.
+**→ Projektplan:** v9.0+ — Abhängig von 5.1 (BYOB)
 
-2. Das "Notion-Modul" mit KI-Power
-Du baust nicht nur ein Notiz-Tool, du baust ein "Active Knowledge Board".
+### 5.3 Offline-Lizenzierung — Offen
 
-Der "KI-Assistent" Button: Neben jedem Textblock (wie in Notion) ist ein kleines Icon.
+Asymmetrische Kryptographie (Ed25519):
+- Server hat Private Key → generiert Lizenz-Datei
+- App hat Public Key → prüft Signatur offline
+- App muss niemals "nach Hause telefonieren"
+- Lifetime-Lizenz funktioniert auch wenn Server offline
 
-Funktionen:
+**→ Projektplan:** v1.0.0 — Lizenzierung (Teil des stabilen Releases)
 
-"Fasse diesen PDF-Anhang zusammen" (Liest den Text aus deinem PDF-Modul, sendet ihn an Llama 3 lokal).
+---
 
-"Erkläre diesen Registry-Key" (Nimmt den Key aus deiner Registry-Analyse).
+## 6. Marketing Vision — Ignoriert (für später)
 
-"Schreibe diese Notiz professioneller".
+> **ACHTUNG:** Bitte diesen Scope ignorieren, das ist alles erstmal für später umzusetzen.
 
-3. Das "Offline-Lizenzierungs-System" (Der Trust-Anchor)
-Das ist technisch absolut machbar und für deine Zielgruppe ("Schweizer Datenschutz") entscheidend.
-
-Das Konzept: Asymmetrische Kryptographie (RSA/ECC)
-
-Der Server (Dein Shop):
-
-Hat den Private Key (Geheim!).
-
-Wenn User kauft: Generiert eine Lizenz-Datei (lizenz.key).
-
-Inhalt: {"email": "user@mail.com", "type": "LIFETIME", "features": ["AI", "PDF", "CLEAN"], "signature": "X9F3..."}.
-
-Diese Datei wird per Mail versendet.
-
-Der Client (Deine App):
-
-Hat den Public Key (im Code fest verbaut).
-
-Der User zieht die lizenz.key per Drag & Drop in die App.
-
-Die App prüft offline mathematisch: "Wurde diese Signatur mit Simons Private Key erstellt?"
-
-Ergebnis: Ja -> App wird freigeschaltet. Nein -> Fehler.
-
-Vorteil:
-
-Die App muss niemals "nach Hause telefonieren", um die Lizenz zu prüfen.
-
-Selbst wenn deine Server in 10 Jahren offline gehen, funktioniert die gekaufte Software weiter. Das ist wahres "Lifetime".
-
-4. Zusammenfassung der User Journey (Story)
-Stell dir vor, wie du das verkaufst:
-
-"Andere Tools zwingen dich in die Cloud. Wir geben dir das Schwert in die Hand.
-
-Lade es herunter.
-
-Kappe das Internet. (Ja, wirklich!)
-
-Installiere deine Lizenz. (Funktioniert offline).
-
-Nutze KI. (Verbinde deine lokale Llama-Instanz).
-
-Bearbeite sensible PDFs.
-
-Alles bleibt auf deinem Rechner. Dein PC. Deine Regeln. Schweizer Code."
-
-Technischer Rat zur Umsetzung (High-Speed)
-Da du Claude Code nutzt, hier die Prompts/Begriffe für die Umsetzung:
-
-Für die Lizenz: "Implementiere ein License-Verification Modul in Node.js mit crypto library. Nutze ed25519 für die Signatur-Prüfung. Lese Public Key aus einer Datei."
-
-Für die KI: "Erstelle einen Service AiProvider, der abstrakt ist. Implementiere OllamaProvider (Fetch auf localhost:11434/api/generate) und OpenAiProvider. Biete Streaming-Responses für das Chat-Fenster."
-
-
-
-
-## Marketing Vision:
-
-
-Hier ist meine Analyse, warum das funktioniert und wie du es noch besser machst (damit sich die 1999.- CHF auch wirklich wertvoll anfühlen):
-
-1. Warum 100 Stück besser sind als 1000 (Die Scarcity-Strategie)
-Exklusivität: Wenn es 1000 Stück gibt, ist es ein Massenprodukt. Wenn es nur 100 gibt, ist es ein Club.
-
-Deine Zeit: 1000 Briefe von Hand zu schreiben, zu unterschreiben und zur Post zu bringen, ist keine "Freude" mehr, das ist Fließbandarbeit. Du willst, dass jeder Brief "Liebe" ausstrahlt. Bei 100 Stück kannst du dir für jeden Käufer 10 Minuten Zeit nehmen.
-
-Psychologie: "Nur noch 12 verfügbar" treibt den Verkauf stärker an als "Nur noch 840 verfügbar".
-
-2. Der "Anker-Effekt" (Warum das den Verkauf der günstigen Versionen ankurbelt)
-Selbst wenn niemand die 1999.- Version kauft, ist sie extrem wertvoll für dich.
-
-Das Szenario: Ein User sieht drei Preise:
-
-Standard: 29.- / Jahr (Wirkt okay)
-
-Lifetime: 149.- (Wirkt teuer)
-
-Collector's Edition: 1999.- (Wirkt wahnsinnig)
-
-Der Effekt: Plötzlich wirken die 149.- für die Lifetime-Lizenz günstig. "Ich spare 1850 Franken im Vergleich zur VIP-Version!". Das nennt man Price Anchoring. Du verkaufst dadurch mehr von der mittleren Version.
-
-3. Das "Unboxing"-Erlebnis: Bitte nicht laminieren!
-Hier muss ich ehrlich sein: Für 2000 Franken darfst du kein einlaminiertes Papier verschicken. Das wirkt wie ein Schülerausweis. Wenn jemand so viel Geld hinlegt, erwartet er Luxus.
-
-Mein Gegenvorschlag für die "Founder's Edition":
-
-Das Material: Drucke den Lizenzschlüssel auf dickes Büttenpapier oder eine Metallkarte (lasergraviert, kostet dich ca. 20-30 CHF im Einkauf, wirkt aber wie 500 CHF).
-
-Die Verpackung: Ein schöner schwarzer Umschlag, versiegelt mit echtem Wachssiegel (rot, mit Schweizer Kreuz oder deinem Logo).
-
-Die Handschrift: Dein persönlicher Brief dazu ist perfekt. Schreib ihn mit Füller, nicht mit Kugelschreiber.
-
-Das Extra: Leg etwas Physisches bei. Ein kleines Victorinox Taschenmesser mit deinem Logo? Oder einen hochwertigen USB-Stick (Edelstahl), auf dem die Software bereits vorinstalliert ist ("Air-Gap Ready").
-
-4. Was der Käufer wirklich kauft (Der "Whale"-Status)
-Wer 2000 Franken für Software zahlt, kauft nicht die Software. Er kauft Status und Einfluss. Gib ihnen mehr als nur Updates:
-
-"The Council": Die 100 Collector-Besitzer kommen in eine exklusive Mailing-Liste oder Discord-Gruppe, wo du sie persönlich nach ihrer Meinung zu neuen Features fragst. "Soll ich erst PDF oder erst KI bauen?" -> Ihre Stimme zählt doppelt.
-
-Credits: Ihr Name steht (wenn sie wollen) im "Über uns"-Dialog der Software unter "Gründungspaten".
-
-Fazit & Empfehlung
-Ja, mach es!
-
-Name: "Founder's Edition" oder "Patron Edition".
-
-Limitierung: Streng limitiert auf 100 Exemplare. (Nummeriert: 1/100, 2/100...).
-
-Preis: 1999.- CHF ist mutig, aber als "Statement" genau richtig.
-
-Inhalt:
-
-Lifetime Updates (Alle Versionen, für immer).
-
-Metall-Lizenzkarte (Lasergraviert).
-
-Handsignierter Brief auf Premium-Papier.
-
-USB-Stick mit der "Offline-Installation".
-
-Nennung in den Credits.
+Enthält: Collector's Edition (1999 CHF), Scarcity-Strategie, Unboxing-Erlebnis, Founder's Edition.
+Wird erst relevant wenn v1.0.0 (stabiler Release) erreicht ist.
