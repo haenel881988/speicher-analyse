@@ -251,29 +251,34 @@ export class TerminalPanel {
 
         // Prüfe ob der Befehl ein echtes Terminal (PTY) benötigt
         const baseCmd = cmd.trim().split(/\s+/)[0].toLowerCase().replace(/\.exe$/, '');
+
+        // Spezialbehandlung: claude CLI
+        if (baseCmd === 'claude') {
+            const args = cmd.trim().split(/\s+/).slice(1);
+            const hasPrintFlag = args.some(a => a === '-p' || a === '--print');
+
+            if (!hasPrintFlag) {
+                // Interaktiver Modus braucht ein echtes PTY
+                this._appendOutput(
+                    `→ "claude" benötigt ein echtes Terminal (PTY) für den interaktiven Modus.\n` +
+                    `  Dieses Terminal nutzt Pipes – TUI-Apps können hier nicht dargestellt werden.\n` +
+                    `  Tipp: "claude -p 'deine Frage'" funktioniert hier für Einzel-Abfragen.\n` +
+                    `→ Interaktiver Modus wird in externem Terminal geöffnet...\n`,
+                    'info'
+                );
+                await this._openExternal(cmd.trim());
+                return;
+            }
+            // -p/--print Modus funktioniert in Pipes → normal weiterleiten
+        }
+
         if (PTY_REQUIRED_COMMANDS.has(baseCmd)) {
-            // Automatisch in echtem externen Terminal öffnen
             this._appendOutput(
-                `→ "${baseCmd}" wird in einem externen Terminal geöffnet...\n`,
+                `→ "${baseCmd}" benötigt ein echtes Terminal (PTY) und wird extern geöffnet...\n`,
                 'info'
             );
-            try {
-                const result = await window.api.terminalOpenExternal(this.currentCwd, cmd.trim());
-                if (result.success) {
-                    this._appendOutput(
-                        `→ Externes Terminal gestartet.\n\n`,
-                        'info'
-                    );
-                } else {
-                    this._appendOutput(
-                        `→ Fehler beim Öffnen: ${result.error}\n\n`,
-                        'error'
-                    );
-                }
-            } catch (err) {
-                this._appendOutput(`→ Fehler: ${err.message}\n\n`, 'error');
-            }
-            return; // Nicht im eingebetteten Terminal ausführen
+            await this._openExternal(cmd.trim());
+            return;
         }
 
         if (!this.sessionId) {
@@ -305,6 +310,19 @@ export class TerminalPanel {
             this.input.value = '';
         } else {
             this.input.value = this.history[this.historyIndex];
+        }
+    }
+
+    async _openExternal(command) {
+        try {
+            const result = await window.api.terminalOpenExternal(this.currentCwd, command);
+            if (result.success) {
+                this._appendOutput(`→ Externes Terminal gestartet.\n\n`, 'info');
+            } else {
+                this._appendOutput(`→ Fehler beim Öffnen: ${result.error}\n\n`, 'error');
+            }
+        } catch (err) {
+            this._appendOutput(`→ Fehler: ${err.message}\n\n`, 'error');
         }
     }
 
