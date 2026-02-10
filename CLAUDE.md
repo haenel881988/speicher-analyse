@@ -23,11 +23,12 @@ Es kombiniert Funktionen von TreeSize (Speichervisualisierung) und CCleaner (Ber
 ```
 speicher_analyse/
   main/                    # Electron Main Process
-    main.js               # App-Einstieg, Fenster-Erstellung
+    main.js               # App-Einstieg, Fenster-Erstellung, Single-Instance-Lock
     preload.js            # contextBridge API-Surface
     ipc-handlers.js       # Alle IPC Handler (zentraler Hub)
-    scanner.js            # Festplatten-Scanner (Worker Thread)
+    scanner.js            # Festplatten-Scanner (Worker Thread) + nameIndex
     scanner-worker.js     # Scanner Worker
+    deep-search-worker.js # Deep Search Worker (Ebene 3, scoreMatch)
     duplicate-worker.js   # SHA-256 Hashing Worker (3-Phasen)
     duplicates.js         # DuplicateFinder mit Pre-Filtering
     registry.js           # Registry-Scanner (async) + Auto-Backup
@@ -38,19 +39,34 @@ speicher_analyse/
     updates.js            # Update-Manager (Windows/Software/Treiber)
     cleanup.js            # Bereinigungskategorien
     old-files.js          # Alte-Dateien-Finder
-    menu.js               # Anwendungsmenue
+    menu.js               # Anwendungsmenue + Kontextmenüs
     file-ops.js           # Dateioperationen
+    file-tags.js          # Farb-Labels für Dateien (JSON in %APPDATA%)
     drives.js             # Laufwerks-Erkennung
     export.js             # CSV-Export
     scan-compare.js       # Scan-Vergleich
     preview.js            # Dateivorschau
+    tray.js               # System-Tray Icon + Kontextmenü
+    global-hotkey.js      # Globaler Hotkey (Ctrl+Shift+S)
+    shell-integration.js  # "Öffnen mit" Windows-Kontextmenü (HKCU)
+    terminal.js           # Eingebettete PowerShell-Sitzungen
+    privacy.js            # Privacy-Dashboard (Registry-Telemetrie)
+    smart.js              # S.M.A.R.T. Festplatten-Gesundheit
+    software-audit.js     # Software-Audit + Korrelations-Engine
+    network.js            # Netzwerk-Monitor (TCP, Bandbreite, Firewall)
+    system-score.js       # System-Gesundheitspunktzahl (0-100)
 
   renderer/               # Frontend
     index.html            # Haupt-HTML
     css/style.css         # Alle Styles (Dark/Light Theme)
     js/
       app.js             # Haupt-Controller
-      dashboard.js       # Dashboard-Uebersicht nach Scan
+      dashboard.js       # Dashboard-Übersicht nach Scan
+      explorer.js        # Datei-Explorer mit Omnibar-Suche
+      explorer-tabs.js   # Tab-Browsing für Explorer
+      explorer-dual-panel.js # Dual-Panel (Commander-Stil)
+      terminal-panel.js  # Eingebettetes Terminal UI
+      batch-rename.js    # Batch-Umbenennung Modal
       tree.js            # Verzeichnisbaum
       treemap.js         # Treemap-Visualisierung
       charts.js          # Dateitypen-Diagramm
@@ -63,6 +79,11 @@ speicher_analyse/
       bloatware.js       # Bloatware-Scanner UI
       optimizer.js       # System-Optimierung UI
       updates.js         # Update-Manager UI
+      privacy.js         # Privacy-Dashboard UI
+      smart.js           # S.M.A.R.T. UI
+      software-audit.js  # Software-Audit UI
+      network.js         # Netzwerk-Monitor UI
+      system-score.js    # System-Score UI
       scan-compare.js    # Scan-Vergleich UI
       preview.js         # Dateivorschau
       file-manager.js    # Dateioperationen (Cut/Copy/Paste/Delete)
@@ -74,13 +95,20 @@ speicher_analyse/
       chart.min.js
       html2pdf.bundle.min.js
 
-  docs/                   # Projektdokumentation
-    01_projektplanung/
-      projektplan.md     # v4.0 Roadmap & Projektplanung
+  docs/                   # Projektdokumentation (verwaltet durch Claude)
+    planung/             # Projektplanung + Visionen
+      projektplan.md    # Aktiver Projektplan (Roadmap)
+      visionen.md       # User-Visionen & Feature-Ideen
+      archiv/           # Abgeschlossene/historische Pläne
+        projektplan_v3-v5.md
+    protokoll/           # Änderungsverfolgung
+      aenderungsprotokoll.md  # Aktiv (max. 30 Einträge)
+      archiv/           # Archivierte Protokolle (automatisch bei >30)
+
   static/                 # ALT - v1.0 FastAPI Frontend (nicht mehr verwendet)
   assets/                 # Icons
   launch.js              # Electron Starter Script
-  package.json           # v4.0.0
+  package.json           # v7.0
 ```
 
 ## Starten
@@ -129,8 +157,37 @@ Ergebnisse erscheinen im Dashboard als klickbare Karten.
 - **Single-Instance:** `app.requestSingleInstanceLock()` ist aktiv - verhindert GPU-Cache-Konflikte bei Tray-Betrieb
 - **GPU Cache:** `--disable-gpu-shader-disk-cache` aktiv - keine GPU-Dateisperren möglich
 
-## Änderungsprotokoll
-→ [`docs/aenderungsprotokoll.md`](docs/aenderungsprotokoll.md) (max. 30 Einträge, dann archivieren)
+## Dateimanagement (docs/)
+
+**Claude ist verantwortlich für die Verwaltung der `docs/`-Verzeichnisstruktur.**
+
+### Regeln
+- **Keine losen Dateien** in `docs/` ablegen - immer in den passenden Unterordner
+- **Neue Dateien** nur in bestehende Kategorien einfügen. Neue Kategorie nur nach Rücksprache mit dem User
+- **Archivierung:** Jeder Bereich hat seinen eigenen `archiv/`-Unterordner (Option A: dezentral)
+- **Interne Links** bei jeder Verschiebung/Umbenennung in ALLEN betroffenen Dateien aktualisieren
+- **Namenskonvention:** Kleinbuchstaben, Bindestriche statt Leerzeichen, kein Nummernpräfix
+
+### Struktur
+```
+docs/
+├── planung/                          # Projektplanung + Visionen
+│   ├── projektplan.md                # Aktiver Projektplan (Roadmap)
+│   ├── visionen.md                   # User-Visionen & Feature-Ideen
+│   └── archiv/                       # Historische Pläne
+│       └── projektplan_v3-v5.md
+├── protokoll/                        # Änderungsverfolgung
+│   ├── aenderungsprotokoll.md        # Aktiv (max. 30 Einträge)
+│   └── archiv/                       # Archivierte Protokolle
+│       └── (Dateiname: aenderungsprotokoll_<version>.md)
+```
+
+### Änderungsprotokoll
+→ [`docs/protokoll/aenderungsprotokoll.md`](docs/protokoll/aenderungsprotokoll.md) (max. 30 Einträge, dann archivieren nach `archiv/`)
+
+### Projektplanung
+→ [`docs/planung/projektplan.md`](docs/planung/projektplan.md) (aktive Roadmap)
+→ [`docs/planung/visionen.md`](docs/planung/visionen.md) (User-Ideen, werden validiert und in Projektplan übertragen)
 
 ## Features (v7.0)
 1. Festplatten-Scan mit Verzeichnisbaum, Treemap, Dateitypen-Chart, Top 100
@@ -145,6 +202,3 @@ Ergebnisse erscheinen im Dashboard als klickbare Karten.
 10. System-Tray, Globaler Hotkey, Datei-Tags, Shell-Integration
 11. Eingebettetes PowerShell-Terminal
 
-## Projektplanung
-Die vollständige v4.0 Roadmap mit allen geplanten Features befindet sich in:
-→ [`docs/01_projektplanung/projektplan.md`](docs/01_projektplanung/projektplan.md)

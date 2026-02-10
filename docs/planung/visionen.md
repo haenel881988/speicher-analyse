@@ -1,7 +1,7 @@
 # Allgemeines
 
 Dieses Dokument ist für den User da um seine Visionen festzuhalten.
-Dabei sollen die Visioen geprüft werden durch die KI, validiert und in die Projektplanung (docs\01_projektplanung\projektplan.md) übertragen werden für die Umsetzung.
+Dabei sollen die Visionen geprüft werden durch die KI, validiert und in die Projektplanung ([projektplan.md](projektplan.md)) übertragen werden für die Umsetzung.
 
 
 ## Visionen
@@ -51,7 +51,7 @@ Eine Funktion sollen alle Programme auflisten. Dabei soll anhand der installiert
 Wenn z.B.: in der Registry eine App, oder rückstände auftauchen, von nicht installierten Programmen soll dies in der Registry angezeigt werden, dafür ist eine Logik nötig, damit man auch genau nachvollziehen kann, welche Software sozusagen müll produziert.
 Dabei sollen Bezug auf die verwaisten Registry Einträge gemacht werden.
 
-**→ Umgesetzt im Projektplan:** Siehe [projektplan.md](../01_projektplanung/projektplan.md) → v7.0 → "Software-Audit"
+**→ Umgesetzt im Projektplan:** Siehe [projektplan.md](projektplan.md) → v7.0 → "Software-Audit"
 - Programm-Inventar (Registry Uninstall-Keys + winget)
 - Korrelations-Engine (Programme ↔ Registry ↔ Autostart ↔ Dienste)
 - Verwaiste Einträge mit Ursprungs-Software-Zuordnung
@@ -62,7 +62,7 @@ Dabei sollen Bezug auf die verwaisten Registry Einträge gemacht werden.
 Viele Anwender wie mich fragen sich, kann ich den Ergebnissen vom Speicher Analysier den trauen?
 Hierfür soll die KI mir ein Konzept in der Projektplanung vorschlagen und hier in dieser Datei, in diesem Abschnitt zum scope verlinken.
 
-**→ Umgesetzt im Projektplan:** Siehe [projektplan.md](../01_projektplanung/projektplan.md) → v7.0 → "Trust-System"
+**→ Umgesetzt im Projektplan:** Siehe [projektplan.md](projektplan.md) → v7.0 → "Trust-System"
 - Begründung pro Ergebnis (WARUM geflaggt)
 - Risiko-Ampel (Grün/Gelb/Rot)
 - Vorschau vor Aktionen (Dry-Run)

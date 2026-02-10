@@ -1,6 +1,6 @@
 # Änderungsprotokoll
 
-> **Regel:** Maximal 30 Einträge. Bei Überschreitung die ältesten in `docs/aenderungsprotokoll_archiv.md` verschieben.
+> **Regel:** Maximal 30 Einträge. Bei Überschreitung die ältesten in `archiv/` verschieben (Dateiname: `aenderungsprotokoll_<version>.md`).
 
 ---
 
@@ -10,6 +10,7 @@
 | 2 | 2026-02-10 | v7.0 | fix | **Debug-Code entfernt** - DevTools, Click-Test-Button, Console-Forwarding und Debug-Logging aus main.js, index.html, app.js entfernt. |
 | 3 | 2026-02-10 | v7.0 | improve | **Omnibar-Suche: Ergebnisse gruppiert** - Ordner werden vor Dateien angezeigt, mit visuellen Gruppenheadern. Innerhalb jeder Gruppe: Qualität absteigend, dann alphabetisch. |
 | 4 | 2026-02-10 | v7.0 | improve | **Omnibar-Suche: Relevanz-Algorithmus** - Neuer `scoreMatch()`-Algorithmus ersetzt naive Prefix-Suche. Positionsbasiertes Scoring (Name startet mit > Wortgrenze > irgendwo). Min. Prefix-Länge von 40% auf 60% erhöht. Mid-Word-Matches nur bei ≥80% Übereinstimmung. Eliminiert irrelevante Treffer wie "api-kosten" bei Suche nach "steuern". |
+| 5 | 2026-02-10 | v7.0 | refactor | **docs/ Verzeichnisstruktur reorganisiert** - Nummernpräfixe (00_, 01_) entfernt. Neue thematische Struktur: `planung/` (Projektplan + Visionen + archiv/), `protokoll/` (Änderungsprotokoll + archiv/). Jeder Bereich verwaltet sein eigenes Archiv (Option A: dezentral). Claude ist verantwortlich für die Verwaltung der docs/-Struktur. Regeln in CLAUDE.md hinterlegt. |
 
 ---
 

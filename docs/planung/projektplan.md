@@ -18,7 +18,7 @@
 | v1.0.0 | Vision | Erster stabiler Release (Semver), Installer, Auto-Update |
 | v1.5.0 | Vision | Plugin-System (externe Module laden) |
 
-Historische Pläne: siehe `archiv_v3-v5.md`
+Historische Pläne: siehe [`archiv/projektplan_v3-v5.md`](archiv/projektplan_v3-v5.md)
 
 ---
 
