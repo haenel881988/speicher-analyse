@@ -184,6 +184,7 @@ export class ExplorerView {
         this.renderAddressBar();
         this.updateQuickAccessHighlight();
         if (this._onNavigate) this._onNavigate(dirPath);
+        document.dispatchEvent(new CustomEvent('explorer-navigate', { detail: { path: dirPath } }));
 
         this.els.fileList.innerHTML = '<div class="explorer-loading"><div class="loading-spinner"></div></div>';
 

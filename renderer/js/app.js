@@ -154,6 +154,11 @@ window.api.onNewTerminal?.(() => {
     globalTerminal.destroy().then(() => globalTerminal.show(cwd));
 });
 
+// Auto-sync terminal CWD when navigating in Explorer
+document.addEventListener('explorer-navigate', (e) => {
+    if (e.detail?.path) globalTerminal.changeCwd(e.detail.path);
+});
+
 // Wire open-in-preview events from explorer (PDF, DOCX, etc.)
 document.addEventListener('open-in-preview', (e) => {
     const filePath = e.detail.path;
