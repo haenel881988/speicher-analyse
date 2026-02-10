@@ -3712,6 +3712,111 @@ body {
     color: var(--accent-text);
 }
 
+/* === v7.4: Toggle Switch (iOS-style) === */
+.settings-toggle {
+    width: 40px;
+    height: 22px;
+    border-radius: 11px;
+    background: var(--border);
+    position: relative;
+    cursor: pointer;
+    transition: background 0.2s;
+    flex-shrink: 0;
+}
+.settings-toggle::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #fff;
+    transition: transform 0.2s;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+.settings-toggle.active {
+    background: var(--success);
+}
+.settings-toggle.active::after {
+    transform: translateX(18px);
+}
+
+/* === v7.4: Select Dropdown === */
+.settings-select {
+    padding: 4px 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-input);
+    color: var(--text-primary);
+    font-size: 12px;
+    cursor: pointer;
+    min-width: 120px;
+}
+.settings-select:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+/* === v7.4: Range Slider === */
+.settings-range-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.settings-range {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 120px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--border);
+    outline: none;
+}
+.settings-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    border: 2px solid var(--bg-card);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+.settings-range-value {
+    font-size: 12px;
+    font-family: var(--font-mono);
+    color: var(--text-primary);
+    min-width: 36px;
+    text-align: right;
+}
+
+/* === v7.4: Theme Switch === */
+.settings-theme-switch {
+    display: flex;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+}
+.settings-theme-option {
+    padding: 4px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    color: var(--text-muted);
+    transition: background var(--transition), color var(--transition);
+}
+.settings-theme-option:first-child {
+    border-right: 1px solid var(--border);
+}
+.settings-theme-option.active {
+    background: var(--accent);
+    color: #fff;
+}
+.settings-theme-option:not(.active):hover {
+    background: var(--bg-hover);
+}
+
 /* ===== v7.3: Global Terminal Panel (VS Code style) ===== */
 #terminal-global {
     flex-shrink: 0;

@@ -19,6 +19,8 @@ const optimizer = require('./optimizer');
 const updates = require('./updates');
 const explorer = require('./explorer');
 const admin = require('./admin');
+const session = require('./session');
+const { PreferencesStore } = require('./preferences');
 
 const { Worker } = require('worker_threads');
 
@@ -27,7 +29,13 @@ const scans = new Map();
 const duplicateFinders = new Map();
 const deepSearchWorkers = new Map();
 
+// Singleton PreferencesStore (shared across module)
+const preferences = new PreferencesStore();
+
 function register(mainWindow) {
+    // Init preferences (needs app.getPath which requires app ready)
+    preferences.init();
+
     // === Drives ===
     ipcMain.handle('get-drives', async () => {
         return listDrives();
@@ -60,6 +68,12 @@ function register(mainWindow) {
             (progress) => {
                 if (mainWindow && !mainWindow.isDestroyed()) {
                     mainWindow.webContents.send('scan-complete', progress);
+                }
+                // Auto-save session after scan completion
+                if (preferences.get('sessionSaveAfterScan')) {
+                    session.saveSession(scans, {}).catch(err =>
+                        console.error('Auto-Session-Save nach Scan fehlgeschlagen:', err.message)
+                    );
                 }
             },
             // onError
@@ -617,17 +631,19 @@ function register(mainWindow) {
         }
     });
 
-    // === Restore Elevated Session (pull-based) ===
-    // Load session data eagerly at startup, renderer awaits the promise when ready
+    // === Restore Elevated Session + Persistent Session (pull-based) ===
+    // Priority: Elevation session > Persistent session
     let restoredSessions = null;
+    let restoredUiState = null;
     const sessionLoadPromise = (async () => {
-        const sessions = await admin.loadElevatedSession();
-        if (sessions && sessions.length > 0) {
-            for (const session of sessions) {
-                const scanner = admin.reconstructScanner(session);
-                scans.set(session.scanId, scanner);
+        // 1. Check for elevation session (priority - one-time, gets deleted)
+        const elevatedSessions = await admin.loadElevatedSession();
+        if (elevatedSessions && elevatedSessions.length > 0) {
+            for (const s of elevatedSessions) {
+                const scanner = admin.reconstructScanner(s);
+                scans.set(s.scanId, scanner);
             }
-            restoredSessions = sessions.map(s => ({
+            restoredSessions = elevatedSessions.map(s => ({
                 scan_id: s.scanId,
                 status: 'complete',
                 current_path: s.rootPath,
@@ -637,6 +653,29 @@ function register(mainWindow) {
                 errors_count: s.errorsCount,
                 elapsed_seconds: 0,
             }));
+            return;
+        }
+
+        // 2. Check for persistent session (only if sessionRestore enabled)
+        if (!preferences.get('sessionRestore')) return;
+
+        const persistentSession = await session.loadSession();
+        if (persistentSession && persistentSession.scans.length > 0) {
+            for (const s of persistentSession.scans) {
+                const scanner = session.reconstructScanner(s);
+                scans.set(s.scanId, scanner);
+            }
+            restoredSessions = persistentSession.scans.map(s => ({
+                scan_id: s.scanId,
+                status: 'complete',
+                current_path: s.rootPath,
+                dirs_scanned: s.dirsScanned,
+                files_found: s.filesFound,
+                total_size: s.totalSize,
+                errors_count: s.errorsCount,
+                elapsed_seconds: 0,
+            }));
+            restoredUiState = persistentSession.ui || null;
         }
     })().catch(err => console.error('Session restore failed:', err));
 
@@ -645,8 +684,10 @@ function register(mainWindow) {
     ipcMain.handle('get-restored-session', async () => {
         await sessionLoadPromise;
         const data = restoredSessions;
+        const ui = restoredUiState;
         restoredSessions = null; // one-time read
-        return data;
+        restoredUiState = null;
+        return data ? { sessions: data, ui } : null;
     });
 
     // === File Tags ===
@@ -827,8 +868,75 @@ function register(mainWindow) {
         return getRegisteredHotkey();
     });
 
-    // Cleanup on app quit: terminate workers and release memory
+    // === Preferences ===
+    ipcMain.handle('get-preferences', async () => {
+        return preferences.getAll();
+    });
+
+    ipcMain.handle('set-preference', async (_event, key, value) => {
+        return preferences.set(key, value);
+    });
+
+    ipcMain.handle('set-preferences-multiple', async (_event, entries) => {
+        return preferences.setMultiple(entries);
+    });
+
+    // === Session Management ===
+    ipcMain.handle('get-session-info', async () => {
+        return session.getSessionInfo();
+    });
+
+    ipcMain.handle('save-session-now', async (_event, uiState) => {
+        try {
+            const saved = await session.saveSession(scans, uiState || {});
+            return { success: saved };
+        } catch (err) {
+            return { success: false, error: err.message };
+        }
+    });
+
+    // Cleanup on app quit: save session, then terminate workers and release memory
     app.on('before-quit', () => {
+        // 1. Flush preferences (synchron, sicherstellt dass alles gespeichert ist)
+        preferences.flush();
+
+        // 2. Session speichern (synchron via gzipSync, da before-quit nicht async wartet)
+        if (preferences.get('sessionSaveOnClose') && scans.size > 0) {
+            try {
+                const zlib = require('zlib');
+                const fss = require('fs');
+                const pathm = require('path');
+                const SESSION_DIR = pathm.join(process.env.APPDATA || process.env.HOME || '.', 'speicher-analyse');
+                const SESSION_FILE = pathm.join(SESSION_DIR, 'session.json.gz');
+
+                const sessions = [];
+                for (const [scanId, scanner] of scans) {
+                    if (!scanner.isComplete) continue;
+                    sessions.push({
+                        scanId,
+                        rootPath: scanner.rootPath,
+                        totalSize: scanner.totalSize,
+                        dirsScanned: scanner.dirsScanned,
+                        filesFound: scanner.filesFound,
+                        errorsCount: scanner.errorsCount,
+                        tree: [...scanner.tree.entries()],
+                        topFiles: scanner.topFiles,
+                        extensionStats: [...scanner.extensionStats.entries()],
+                    });
+                }
+
+                if (sessions.length > 0) {
+                    if (!fss.existsSync(SESSION_DIR)) fss.mkdirSync(SESSION_DIR, { recursive: true });
+                    const payload = { version: 1, savedAt: new Date().toISOString(), ui: {}, scans: sessions };
+                    const compressed = zlib.gzipSync(JSON.stringify(payload));
+                    fss.writeFileSync(SESSION_FILE, compressed);
+                }
+            } catch (err) {
+                console.error('Session-Save beim Beenden fehlgeschlagen:', err.message);
+            }
+        }
+
+        // 3. Workers terminieren + Speicher freigeben
         for (const [id, scanner] of scans) {
             if (scanner.worker) {
                 try { scanner.worker.terminate(); } catch {}
@@ -847,4 +955,4 @@ function register(mainWindow) {
     });
 }
 
-module.exports = { register };
+module.exports = { register, preferences };

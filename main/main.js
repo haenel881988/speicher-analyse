@@ -73,8 +73,8 @@ if (!gotLock) {
         const { buildAppMenu } = require('./menu');
         Menu.setApplicationMenu(buildAppMenu(mainWindow));
 
-        // Register IPC handlers
-        const { register } = require('./ipc-handlers');
+        // Register IPC handlers (also inits PreferencesStore)
+        const { register, preferences } = require('./ipc-handlers');
         register(mainWindow);
 
         // System Tray
@@ -85,10 +85,11 @@ if (!gotLock) {
             console.error('Tray init error:', err);
         }
 
-        // Global Hotkey (Ctrl+Shift+S)
+        // Global Hotkey (aus Preferences laden, fallback: Ctrl+Shift+S)
         try {
             const { registerGlobalHotkey } = require('./global-hotkey');
-            registerGlobalHotkey(mainWindow);
+            const savedHotkey = preferences.get('globalHotkey');
+            registerGlobalHotkey(mainWindow, savedHotkey);
         } catch (err) {
             console.error('Global hotkey init error:', err);
         }

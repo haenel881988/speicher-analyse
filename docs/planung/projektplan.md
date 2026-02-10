@@ -16,7 +16,8 @@
 | v7.0 | Fertig | Netzwerk-Monitor, Privacy-Dashboard, Software-Audit, S.M.A.R.T., System-Score |
 | v7.1 | Fertig | Monaco Editor, PDF/DOCX/XLSX-Viewer, Sidebar-Gruppen, Omnibar-Fixes |
 | v7.2 | Fertig | Governance, WCAG-Kontrast-Fixes, Terminal Multi-Shell, Versions-Fix |
-| v7.3 | Geplant | WCAG-Vertiefung, Resizable Panels, Terminal-Emulation (xterm.js) |
+| v7.3 | Fertig | Terminal: node-pty + xterm.js (echtes PTY), CWD-Sync |
+| v7.4 | Fertig | Session-Persistenz, PreferencesStore, Energieverwaltung, Einstellungen-Rewrite |
 | v8.0 | Geplant | Automatisierung, Browser-Bereinigung, Backup, Undo-Log |
 | v9.0 | Vision | KI-Integration (BYOB: Cloud + Ollama), Notion-Modul |
 | v1.0.0 | Vision | Erster stabiler Release (Semver), Installer, Auto-Update, Lizenzierung |

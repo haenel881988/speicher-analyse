@@ -179,6 +179,12 @@ async function init() {
     setupToolbar();
     setupExport();
     setupThemeToggle();
+
+    // Listen for theme changes from Settings page
+    document.addEventListener('settings-theme-change', (e) => {
+        if (e.detail?.theme) toggleTheme(e.detail.theme);
+    });
+
     setupPropertiesModal();
     setupContextMenuActions();
     setupKeyboardShortcuts();
@@ -209,9 +215,21 @@ async function init() {
         if (badge) badge.style.display = '';
     }
 
-    // Start battery monitoring
+    // Start battery monitoring (interval depends on energy mode)
     await updateBatteryUI();
-    setInterval(updateBatteryUI, 30000);
+    let batteryInterval = 30000; // default
+    try {
+        const prefs = await window.api.getPreferences();
+        if (prefs.energyMode === 'powersave') batteryInterval = 120000;
+        else if (prefs.energyMode === 'auto' && state.batteryInfo?.onBattery) batteryInterval = 60000;
+
+        // One-time theme migration: localStorage → preferences
+        const lsTheme = localStorage.getItem('speicher-analyse-theme');
+        if (lsTheme && lsTheme !== prefs.theme) {
+            window.api.setPreference('theme', lsTheme).catch(() => {});
+        }
+    } catch { /* use default interval */ }
+    setInterval(updateBatteryUI, batteryInterval);
 
     // Smart Reload: State wiederherstellen nach F5 (page reload mit State-Preservation)
     const reloadStateJson = sessionStorage.getItem('speicher-analyse-reload-state');
@@ -249,11 +267,11 @@ async function init() {
             console.error('Smart reload restore error:', err);
         }
     } else {
-        // Check for restored session data after admin elevation restart (pull-based, no race condition)
+        // Check for restored session data (admin elevation OR persistent session)
         try {
-            const sessions = await window.api.getRestoredSession();
-            if (sessions && sessions.length > 0) {
-                const progress = sessions[0];
+            const restored = await window.api.getRestoredSession();
+            if (restored && restored.sessions && restored.sessions.length > 0) {
+                const progress = restored.sessions[0];
                 state.currentScanId = progress.scan_id;
                 state.currentPath = progress.current_path;
                 state.lastScanProgress = progress;
@@ -271,7 +289,13 @@ async function init() {
 
                 setStatus('Session wiederhergestellt', true);
                 await loadAllViews();
-                setStatus('Bereit (Admin-Modus)');
+
+                // Restore UI state (activeTab) if available from persistent session
+                if (restored.ui && restored.ui.activeTab) {
+                    switchToTab(restored.ui.activeTab);
+                }
+
+                setStatus('Bereit');
                 showToast('Scan-Daten wurden wiederhergestellt');
                 setTimeout(() => els.scanProgress.classList.remove('active'), 3000);
             }
@@ -1006,15 +1030,17 @@ function setupThemeToggle() {
     els.themeToggle.onclick = toggleTheme;
 }
 
-function toggleTheme() {
+function toggleTheme(forceTheme) {
     const current = document.documentElement.dataset.theme;
-    const next = current === 'dark' ? 'light' : 'dark';
+    const next = forceTheme || (current === 'dark' ? 'light' : 'dark');
     document.documentElement.dataset.theme = next;
     localStorage.setItem('speicher-analyse-theme', next);
     updateThemeIcons();
     fileTypeChart.updateTheme();
     editorPanel.setTheme(next);
     globalTerminal.updateTheme();
+    // Persist to preferences (async, fire-and-forget)
+    window.api.setPreference('theme', next).catch(() => {});
 }
 
 function updateThemeIcons() {

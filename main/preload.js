@@ -234,6 +234,15 @@ contextBridge.exposeInMainWorld('api', {
     // === System Score ===
     getSystemScore: (results) => ipcRenderer.invoke('get-system-score', results),
 
+    // === Preferences ===
+    getPreferences: () => ipcRenderer.invoke('get-preferences'),
+    setPreference: (key, value) => ipcRenderer.invoke('set-preference', key, value),
+    setPreferencesMultiple: (entries) => ipcRenderer.invoke('set-preferences-multiple', entries),
+
+    // === Session ===
+    getSessionInfo: () => ipcRenderer.invoke('get-session-info'),
+    saveSessionNow: (uiState) => ipcRenderer.invoke('save-session-now', uiState),
+
     // === Terminal Menu Actions (from menu bar) ===
     onToggleTerminal: (callback) => {
         ipcRenderer.removeAllListeners('toggle-terminal');
