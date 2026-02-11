@@ -12,8 +12,8 @@ const { app } = require('electron');
  *
  * Im Unterschied zu admin.js:
  * - Session wird NICHT nach dem Laden gelöscht
- * - dirFiles wird NICHT gespeichert (zu groß, ~80-120MB)
- * - nameIndex wird NICHT gespeichert (kann aus tree rekonstruiert werden)
+ * - dirFiles wird mitgespeichert (gzip-komprimiert ~5-15MB)
+ * - nameIndex wird aus dirFiles rekonstruiert (nicht separat gespeichert)
  * - UI-State wird mitgespeichert (activeTab, activePath, driveSelection)
  */
 
@@ -42,8 +42,8 @@ async function saveSession(scans, uiState) {
             tree: [...scanner.tree.entries()],
             topFiles: scanner.topFiles,
             extensionStats: [...scanner.extensionStats.entries()],
-            // dirFiles bewusst weggelassen (zu groß)
-            // nameIndex bewusst weggelassen (rekonstruierbar)
+            dirFiles: scanner.dirFiles ? [...scanner.dirFiles.entries()] : null,
+            // nameIndex wird aus dirFiles rekonstruiert
         });
     }
 
@@ -119,7 +119,7 @@ async function loadSession() {
 
 /**
  * Rekonstruiert einen DiskScanner aus gespeicherten Session-Daten.
- * Identisch zu admin.js:reconstructScanner, aber ohne dirFiles.
+ * Stellt dirFiles wieder her und baut nameIndex aus dirFiles auf.
  * @param {Object} session - Einzelner Scan aus loadSession().scans
  * @returns {DiskScanner}
  */
@@ -137,7 +137,26 @@ function reconstructScanner(session) {
     scanner.tree = new Map(session.tree);
     scanner.topFiles = session.topFiles || [];
     scanner.extensionStats = new Map(session.extensionStats);
-    scanner.dirFiles = null; // Wird nicht persistiert
+
+    // dirFiles wiederherstellen (seit v7.3 in Session gespeichert)
+    if (session.dirFiles) {
+        scanner.dirFiles = new Map(session.dirFiles);
+        // nameIndex aus dirFiles rekonstruieren
+        scanner.nameIndex = new Map();
+        for (const [dirPath, files] of scanner.dirFiles) {
+            for (const f of files) {
+                const lower = f.name.toLowerCase();
+                if (!scanner.nameIndex.has(lower)) {
+                    scanner.nameIndex.set(lower, []);
+                }
+                scanner.nameIndex.get(lower).push(dirPath);
+            }
+        }
+        console.log(`[Session] nameIndex rekonstruiert: ${scanner.nameIndex.size} Einträge`);
+    } else {
+        scanner.dirFiles = null;
+        // nameIndex bleibt leerer Map vom Konstruktor
+    }
 
     return scanner;
 }

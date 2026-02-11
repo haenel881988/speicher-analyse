@@ -1075,6 +1075,7 @@ function register(mainWindow) {
                         tree: [...scanner.tree.entries()],
                         topFiles: scanner.topFiles,
                         extensionStats: [...scanner.extensionStats.entries()],
+                        dirFiles: scanner.dirFiles ? [...scanner.dirFiles.entries()] : null,
                     });
                 }
 

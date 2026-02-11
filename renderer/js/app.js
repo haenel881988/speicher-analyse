@@ -302,7 +302,7 @@ async function init() {
                 els.scanProgress.classList.add('active');
 
                 setStatus('Session wiederhergestellt', true);
-                // skipPostAnalysis=true: Keine 5 Hintergrund-Scans, kein switchToTab('dashboard')
+                // Views laden (ohne Post-Analyse zunächst)
                 await loadAllViews(true);
 
                 // Restore UI state (activeTab) if available from persistent session
@@ -326,6 +326,11 @@ async function init() {
                 setStatus('Bereit');
                 showToast('Scan-Daten wurden wiederhergestellt');
                 setTimeout(() => els.scanProgress.classList.remove('active'), 3000);
+
+                // Dashboard-Analyse im Hintergrund starten (ohne Tab-Wechsel)
+                runPostScanAnalysis(false).catch(err =>
+                    console.error('[Session] Post-Analyse nach Restore fehlgeschlagen:', err)
+                );
             } else {
                 console.log('[Session] Keine Session-Daten vorhanden (Datei fehlt oder leer)');
             }
@@ -571,7 +576,7 @@ async function loadAllViews(skipPostAnalysis = false) {
     }
 }
 
-async function runPostScanAnalysis() {
+async function runPostScanAnalysis(switchToDashboard = true) {
     setStatus('Analyse wird durchgeführt...', true);
     const [cleanup, oldFiles, registry, optimizer, sizeDuplicates] = await Promise.allSettled([
         cleanupView.autoScan(),
@@ -582,10 +587,10 @@ async function runPostScanAnalysis() {
     ]);
     dashboardView.updateResults({ cleanup, oldFiles, registry, optimizer, sizeDuplicates });
     setStatus('Bereit');
-    switchToTab('dashboard');
-
-    // Release bulk file data to free ~200-400 MB RAM
-    await window.api.releaseScanBulkData(state.currentScanId);
+    if (switchToDashboard) {
+        switchToTab('dashboard');
+    }
+    // dirFiles bleibt im Speicher für Duplikate, Suche, Session-Persistenz
 }
 
 function switchToTab(tabName) {
