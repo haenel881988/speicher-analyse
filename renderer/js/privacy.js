@@ -249,6 +249,9 @@ export class PrivacyView {
     _renderSetting(s, isAdvanced = false) {
         const statusClass = s.isPrivate ? 'safe' : 'high';
         const statusText = s.isPrivate ? 'Geschützt' : 'Offen';
+        const statusHint = s.isPrivate
+            ? 'Deine Daten werden bei dieser Einstellung nicht an Microsoft gesendet.'
+            : 'Diese Einstellung teilt Daten mit Microsoft oder Werbepartnern.';
         const warningHtml = s.warning ? `<div class="privacy-setting-warning">${this._esc(s.warning)}</div>` : '';
 
         // Smarte Empfehlung für diese Einstellung
@@ -256,8 +259,8 @@ export class PrivacyView {
         let recHtml = '';
         if (rec) {
             const recColors = { safe: 'risk-safe', caution: 'risk-medium', risky: 'risk-high' };
-            const recLabels = { safe: 'Sicher', caution: 'Vorsicht', risky: 'Risiko' };
-            const recIcons = { safe: '&#10003;', caution: '&#9888;', risky: '&#9888;' };
+            const recLabels = { safe: 'Deaktivieren empfohlen', caution: 'Vorsicht', risky: 'Nicht deaktivieren' };
+            const recIcons = { safe: '&#10003;', caution: '&#9888;', risky: '&#10007;' };
             const badgeClass = recColors[rec.recommendation] || 'risk-medium';
             const badgeLabel = recLabels[rec.recommendation] || 'Prüfen';
             const badgeIcon = recIcons[rec.recommendation] || '';
@@ -265,6 +268,7 @@ export class PrivacyView {
             recHtml = `<div class="privacy-recommendation privacy-rec-${rec.recommendation}">
                 <span class="risk-badge ${badgeClass}">${badgeIcon} ${badgeLabel}</span>
                 <span class="privacy-rec-reason">${this._esc(rec.reason)}</span>
+                ${rec.guidance ? `<div class="privacy-rec-guidance">${this._esc(rec.guidance)}</div>` : ''}
                 ${rec.affectedApps.length > 0 ? `<div class="privacy-rec-apps">${rec.affectedApps.slice(0, 5).map(a =>
                     `<span class="privacy-rec-app" title="${this._esc(a.label)}">${this._esc(a.name)}</span>`
                 ).join('')}${rec.affectedApps.length > 5 ? `<span class="privacy-rec-app">+${rec.affectedApps.length - 5}</span>` : ''}</div>` : ''}
@@ -274,8 +278,8 @@ export class PrivacyView {
         // Laienverständliche Erklärung (aus Backend)
         const explanationHtml = s.explanation ? `<div class="privacy-setting-explanation">${this._esc(s.explanation)}</div>` : '';
 
-        // Auswirkungen
-        const impactsHtml = s.impacts?.length > 0 ? `<div class="privacy-setting-impacts"><strong>Auswirkungen:</strong><ul>${s.impacts.map(i => `<li>${this._esc(i)}</li>`).join('')}</ul></div>` : '';
+        // Auswirkungen beim Deaktivieren
+        const impactsHtml = s.impacts?.length > 0 ? `<div class="privacy-setting-impacts"><strong>Was passiert beim Deaktivieren:</strong><ul>${s.impacts.map(i => `<li>${this._esc(i)}</li>`).join('')}</ul></div>` : '';
 
         return `<div class="privacy-setting ${isAdvanced ? 'privacy-setting-advanced' : ''}" data-id="${s.id}">
             <div class="privacy-setting-info">
@@ -285,10 +289,10 @@ export class PrivacyView {
                 ${impactsHtml}
                 ${warningHtml}
                 ${recHtml}
-                <span class="privacy-setting-path">${this._esc(s.registryPath)}\\${this._esc(s.registryKey)}</span>
             </div>
             <div class="privacy-setting-actions">
-                <span class="risk-badge risk-${statusClass}">${statusText}</span>
+                <span class="risk-badge risk-${statusClass}" title="${statusHint}">${statusText}</span>
+                <span class="privacy-status-hint">${statusHint}</span>
                 ${!s.isPrivate ? `<button class="privacy-btn-small ${isAdvanced ? 'privacy-btn-advanced' : ''}" data-setting="${s.id}" ${isAdvanced ? 'data-advanced="true"' : ''}>${isAdvanced ? 'Ändern...' : 'Schützen'}</button>` : ''}
             </div>
         </div>`;

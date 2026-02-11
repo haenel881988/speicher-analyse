@@ -447,6 +447,8 @@ async function getPrivacySettings() {
                     category: setting.category,
                     name: setting.name,
                     description: setting.description,
+                    explanation: setting.explanation || null,
+                    impacts: setting.impacts || [],
                     registryPath: setting.registryPath,
                     registryKey: setting.registryKey,
                     registryValue: currentValue,
@@ -472,6 +474,8 @@ async function getPrivacySettings() {
             category: setting.category,
             name: setting.name,
             description: setting.description,
+            explanation: setting.explanation || null,
+            impacts: setting.impacts || [],
             registryPath: setting.registryPath,
             registryKey: setting.registryKey,
             registryValue: null,
@@ -691,19 +695,22 @@ function getSmartRecommendations(programs) {
         const apps = settingApps.get(setting.id) || [];
         const count = apps.length;
 
-        let recommendation, reason;
+        let recommendation, reason, guidance;
         if (count === 0) {
             recommendation = 'safe';
             reason = 'Keine deiner installierten Apps benötigt diese Funktion.';
+            guidance = 'Empfehlung: Deaktivieren für besseren Datenschutz.';
         } else if (count <= 2) {
             recommendation = 'caution';
             const names = apps.map(a => a.name).join(', ');
             reason = `${count} App${count > 1 ? 's' : ''} nutzt diese Funktion: ${names}`;
+            guidance = 'Vorsicht: Diese Apps könnten eingeschränkt werden. Nur deaktivieren wenn du diese Apps nicht brauchst.';
         } else {
             recommendation = 'risky';
             const names = apps.slice(0, 3).map(a => a.name).join(', ');
             const more = count > 3 ? ` und ${count - 3} weitere` : '';
             reason = `${count} Apps benötigen diese Funktion aktiv: ${names}${more}`;
+            guidance = 'Nicht empfohlen: Zu viele deiner Apps brauchen diese Funktion. Nur deaktivieren wenn du genau weisst was du tust.';
         }
 
         return {
@@ -711,6 +718,7 @@ function getSmartRecommendations(programs) {
             recommendation, // 'safe' | 'caution' | 'risky'
             affectedApps: apps,
             reason,
+            guidance,
         };
     });
 }
