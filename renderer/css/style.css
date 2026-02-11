@@ -4348,6 +4348,52 @@ body {
 .audit-btn-detail:hover { color: var(--accent-text); border-color: var(--accent); }
 .audit-empty { padding: 24px; text-align: center; color: var(--text-secondary); }
 
+/* Kategorie-Badges */
+.audit-category-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.audit-category-filter {
+    padding: 5px 8px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 12px;
+    min-width: 140px;
+}
+
+/* Software-Update-Badges und Buttons */
+.audit-update-badge {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 8px;
+    font-size: 10px;
+    font-weight: 600;
+    background: rgba(78, 204, 163, 0.15);
+    color: #4ecca3;
+    margin-right: 4px;
+}
+.audit-btn-update {
+    padding: 2px 8px;
+    background: var(--accent);
+    border: none;
+    border-radius: 4px;
+    color: #fff;
+    cursor: pointer;
+    font-size: 10px;
+    font-weight: 600;
+}
+.audit-btn-update:hover { opacity: 0.85; }
+.audit-btn-update:disabled { opacity: 0.4; cursor: not-allowed; }
+.audit-no-update { color: var(--text-muted); font-size: 11px; }
+.audit-update-count { font-size: 12px; color: #4ecca3; font-weight: 600; }
+.audit-loading-updates { font-size: 12px; color: var(--text-secondary); font-style: italic; }
+
 /* ===== v7.0: Network Monitor ===== */
 .network-page { padding: 20px; }
 .network-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 8px; }

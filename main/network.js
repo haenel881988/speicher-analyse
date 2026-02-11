@@ -2,6 +2,7 @@
 
 const http = require('http');
 const { runPS, runSafe, isSafeShellArg } = require('./cmd-utils');
+const log = require('./logger').createLogger('network');
 
 const PS_TIMEOUT = 30000;
 const PS_OPTS = { timeout: PS_TIMEOUT, maxBuffer: 10 * 1024 * 1024 };
@@ -50,7 +51,7 @@ async function getConnections() {
             processPath:   c.processPath   || '',
         }));
     } catch (err) {
-        console.error('Netzwerkverbindungen konnten nicht abgerufen werden:', err.message);
+        log.error('Netzwerkverbindungen konnten nicht abgerufen werden:', err.message);
         return [];
     }
 }
@@ -95,7 +96,7 @@ async function getBandwidth() {
             sentPackets:     Number(a.sentPackets)     || 0,
         }));
     } catch (err) {
-        console.error('Netzwerkadapter-Statistiken konnten nicht abgerufen werden:', err.message);
+        log.error('Netzwerkadapter-Statistiken konnten nicht abgerufen werden:', err.message);
         return [];
     }
 }
@@ -146,7 +147,7 @@ async function getFirewallRules(direction = 'Inbound') {
             program:     r.program     || '',
         }));
     } catch (err) {
-        console.error('Firewall-Regeln konnten nicht abgerufen werden:', err.message);
+        log.error('Firewall-Regeln konnten nicht abgerufen werden:', err.message);
         return [];
     }
 }
@@ -262,7 +263,7 @@ async function getNetworkSummary() {
             topProcesses,
         };
     } catch (err) {
-        console.error('Netzwerk-Zusammenfassung konnte nicht abgerufen werden:', err.message);
+        log.error('Netzwerk-Zusammenfassung konnte nicht abgerufen werden:', err.message);
         return {
             totalConnections: 0,
             establishedCount: 0,
@@ -566,7 +567,7 @@ async function lookupIPs(ipAddresses) {
             }
         }
     } catch (err) {
-        console.error('ip-api.com Batch-Abfrage fehlgeschlagen:', err.message, '→ Fallback auf DNS');
+        log.error('ip-api.com Batch-Abfrage fehlgeschlagen:', err.message, '→ Fallback auf DNS');
         await _fallbackDNSResolve(batch, results);
     }
 

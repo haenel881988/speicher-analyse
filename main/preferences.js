@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { app } = require('electron');
+const log = require('./logger').createLogger('prefs');
 
 /**
  * PreferencesStore - Zentraler Einstellungsspeicher.
@@ -131,7 +132,7 @@ class PreferencesStore {
             fs.writeFileSync(this.dbPath, JSON.stringify(this.data, null, 2), 'utf8');
             this._dirty = false;
         } catch (err) {
-            console.error('Failed to save preferences:', err.message);
+            log.error('Failed to save preferences:', err.message);
         }
     }
 

@@ -3,6 +3,7 @@
 const { execFile } = require('child_process');
 const { promisify } = require('util');
 const { runPS, runSafe } = require('./cmd-utils');
+const log = require('./logger').createLogger('privacy');
 
 const execFileAsync = promisify(execFile);
 
@@ -704,7 +705,7 @@ async function getScheduledTasksAudit() {
             };
         });
     } catch (err) {
-        console.error('Fehler beim Lesen der geplanten Aufgaben:', err.message);
+        log.error('Fehler beim Lesen der geplanten Aufgaben:', err.message);
         return [];
     }
 }

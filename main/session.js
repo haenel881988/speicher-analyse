@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
 const { app } = require('electron');
+const log = require('./logger').createLogger('session');
 
 /**
  * SessionManager - Speichert und lädt Scan-Daten + UI-State.
@@ -112,7 +113,7 @@ async function loadSession() {
             scans: data.scans,
         };
     } catch (err) {
-        console.error('Session laden fehlgeschlagen:', err.message);
+        log.error('Session laden fehlgeschlagen:', err.message);
         return null;
     }
 }
@@ -152,7 +153,7 @@ function reconstructScanner(session) {
                 scanner.nameIndex.get(lower).push(dirPath);
             }
         }
-        console.log(`[Session] nameIndex rekonstruiert: ${scanner.nameIndex.size} Einträge`);
+        log.info(`nameIndex rekonstruiert: ${scanner.nameIndex.size} Einträge`);
     } else {
         scanner.dirFiles = null;
         // nameIndex bleibt leerer Map vom Konstruktor

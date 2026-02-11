@@ -228,6 +228,7 @@ contextBridge.exposeInMainWorld('api', {
     // === Software Audit ===
     auditSoftware: () => ipcRenderer.invoke('audit-software'),
     correlateSoftware: (program) => ipcRenderer.invoke('correlate-software', program),
+    checkAuditUpdates: () => ipcRenderer.invoke('check-audit-updates'),
 
     // === Network Monitor ===
     getConnections: () => ipcRenderer.invoke('get-connections'),

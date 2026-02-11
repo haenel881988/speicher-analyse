@@ -6,6 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
 const { app } = require('electron');
+const log = require('./logger').createLogger('admin');
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
@@ -82,7 +83,7 @@ async function loadElevatedSession() {
 
         return data.sessions || [];
     } catch (err) {
-        console.error('Failed to load elevation session:', err);
+        log.error('Failed to load elevation session:', err);
         // Clean up broken file
         await fs.promises.unlink(SESSION_FILE).catch(() => {});
         return null;

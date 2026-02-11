@@ -2,6 +2,7 @@ node_modules/
 dist/
 out/
 *.log
+logs/
 .env
 
 # Old v1.0 FastAPI files (not part of Electron app)

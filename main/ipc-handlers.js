@@ -23,6 +23,7 @@ const session = require('./session');
 const { PreferencesStore } = require('./preferences');
 
 const { Worker } = require('worker_threads');
+const log = require('./logger').createLogger('ipc');
 
 // In-memory scan storage
 const scans = new Map();
@@ -74,11 +75,11 @@ function register(mainWindow) {
                 }
                 // Auto-save session after scan completion
                 if (preferences.get('sessionSaveAfterScan')) {
-                    console.log('[Session] Auto-Save nach Scan wird durchgeführt...');
+                    log.info('Auto-Save nach Scan wird durchgeführt...');
                     session.saveSession(scans, lastKnownUiState).then(saved => {
-                        console.log(`[Session] Auto-Save ${saved ? 'erfolgreich' : 'fehlgeschlagen (keine Daten)'}`);
+                        log.info(`Auto-Save ${saved ? 'erfolgreich' : 'fehlgeschlagen (keine Daten)'}`);
                     }).catch(err =>
-                        console.error('[Session] Auto-Save FEHLER:', err.message)
+                        log.error('Auto-Save FEHLER:', err.message)
                     );
                 }
             },
@@ -714,12 +715,12 @@ function register(mainWindow) {
         // 0. Check + execute pending actions (from admin elevation restart)
         const pendingAction = await admin.loadAndClearPendingAction();
         if (pendingAction) {
-            console.log(`[Admin] Pending-Action gefunden: ${pendingAction}`);
+            log.info(`Pending-Action gefunden: ${pendingAction}`);
             if (pendingAction === 'fix-sideloading') {
                 const privacy = require('./privacy');
                 const result = await privacy.fixSideloading();
                 pendingActionResult = { action: pendingAction, ...result };
-                console.log(`[Admin] Sideloading-Fix: ${result.success ? 'ERFOLGREICH' : 'FEHLGESCHLAGEN: ' + result.error}`);
+                log.info(`Sideloading-Fix: ${result.success ? 'ERFOLGREICH' : 'FEHLGESCHLAGEN: ' + result.error}`);
             }
         }
 
@@ -745,18 +746,18 @@ function register(mainWindow) {
 
         // 2. Check for persistent session (only if sessionRestore enabled)
         if (!preferences.get('sessionRestore')) {
-            console.log('[Session] sessionRestore ist deaktiviert → überspringe');
+            log.info('sessionRestore ist deaktiviert → überspringe');
             return;
         }
 
-        console.log('[Session] Lade gespeicherte Session...');
+        log.info('Lade gespeicherte Session...');
         const persistentSession = await session.loadSession();
         if (persistentSession && persistentSession.scans.length > 0) {
-            console.log(`[Session] ${persistentSession.scans.length} Scan(s) gefunden, rekonstruiere...`);
+            log.info(`${persistentSession.scans.length} Scan(s) gefunden, rekonstruiere...`);
             for (const s of persistentSession.scans) {
                 const scanner = session.reconstructScanner(s);
                 scans.set(s.scanId, scanner);
-                console.log(`[Session] Scan ${s.scanId} rekonstruiert: ${s.rootPath}, ${s.filesFound} Dateien, ${s.dirsScanned} Ordner`);
+                log.info(`Scan ${s.scanId} rekonstruiert: ${s.rootPath}, ${s.filesFound} Dateien, ${s.dirsScanned} Ordner`);
             }
             restoredSessions = persistentSession.scans.map(s => ({
                 scan_id: s.scanId,
@@ -770,9 +771,9 @@ function register(mainWindow) {
             }));
             restoredUiState = persistentSession.ui || null;
         } else {
-            console.log('[Session] Keine gespeicherte Session gefunden oder Session-Datei leer');
+            log.info('Keine gespeicherte Session gefunden oder Session-Datei leer');
         }
-    })().catch(err => console.error('[Session] Restore FEHLGESCHLAGEN:', err));
+    })().catch(err => log.error('Restore FEHLGESCHLAGEN:', err));
 
     // Renderer calls this to check for restored session data
     // Awaits the loading promise to guarantee data is ready (no race condition)
@@ -954,7 +955,7 @@ function register(mainWindow) {
             const recommendations = privacy.getSmartRecommendations(programList);
             return { recommendations, programCount: programList.length };
         } catch (err) {
-            console.error('[Privacy] Recommendations-Fehler:', err.message);
+            log.error('Recommendations-Fehler:', err.message);
             return { error: err.message };
         }
     });
@@ -974,6 +975,13 @@ function register(mainWindow) {
     ipcMain.handle('correlate-software', async (_event, program) => {
         const audit = require('./software-audit');
         return audit.correlateProgram(program);
+    });
+
+    ipcMain.handle('check-audit-updates', async () => {
+        const audit = require('./software-audit');
+        const auditResult = await audit.auditAll();
+        if (!auditResult?.programs) return { available: false, error: 'Keine Programmdaten' };
+        return audit.checkUpdatesForPrograms(auditResult.programs);
     });
 
     // === Network Monitor ===
@@ -1073,7 +1081,7 @@ function register(mainWindow) {
         preferences.flush();
 
         // 2. Session speichern (synchron via gzipSync, da before-quit nicht async wartet)
-        console.log(`[Session] before-quit: sessionSaveOnClose=${preferences.get('sessionSaveOnClose')}, scans.size=${scans.size}`);
+        log.info(`before-quit: sessionSaveOnClose=${preferences.get('sessionSaveOnClose')}, scans.size=${scans.size}`);
         if (preferences.get('sessionSaveOnClose') && scans.size > 0) {
             try {
                 const zlib = require('zlib');
@@ -1106,7 +1114,7 @@ function register(mainWindow) {
                     fss.writeFileSync(SESSION_FILE, compressed);
                 }
             } catch (err) {
-                console.error('Session-Save beim Beenden fehlgeschlagen:', err.message);
+                log.error('Session-Save beim Beenden fehlgeschlagen:', err.message);
             }
         }
 

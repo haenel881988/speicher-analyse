@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { app } = require('electron');
+const log = require('./logger').createLogger('tags');
 
 /**
  * File Tags - Color labels for files stored in a local JSON file.
@@ -74,7 +75,7 @@ class FileTagStore {
             fs.writeFileSync(this.dbPath, JSON.stringify(data, null, 2), 'utf8');
             this._dirty = false;
         } catch (err) {
-            console.error('Failed to save file tags:', err.message);
+            log.error('Failed to save file tags:', err.message);
         }
     }
 

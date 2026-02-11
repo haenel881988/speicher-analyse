@@ -3,6 +3,7 @@
 const { execFile } = require('child_process');
 const { promisify } = require('util');
 const execFileAsync = promisify(execFile);
+const log = require('./logger').createLogger('updates');
 
 // UTF-8 prefix for PowerShell commands
 const PS_UTF8 = '[Console]::OutputEncoding = [Text.UTF8Encoding]::UTF8; ';
@@ -39,7 +40,7 @@ async function checkWindowsUpdates() {
         const parsed = JSON.parse(stdout.trim() || '[]');
         return Array.isArray(parsed) ? parsed : [parsed];
     } catch (err) {
-        console.error('Windows Update check error:', err);
+        log.error('Windows Update check error:', err);
         return [];
     }
 }
@@ -80,7 +81,7 @@ async function getUpdateHistory() {
         const parsed = JSON.parse(stdout.trim() || '[]');
         return Array.isArray(parsed) ? parsed : [parsed];
     } catch (err) {
-        console.error('Update history error:', err);
+        log.error('Update history error:', err);
         return [];
     }
 }
@@ -240,7 +241,7 @@ async function getDriverInfo() {
 
         return drivers;
     } catch (err) {
-        console.error('Driver info error:', err);
+        log.error('Driver info error:', err);
         return [];
     }
 }

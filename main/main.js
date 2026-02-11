@@ -1,12 +1,13 @@
 const { app, BrowserWindow, ipcMain, shell, dialog, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const log = require('./logger').createLogger('main');
 
 // Prevent GPU shader disk cache errors when multiple instances try to access the same cache files
 app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');
 
 process.on('uncaughtException', (err) => {
-    console.error('Main process error:', err);
+    try { log.error('Main process error:', err); } catch { console.error('Main process error:', err); }
 });
 
 // ===== Single Instance Lock =====
@@ -16,7 +17,7 @@ const gotLock = app.requestSingleInstanceLock();
 
 if (!gotLock) {
     // Another instance is already running - quit immediately
-    console.log('Another instance is already running. Quitting.');
+    log.info('Another instance is already running. Quitting.');
     app.quit();
 } else {
     let mainWindow;
@@ -93,7 +94,7 @@ if (!gotLock) {
             const { createTray } = require('./tray');
             createTray(mainWindow);
         } catch (err) {
-            console.error('Tray init error:', err);
+            log.error('Tray init error:', err);
         }
 
         // Global Hotkey (aus Preferences laden, fallback: Ctrl+Shift+S)
@@ -102,7 +103,7 @@ if (!gotLock) {
             const savedHotkey = preferences.get('globalHotkey');
             registerGlobalHotkey(mainWindow, savedHotkey);
         } catch (err) {
-            console.error('Global hotkey init error:', err);
+            log.error('Global hotkey init error:', err);
         }
 
         // File Tags
@@ -112,7 +113,7 @@ if (!gotLock) {
             tagStore.init();
             app._tagStore = tagStore;
         } catch (err) {
-            console.error('File tags init error:', err);
+            log.error('File tags init error:', err);
         }
 
         // Handle --open-folder argument (from shell integration)
@@ -181,7 +182,7 @@ if (!gotLock) {
 
                 debounceReload(() => {
                     lastReloadTime = Date.now();
-                    console.log(`[Auto-Reload] Renderer geändert: ${filename}`);
+                    log.info(`Renderer geändert: ${filename}`);
                     mainWindow.webContents.reloadIgnoringCache();
                 });
             });
@@ -198,19 +199,21 @@ if (!gotLock) {
 
                 debounceReload(() => {
                     lastReloadTime = Date.now();
-                    console.log(`[Auto-Reload] Main-Prozess geändert: ${filename} → App wird neu gestartet...`);
+                    log.info(`Main-Prozess geändert: ${filename} → App wird neu gestartet...`);
                     app.relaunch();
                     app.exit(0);
                 }, 1000);
             });
         } catch (err) {
-            console.error('Auto-Reload watcher error:', err);
+            log.error('Auto-Reload watcher error:', err);
         }
     });
 
     app.on('before-quit', () => {
         isQuitting = true;
         if (app._tagStore) app._tagStore.flush();
+        const { flush: flushLogs } = require('./logger');
+        flushLogs();
         try {
             const { unregisterGlobalHotkey } = require('./global-hotkey');
             unregisterGlobalHotkey();

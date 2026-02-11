@@ -2,6 +2,7 @@
 
 const os = require('os');
 const { runCmd, runPS, runSafe } = require('./cmd-utils');
+const log = require('./logger').createLogger('optimizer');
 
 async function getOptimizationRecommendations() {
     const recommendations = [];
@@ -158,7 +159,7 @@ async function getOptimizationRecommendations() {
         recommendations.sort((a, b) => (impactOrder[a.impact] || 2) - (impactOrder[b.impact] || 2));
 
     } catch (err) {
-        console.error('Optimizer scan error:', err);
+        log.error('Optimizer scan error:', err);
     }
 
     return recommendations;

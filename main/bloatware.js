@@ -3,6 +3,7 @@
 const path = require('path');
 const fs = require('fs');
 const { runCmd, execFileAsync } = require('./cmd-utils');
+const log = require('./logger').createLogger('bloatware');
 
 // Kuratierte Bloatware-Datenbank
 const BLOATWARE_DB = [
@@ -74,7 +75,7 @@ async function scanBloatware() {
             }
         }
     } catch (err) {
-        console.error('Bloatware scan error:', err);
+        log.error('Bloatware scan error:', err);
     }
 
     // Sortieren: Gefährlich zuerst, dann nach Risiko

@@ -1,6 +1,7 @@
 'use strict';
 
 const { runPS } = require('./cmd-utils');
+const log = require('./logger').createLogger('smart');
 
 /**
  * S.M.A.R.T. Festplattengesundheit - Windows-Modul
@@ -163,7 +164,7 @@ async function getDiskHealth() {
         );
         physicalDisks = parseJsonArray(stdout);
     } catch (err) {
-        console.error('[smart] Fehler beim Lesen der physischen Datentraeger:', err.message || err);
+        log.error('Fehler beim Lesen der physischen Datentraeger:', err.message || err);
         return [];
     }
 
@@ -186,7 +187,7 @@ async function getDiskHealth() {
         }
     } catch (err) {
         // Nicht alle Systeme unterstuetzen StorageReliabilityCounter
-        console.warn('[smart] Zuverlaessigkeitszaehler nicht verfuegbar:', err.message || err);
+        log.warn('Zuverlaessigkeitszaehler nicht verfuegbar:', err.message || err);
     }
 
     // --- 3) Disk-Info (Partitionen) -----------------------------------------
@@ -203,7 +204,7 @@ async function getDiskHealth() {
             }
         }
     } catch (err) {
-        console.warn('[smart] Disk-Info nicht verfuegbar:', err.message || err);
+        log.warn('Disk-Info nicht verfuegbar:', err.message || err);
     }
 
     // --- Zusammenfuehren -----------------------------------------------------
