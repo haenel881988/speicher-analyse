@@ -215,6 +215,8 @@ contextBridge.exposeInMainWorld('api', {
     applyAllPrivacy: () => ipcRenderer.invoke('apply-all-privacy'),
     getScheduledTasksAudit: () => ipcRenderer.invoke('get-scheduled-tasks-audit'),
     disableScheduledTask: (taskPath) => ipcRenderer.invoke('disable-scheduled-task', taskPath),
+    checkSideloading: () => ipcRenderer.invoke('check-sideloading'),
+    fixSideloading: () => ipcRenderer.invoke('fix-sideloading'),
 
     // === S.M.A.R.T. Disk Health ===
     getDiskHealth: () => ipcRenderer.invoke('get-disk-health'),

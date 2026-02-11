@@ -11,95 +11,22 @@ const DEFAULT_OPTS = { encoding: 'utf8', windowsHide: true };
 // ============================================================================
 // Datenschutz-Einstellungen Datenbank
 // ============================================================================
+// tier: 'standard' = sicher, keine Nebeneffekte
+// tier: 'advanced' = kann Systemverhalten beeinflussen, braucht Warnhinweis
 
 const PRIVACY_SETTINGS = [
-    {
-        id: 'telemetrie-policy',
-        category: 'telemetrie',
-        name: 'Telemetrie (Gruppenrichtlinie)',
-        description: 'Sendet Diagnose- und Nutzungsdaten an Microsoft. Richtlinienebene.',
-        registryPath: 'HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\DataCollection',
-        registryKey: 'AllowTelemetry',
-        recommendedValue: 0,
-        valueType: 'REG_DWORD',
-        riskLevel: 'high',
-    },
-    {
-        id: 'telemetrie-datacollection',
-        category: 'telemetrie',
-        name: 'Telemetrie (Datensammlung)',
-        description: 'Steuert den Umfang der an Microsoft gesendeten Diagnosedaten.',
-        registryPath: 'HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\DataCollection',
-        registryKey: 'AllowTelemetry',
-        recommendedValue: 0,
-        valueType: 'REG_DWORD',
-        riskLevel: 'high',
-    },
+    // ── STANDARD-Einstellungen (sicher, nur Benutzer-Ebene) ─────────────
     {
         id: 'werbung-id',
         category: 'werbung',
         name: 'Werbe-ID',
-        description: 'Ermoeglicht personalisierte Werbung anhand einer eindeutigen Geraete-ID.',
+        description: 'Ermöglicht personalisierte Werbung anhand einer eindeutigen Geräte-ID.',
         registryPath: 'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\AdvertisingInfo',
         registryKey: 'Enabled',
         recommendedValue: 0,
         valueType: 'REG_DWORD',
         riskLevel: 'moderate',
-    },
-    {
-        id: 'standort-zugriff',
-        category: 'standort',
-        name: 'Standortzugriff',
-        description: 'Erlaubt Apps den Zugriff auf Ihren Standort.',
-        registryPath: 'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\location',
-        registryKey: 'Value',
-        recommendedValue: 'Deny',
-        valueType: 'REG_SZ',
-        riskLevel: 'high',
-    },
-    {
-        id: 'diagnose-toast',
-        category: 'diagnose',
-        name: 'Diagnose-Benachrichtigungen',
-        description: 'Steuert die Anzeige von Diagnose-Benachrichtigungen.',
-        registryPath: 'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Diagnostics\\DiagTrack',
-        registryKey: 'ShowedToastAtLevel',
-        recommendedValue: 0,
-        valueType: 'REG_DWORD',
-        riskLevel: 'moderate',
-    },
-    {
-        id: 'aktivitaet-feed',
-        category: 'aktivitaet',
-        name: 'Aktivitaetsverlauf',
-        description: 'Erfasst Ihre Aktivitaeten (geoeffnete Apps, Dateien, Webseiten) und zeigt sie in der Zeitachse an.',
-        registryPath: 'HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\System',
-        registryKey: 'EnableActivityFeed',
-        recommendedValue: 0,
-        valueType: 'REG_DWORD',
-        riskLevel: 'high',
-    },
-    {
-        id: 'aktivitaet-publish',
-        category: 'aktivitaet',
-        name: 'Aktivitaeten veroeffentlichen',
-        description: 'Sendet Ihren Aktivitaetsverlauf an Microsoft-Server.',
-        registryPath: 'HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\System',
-        registryKey: 'PublishUserActivities',
-        recommendedValue: 0,
-        valueType: 'REG_DWORD',
-        riskLevel: 'high',
-    },
-    {
-        id: 'wifi-sense',
-        category: 'telemetrie',
-        name: 'WiFi Sense',
-        description: 'Automatische Verbindung mit vorgeschlagenen WLAN-Hotspots und Freigabe von Netzwerken.',
-        registryPath: 'HKLM\\SOFTWARE\\Microsoft\\WcmSvc\\wifinetworkmanager\\config',
-        registryKey: 'AutoConnectAllowedOEM',
-        recommendedValue: 0,
-        valueType: 'REG_DWORD',
-        riskLevel: 'moderate',
+        tier: 'standard',
     },
     {
         id: 'cortana-consent',
@@ -111,6 +38,19 @@ const PRIVACY_SETTINGS = [
         recommendedValue: 0,
         valueType: 'REG_DWORD',
         riskLevel: 'moderate',
+        tier: 'standard',
+    },
+    {
+        id: 'feedback-haeufigkeit',
+        category: 'telemetrie',
+        name: 'Feedback-Häufigkeit',
+        description: 'Bestimmt, wie oft Windows nach Feedback fragt.',
+        registryPath: 'HKCU\\SOFTWARE\\Microsoft\\Siuf\\Rules',
+        registryKey: 'NumberOfSIUFInPeriod',
+        recommendedValue: 0,
+        valueType: 'REG_DWORD',
+        riskLevel: 'moderate',
+        tier: 'standard',
     },
     {
         id: 'handschrift-daten',
@@ -122,6 +62,19 @@ const PRIVACY_SETTINGS = [
         recommendedValue: 1,
         valueType: 'REG_DWORD',
         riskLevel: 'moderate',
+        tier: 'standard',
+    },
+    {
+        id: 'diagnose-toast',
+        category: 'diagnose',
+        name: 'Diagnose-Benachrichtigungen',
+        description: 'Steuert die Anzeige von Diagnose-Benachrichtigungen.',
+        registryPath: 'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Diagnostics\\DiagTrack',
+        registryKey: 'ShowedToastAtLevel',
+        recommendedValue: 0,
+        valueType: 'REG_DWORD',
+        riskLevel: 'moderate',
+        tier: 'standard',
     },
     {
         id: 'app-diagnose',
@@ -133,17 +86,86 @@ const PRIVACY_SETTINGS = [
         recommendedValue: 'Deny',
         valueType: 'REG_SZ',
         riskLevel: 'moderate',
+        tier: 'standard',
     },
     {
-        id: 'feedback-haeufigkeit',
+        id: 'standort-zugriff',
+        category: 'standort',
+        name: 'Standortzugriff',
+        description: 'Erlaubt Apps den Zugriff auf Ihren Standort.',
+        registryPath: 'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\location',
+        registryKey: 'Value',
+        recommendedValue: 'Deny',
+        valueType: 'REG_SZ',
+        riskLevel: 'moderate',
+        tier: 'standard',
+    },
+
+    // ── ERWEITERTE Einstellungen (Systemebene, mögliche Nebeneffekte) ───
+    {
+        id: 'telemetrie-policy',
         category: 'telemetrie',
-        name: 'Feedback-Haeufigkeit',
-        description: 'Bestimmt, wie oft Windows nach Feedback fragt.',
-        registryPath: 'HKCU\\SOFTWARE\\Microsoft\\Siuf\\Rules',
-        registryKey: 'NumberOfSIUFInPeriod',
+        name: 'Telemetrie (Gruppenrichtlinie)',
+        description: 'Sendet Diagnose- und Nutzungsdaten an Microsoft. Richtlinienebene.',
+        registryPath: 'HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\DataCollection',
+        registryKey: 'AllowTelemetry',
+        recommendedValue: 1, // Minimum auf Pro (0=Security ist nur Enterprise/Education)
+        valueType: 'REG_DWORD',
+        riskLevel: 'high',
+        tier: 'advanced',
+        warning: 'ACHTUNG: Auf Windows Pro/Home ist Level 0 (Sicherheit) nicht verfügbar und kann unerwünschte Nebeneffekte verursachen: "Von Organisation verwaltet"-Banner, blockierte App-Installationen (Sideloading), Probleme mit Windows-Updates. Empfohlen: Level 1 (Erforderlich).',
+    },
+    {
+        id: 'telemetrie-datacollection',
+        category: 'telemetrie',
+        name: 'Telemetrie (Datensammlung)',
+        description: 'Steuert den Umfang der an Microsoft gesendeten Diagnosedaten.',
+        registryPath: 'HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\DataCollection',
+        registryKey: 'AllowTelemetry',
+        recommendedValue: 1, // Minimum auf Pro
+        valueType: 'REG_DWORD',
+        riskLevel: 'high',
+        tier: 'advanced',
+        warning: 'Gleiche Risiken wie Telemetrie-Gruppenrichtlinie. Auf Windows Pro/Home sollte dieser Wert nicht auf 0 gesetzt werden.',
+    },
+    {
+        id: 'wifi-sense',
+        category: 'telemetrie',
+        name: 'WiFi Sense',
+        description: 'Automatische Verbindung mit vorgeschlagenen WLAN-Hotspots und Freigabe von Netzwerken.',
+        registryPath: 'HKLM\\SOFTWARE\\Microsoft\\WcmSvc\\wifinetworkmanager\\config',
+        registryKey: 'AutoConnectAllowedOEM',
         recommendedValue: 0,
         valueType: 'REG_DWORD',
         riskLevel: 'moderate',
+        tier: 'advanced',
+        warning: 'Erfordert Administratorrechte. Deaktiviert automatische WLAN-Verbindungen.',
+    },
+    {
+        id: 'aktivitaet-feed',
+        category: 'aktivitaet',
+        name: 'Aktivitätsverlauf',
+        description: 'Erfasst Ihre Aktivitäten (geöffnete Apps, Dateien, Webseiten) und zeigt sie in der Zeitachse an.',
+        registryPath: 'HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\System',
+        registryKey: 'EnableActivityFeed',
+        recommendedValue: 0,
+        valueType: 'REG_DWORD',
+        riskLevel: 'high',
+        tier: 'advanced',
+        warning: 'Erfordert Administratorrechte. Deaktiviert die Windows-Zeitachse (Timeline) systemweit.',
+    },
+    {
+        id: 'aktivitaet-publish',
+        category: 'aktivitaet',
+        name: 'Aktivitäten veröffentlichen',
+        description: 'Sendet Ihren Aktivitätsverlauf an Microsoft-Server.',
+        registryPath: 'HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\System',
+        registryKey: 'PublishUserActivities',
+        recommendedValue: 0,
+        valueType: 'REG_DWORD',
+        riskLevel: 'high',
+        tier: 'advanced',
+        warning: 'Erfordert Administratorrechte. Verhindert die Synchronisation von Aktivitäten mit Microsoft-Servern.',
     },
 ];
 
@@ -175,18 +197,15 @@ async function readRegistryValue(regPath, valueName) {
             'query', regPath, '/v', valueName,
         ], { ...DEFAULT_OPTS, timeout: 10000 });
 
-        // Ausgabe parsen: Zeile mit Wertname, Typ und Daten finden
         const lines = stdout.split('\n');
         for (const line of lines) {
             const trimmed = line.trim();
-            // Format: ValueName    REG_TYPE    Data
             const match = trimmed.match(/^\S+\s+(REG_\w+)\s+(.*)$/);
             if (match && trimmed.startsWith(valueName)) {
                 const type = match[1];
                 const rawData = match[2].trim();
 
                 if (type === 'REG_DWORD') {
-                    // REG_DWORD-Werte kommen als "0x00000000"
                     return parseInt(rawData, 16);
                 }
                 return rawData;
@@ -194,7 +213,6 @@ async function readRegistryValue(regPath, valueName) {
         }
         return null;
     } catch {
-        // Schluessel oder Wert existiert nicht
         return null;
     }
 }
@@ -219,44 +237,117 @@ async function writeRegistryValue(regPath, valueName, value, valueType) {
 }
 
 // ============================================================================
+// Windows-Edition erkennen
+// ============================================================================
+
+let _cachedEdition = null;
+
+/**
+ * Erkennt die Windows-Edition (Pro, Enterprise, Home, etc.)
+ * @returns {Promise<{edition: string, isEnterprise: boolean}>}
+ */
+async function getWindowsEdition() {
+    if (_cachedEdition) return _cachedEdition;
+
+    try {
+        const { stdout } = await runPS(
+            "(Get-CimInstance Win32_OperatingSystem).Caption",
+            { timeout: 15000 }
+        );
+        const edition = (stdout || '').trim();
+        const isEnterprise = /enterprise|education|server/i.test(edition);
+        _cachedEdition = { edition, isEnterprise };
+        return _cachedEdition;
+    } catch {
+        _cachedEdition = { edition: 'Unbekannt', isEnterprise: false };
+        return _cachedEdition;
+    }
+}
+
+// ============================================================================
+// Sideloading-Prüfung
+// ============================================================================
+
+const SIDELOADING_PATH = 'HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\AppModelUnlock';
+const SIDELOADING_KEY = 'AllowAllTrustedApps';
+
+/**
+ * Prüft den Sideloading-Status des Systems.
+ * @returns {Promise<{enabled: boolean, value: number|null}>}
+ */
+async function checkSideloading() {
+    const value = await readRegistryValue(SIDELOADING_PATH, SIDELOADING_KEY);
+    return {
+        enabled: value === 1,
+        value,
+    };
+}
+
+/**
+ * Repariert App-Sideloading (setzt AllowAllTrustedApps auf 1).
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+async function fixSideloading() {
+    try {
+        await writeRegistryValue(SIDELOADING_PATH, SIDELOADING_KEY, 1, 'REG_DWORD');
+        return { success: true };
+    } catch (err) {
+        const message = err.stderr || err.message || String(err);
+        if (message.includes('Zugriff') || message.includes('Access')) {
+            return {
+                success: false,
+                error: 'Administratorrechte erforderlich. Bitte die App als Administrator starten.',
+            };
+        }
+        return { success: false, error: message };
+    }
+}
+
+// ============================================================================
 // Hauptfunktionen
 // ============================================================================
 
 /**
  * Liest alle Datenschutz-Einstellungen aus und gibt ihren aktuellen Status zurueck.
- * @returns {Promise<Array>} Array von Datenschutz-Einstellungsobjekten
+ * Enthält jetzt auch tier, warning und Windows-Edition-Info.
+ * @returns {Promise<{settings: Array, edition: object, sideloading: object}>}
  */
 async function getPrivacySettings() {
-    const results = await Promise.allSettled(
-        PRIVACY_SETTINGS.map(async (setting) => {
-            const currentValue = await readRegistryValue(
-                setting.registryPath,
-                setting.registryKey
-            );
+    const [settingsResults, edition, sideloading] = await Promise.all([
+        Promise.allSettled(
+            PRIVACY_SETTINGS.map(async (setting) => {
+                const currentValue = await readRegistryValue(
+                    setting.registryPath,
+                    setting.registryKey
+                );
 
-            const isPrivate = currentValue !== null &&
-                String(currentValue) === String(setting.recommendedValue);
+                const isPrivate = currentValue !== null &&
+                    String(currentValue) === String(setting.recommendedValue);
 
-            return {
-                id: setting.id,
-                category: setting.category,
-                name: setting.name,
-                description: setting.description,
-                registryPath: setting.registryPath,
-                registryKey: setting.registryKey,
-                registryValue: currentValue,
-                recommendedValue: setting.recommendedValue,
-                isPrivate,
-                riskLevel: setting.riskLevel,
-            };
-        })
-    );
+                return {
+                    id: setting.id,
+                    category: setting.category,
+                    name: setting.name,
+                    description: setting.description,
+                    registryPath: setting.registryPath,
+                    registryKey: setting.registryKey,
+                    registryValue: currentValue,
+                    recommendedValue: setting.recommendedValue,
+                    isPrivate,
+                    riskLevel: setting.riskLevel,
+                    tier: setting.tier,
+                    warning: setting.warning || null,
+                };
+            })
+        ),
+        getWindowsEdition(),
+        checkSideloading(),
+    ]);
 
-    return results.map((result, idx) => {
+    const settings = settingsResults.map((result, idx) => {
         if (result.status === 'fulfilled') {
             return result.value;
         }
-        // Fallback bei Fehler: Einstellung als nicht-privat markieren
         const setting = PRIVACY_SETTINGS[idx];
         return {
             id: setting.id,
@@ -269,8 +360,12 @@ async function getPrivacySettings() {
             recommendedValue: setting.recommendedValue,
             isPrivate: false,
             riskLevel: setting.riskLevel,
+            tier: setting.tier,
+            warning: setting.warning || null,
         };
     });
+
+    return { settings, edition, sideloading };
 }
 
 /**
@@ -294,11 +389,10 @@ async function applyPrivacySetting(id) {
         return { success: true };
     } catch (err) {
         const message = err.stderr || err.message || String(err);
-        // HKLM-Schluessel benoetigen oft Administratorrechte
         if (setting.registryPath.startsWith('HKLM') && message.includes('Zugriff')) {
             return {
                 success: false,
-                error: `Administratorrechte erforderlich fuer: ${setting.name}`,
+                error: `Administratorrechte erforderlich für: ${setting.name}`,
             };
         }
         return { success: false, error: message };
@@ -306,24 +400,29 @@ async function applyPrivacySetting(id) {
 }
 
 /**
- * Wendet alle empfohlenen Datenschutzeinstellungen an.
- * @returns {Promise<{applied: number, failed: number, errors: string[]}>}
+ * Wendet NUR Standard-Einstellungen an (keine erweiterten/gefährlichen).
+ * @returns {Promise<{applied: number, failed: number, skipped: number, errors: string[]}>}
  */
 async function applyAllPrivacy() {
     const results = {
         applied: 0,
         failed: 0,
+        skipped: 0,
         errors: [],
     };
 
-    // Alle Einstellungen parallel anwenden
+    // NUR Standard-Einstellungen anwenden, erweiterte überspringen
+    const standardSettings = PRIVACY_SETTINGS.filter(s => s.tier === 'standard');
+    const advancedCount = PRIVACY_SETTINGS.length - standardSettings.length;
+    results.skipped = advancedCount;
+
     const outcomes = await Promise.allSettled(
-        PRIVACY_SETTINGS.map(setting => applyPrivacySetting(setting.id))
+        standardSettings.map(setting => applyPrivacySetting(setting.id))
     );
 
     for (let i = 0; i < outcomes.length; i++) {
         const outcome = outcomes[i];
-        const setting = PRIVACY_SETTINGS[i];
+        const setting = standardSettings[i];
 
         if (outcome.status === 'fulfilled' && outcome.value.success) {
             results.applied++;
@@ -341,19 +440,15 @@ async function applyAllPrivacy() {
 
 /**
  * Berechnet einen Datenschutz-Score von 0 bis 100.
- * @param {Array} settings - Array von Datenschutz-Einstellungsobjekten
- * @returns {number} Score von 0 (kein Datenschutz) bis 100 (alles geschuetzt)
  */
 function getPrivacyScore(settings) {
     if (!settings || settings.length === 0) return 0;
-
     const privateCount = settings.filter(s => s.isPrivate).length;
     return Math.round((privateCount / settings.length) * 100);
 }
 
 /**
  * Prueft geplante Aufgaben auf Telemetrie-Aufgaben.
- * @returns {Promise<Array>} Array von geplanten Aufgaben mit Telemetrie-Markierung
  */
 async function getScheduledTasksAudit() {
     try {
@@ -380,8 +475,7 @@ async function getScheduledTasksAudit() {
             const taskPath = task.TaskPath || '';
             const fullPath = taskPath + name;
 
-            // Status-Werte von PowerShell: 0=Disabled, 1=Queued, 2=Unknown, 3=Ready, 4=Running
-            const stateMap = { 0: 'Deaktiviert', 1: 'In Warteschlange', 2: 'Unbekannt', 3: 'Bereit', 4: 'Wird ausgefuehrt' };
+            const stateMap = { 0: 'Deaktiviert', 1: 'In Warteschlange', 2: 'Unbekannt', 3: 'Bereit', 4: 'Wird ausgeführt' };
             const stateValue = typeof task.State === 'number' ? task.State : -1;
 
             const isTelemetry = TELEMETRY_TASK_KEYWORDS.some(keyword =>
@@ -404,8 +498,6 @@ async function getScheduledTasksAudit() {
 
 /**
  * Deaktiviert eine geplante Aufgabe.
- * @param {string} taskPath - Voller Pfad der Aufgabe (z.B. "\Microsoft\Windows\...")
- * @returns {Promise<{success: boolean, error?: string}>}
  */
 async function disableScheduledTask(taskPath) {
     if (!taskPath || typeof taskPath !== 'string') {
@@ -413,17 +505,13 @@ async function disableScheduledTask(taskPath) {
     }
 
     try {
-        // Aufgabenname und Pfad trennen
-        // taskPath kommt im Format "\Folder\TaskName" - wir brauchen TaskPath + TaskName separat
         const lastSlash = taskPath.lastIndexOf('\\');
         let folder, taskName;
 
         if (lastSlash > 0 && lastSlash < taskPath.length - 1) {
-            // Format: "\Folder\TaskName" -> Pfad: "\Folder\" Name: "TaskName"
             folder = taskPath.substring(0, lastSlash + 1);
             taskName = taskPath.substring(lastSlash + 1);
         } else {
-            // Gesamter Pfad ist der Name
             folder = '\\';
             taskName = taskPath.replace(/\\/g, '');
         }
@@ -458,4 +546,7 @@ module.exports = {
     getPrivacyScore,
     getScheduledTasksAudit,
     disableScheduledTask,
+    checkSideloading,
+    fixSideloading,
+    getWindowsEdition,
 };

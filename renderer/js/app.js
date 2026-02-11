@@ -1309,7 +1309,8 @@ async function calculateAndShowSystemScore() {
         // Run fresh if not loaded yet
         if (!results.privacy) {
             try {
-                const settings = await window.api.getPrivacySettings();
+                const privacyData = await window.api.getPrivacySettings();
+                const settings = privacyData.settings || (Array.isArray(privacyData) ? privacyData : []);
                 const priv = settings.filter(s => s.isPrivate).length;
                 results.privacy = { score: settings.length > 0 ? Math.round((priv / settings.length) * 100) : 50 };
             } catch { results.privacy = { score: 50 }; }

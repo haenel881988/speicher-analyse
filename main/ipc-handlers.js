@@ -847,6 +847,16 @@ function register(mainWindow) {
         return privacy.disableScheduledTask(taskPath);
     });
 
+    ipcMain.handle('check-sideloading', async () => {
+        const privacy = require('./privacy');
+        return privacy.checkSideloading();
+    });
+
+    ipcMain.handle('fix-sideloading', async () => {
+        const privacy = require('./privacy');
+        return privacy.fixSideloading();
+    });
+
     // === S.M.A.R.T. Disk Health ===
     ipcMain.handle('get-disk-health', async () => {
         const smart = require('./smart');
