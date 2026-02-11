@@ -15,7 +15,6 @@ export class NetworkView {
         this.filter = '';
         this.snapshotMode = true;
         this._expandedGroups = new Set();
-        this._resolvedIPs = new Map(); // ip → { hostname, company, isTracker }
         this._lastRefreshTime = null;
         this._loaded = false;
         this._errorCount = 0;
@@ -97,6 +96,7 @@ export class NetworkView {
     render() {
         const s = this.summary || {};
         const timeStr = this._lastRefreshTime ? this._lastRefreshTime.toLocaleTimeString('de-DE') : '';
+        const totalCompanies = new Set(this.groupedData.flatMap(g => g.resolvedCompanies || [])).size;
 
         this.container.innerHTML = `
             <div class="network-page">
@@ -107,6 +107,7 @@ export class NetworkView {
                         <span class="network-stat"><strong>${s.establishedCount || 0}</strong> Aktiv</span>
                         <span class="network-stat"><strong>${s.listeningCount || 0}</strong> Lauschend</span>
                         <span class="network-stat"><strong>${s.uniqueRemoteIPs || 0}</strong> Remote-IPs</span>
+                        <span class="network-stat"><strong>${totalCompanies}</strong> Firmen</span>
                     </div>
                 </div>
                 <div class="network-tabs">
@@ -165,13 +166,18 @@ export class NetworkView {
                 const ghostWarning = !g.isRunning && g.connectionCount > 0;
                 const expanded = this._expandedGroups.has(g.processName);
 
+                const companySummary = g.resolvedCompanies?.length
+                    ? g.resolvedCompanies.slice(0, 3).join(', ') + (g.resolvedCompanies.length > 3 ? ', ...' : '')
+                    : '';
+
                 return `<div class="network-group ${ghostWarning ? 'network-group-ghost' : ''}" data-process="${this._esc(g.processName)}">
                     <div class="network-group-header" data-toggle="${this._esc(g.processName)}">
                         <span class="network-group-arrow">${expanded ? '&#9660;' : '&#9654;'}</span>
                         <span class="network-status-dot network-status-${statusColor}"></span>
                         <strong class="network-group-name">${this._esc(g.processName)}</strong>
                         <span class="network-group-badge">${g.connectionCount}</span>
-                        <span class="network-group-ips">${g.uniqueIPCount} IP${g.uniqueIPCount !== 1 ? 's' : ''}</span>
+                        <span class="network-group-ips">${g.uniqueIPCount} IP${g.uniqueIPCount !== 1 ? 's' : ''}${companySummary ? ' (' + this._esc(companySummary) + ')' : ''}</span>
+                        ${g.hasTrackers ? '<span class="network-tracker-badge">Tracker</span>' : ''}
                         <span class="network-group-states">
                             ${Object.entries(g.states).map(([state, count]) =>
                                 `<span class="network-state-pill">${state}: ${count}</span>`
@@ -187,12 +193,40 @@ export class NetworkView {
     }
 
     _renderGroupDetail(g) {
-        // Verbindungen nach Remote-IP gruppieren
+        // Verbindungen nach Remote-IP gruppieren, lokale IPs ausblenden
         const ipGroups = new Map();
         for (const c of g.connections) {
-            const ip = c.remoteAddress || '0.0.0.0';
+            if (c.resolved?.isLocal) continue;
+            const ip = c.remoteAddress || '';
+            if (!ip) continue;
             if (!ipGroups.has(ip)) ipGroups.set(ip, []);
             ipGroups.get(ip).push(c);
+        }
+
+        if (ipGroups.size === 0) {
+            return '<div class="network-group-detail"><em style="color:var(--text-secondary);padding:8px;display:block">Nur lokale Verbindungen</em></div>';
+        }
+
+        let rows = '';
+        for (const [ip, connections] of ipGroups) {
+            const info = connections[0].resolved || {};
+            const isTracker = info.isTracker;
+            const flag = this._countryFlag(info.countryCode);
+            const ports = [...new Set(connections.map(c => c.remotePort).filter(Boolean))].sort((a, b) => a - b);
+            const states = {};
+            for (const c of connections) {
+                states[c.state] = (states[c.state] || 0) + 1;
+            }
+            const stateStr = Object.entries(states).map(([s, n]) => `${s}: ${n}`).join(', ');
+
+            rows += `<tr class="${isTracker ? 'network-row-tracker' : ''}">
+                <td class="network-ip">${this._esc(ip)}</td>
+                <td class="network-company ${isTracker ? 'network-tracker' : ''}">${flag ? flag + ' ' : ''}${this._esc(info.org || 'Unbekannt')}${isTracker ? ' &#128065;' : ''}</td>
+                <td class="network-isp" title="${this._esc(info.isp || '')}">${this._esc(info.isp && info.isp !== info.org ? info.isp : '')}</td>
+                <td>${ports.join(', ') || '-'}</td>
+                <td>${connections.length}</td>
+                <td><span class="network-state-pills">${stateStr}</span></td>
+            </tr>`;
         }
 
         return `<div class="network-group-detail">
@@ -200,55 +234,32 @@ export class NetworkView {
                 <thead><tr>
                     <th>Remote-IP</th>
                     <th>Firma</th>
-                    <th>Port</th>
+                    <th>Anbieter</th>
+                    <th>Ports</th>
+                    <th>Verb.</th>
                     <th>Status</th>
-                    <th>Lokal</th>
                 </tr></thead>
-                <tbody>
-                    ${g.connections.map(c => {
-                        const info = this._resolvedIPs.get(c.remoteAddress);
-                        const companyText = info ? info.company : '...';
-                        const isTracker = info?.isTracker;
-                        const isLocal = c.remoteAddress === '127.0.0.1' || c.remoteAddress === '::1' || c.remoteAddress === '0.0.0.0';
-                        const stateClass = c.state === 'Established' ? 'safe' :
-                            c.state === 'Listen' ? 'moderate' : 'neutral';
-
-                        return `<tr class="${isLocal ? 'network-row-local' : ''}">
-                            <td class="network-ip" title="${this._esc(info?.hostname || '')}">${this._esc(c.remoteAddress || '-')}</td>
-                            <td class="network-company ${isTracker ? 'network-tracker' : ''}">${this._esc(companyText)}${isTracker ? ' &#128065;' : ''}</td>
-                            <td>${c.remotePort || '-'}</td>
-                            <td><span class="risk-badge risk-${stateClass}">${c.state}</span></td>
-                            <td>${c.localPort}</td>
-                        </tr>`;
-                    }).join('')}
-                </tbody>
+                <tbody>${rows}</tbody>
             </table>
         </div>`;
     }
 
     _groupHasCompanyMatch(group, query) {
-        return group.uniqueIPs.some(ip => {
-            const info = this._resolvedIPs.get(ip);
-            return info && info.company.toLowerCase().includes(query);
-        });
+        if (group.resolvedCompanies?.some(c => c.toLowerCase().includes(query))) return true;
+        return group.connections.some(c =>
+            c.resolved?.org?.toLowerCase().includes(query) ||
+            c.resolved?.isp?.toLowerCase().includes(query)
+        );
     }
 
-    async _resolveGroupIPs(processName) {
-        const group = this.groupedData.find(g => g.processName === processName);
-        if (!group) return;
-
-        const unresolvedIPs = group.uniqueIPs.filter(ip => !this._resolvedIPs.has(ip));
-        if (unresolvedIPs.length === 0) return;
-
-        try {
-            const resolved = await window.api.resolveIPs(unresolvedIPs);
-            for (const [ip, info] of Object.entries(resolved)) {
-                this._resolvedIPs.set(ip, info);
-            }
-            this.render();
-        } catch (err) {
-            console.warn('IP-Auflösung fehlgeschlagen:', err.message);
-        }
+    /**
+     * Konvertiert 2-Buchstaben-Ländercode in Flaggen-Emoji.
+     */
+    _countryFlag(countryCode) {
+        if (!countryCode || countryCode.length !== 2) return '';
+        const cc = countryCode.toUpperCase();
+        const offset = 127397;
+        return String.fromCodePoint(cc.charCodeAt(0) + offset, cc.charCodeAt(1) + offset);
     }
 
     _renderBandwidth() {
@@ -346,14 +357,12 @@ export class NetworkView {
         // Group toggle (aufklappen/zuklappen)
         this.container.querySelectorAll('[data-toggle]').forEach(header => {
             header.onclick = (e) => {
-                // Nicht toggler wenn Block-Button geklickt
                 if (e.target.closest('button')) return;
                 const processName = header.dataset.toggle;
                 if (this._expandedGroups.has(processName)) {
                     this._expandedGroups.delete(processName);
                 } else {
                     this._expandedGroups.add(processName);
-                    this._resolveGroupIPs(processName);
                 }
                 this.render();
             };

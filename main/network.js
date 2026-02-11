@@ -1,5 +1,6 @@
 'use strict';
 
+const http = require('http');
 const { runPS, runSafe, isSafeShellArg } = require('./cmd-utils');
 
 const PS_TIMEOUT = 30000;
@@ -293,20 +294,44 @@ async function getGroupedConnections() {
         }
         const group = groups.get(key);
         group.connections.push(conn);
-        if (conn.remoteAddress && conn.remoteAddress !== '0.0.0.0' &&
-            conn.remoteAddress !== '::' && conn.remoteAddress !== '127.0.0.1' &&
-            conn.remoteAddress !== '::1') {
+        if (conn.remoteAddress && !isPrivateIP(conn.remoteAddress)) {
             group.uniqueRemoteIPs.add(conn.remoteAddress);
         }
         group.states[conn.state] = (group.states[conn.state] || 0) + 1;
     }
 
+    // Alle öffentlichen IPs über alle Gruppen sammeln und auf einmal auflösen
+    const allPublicIPs = new Set();
+    for (const group of groups.values()) {
+        for (const ip of group.uniqueRemoteIPs) allPublicIPs.add(ip);
+    }
+    const resolvedMap = await lookupIPs([...allPublicIPs]);
+
     // Prozess-Status prüfen (läuft der Prozess noch?)
     const processRunning = await checkProcessesRunning([...groups.keys()]);
 
-    // In serialisierbares Array umwandeln
+    // In serialisierbares Array umwandeln — mit eingebetteten Firmendaten
     const result = [];
     for (const [name, group] of groups) {
+        // Firmen pro Gruppe ermitteln
+        const companies = new Set();
+        let hasTrackers = false;
+        for (const ip of group.uniqueRemoteIPs) {
+            const info = resolvedMap[ip];
+            if (info) {
+                if (info.org && info.org !== 'Unbekannt') companies.add(info.org);
+                if (info.isTracker) hasTrackers = true;
+            }
+        }
+
+        // Resolved-Info in jede Verbindung einbetten
+        const enrichedConnections = group.connections.map(c => ({
+            ...c,
+            resolved: isPrivateIP(c.remoteAddress)
+                ? { org: 'Lokal', isp: '', country: '', countryCode: '', as: '', isTracker: false, isLocal: true }
+                : { ...(resolvedMap[c.remoteAddress] || { org: 'Unbekannt', isp: '', country: '', countryCode: '', as: '', isTracker: false }), isLocal: false },
+        }));
+
         result.push({
             processName: group.processName,
             processPath: group.processPath,
@@ -315,7 +340,9 @@ async function getGroupedConnections() {
             uniqueIPs: [...group.uniqueRemoteIPs],
             states: group.states,
             isRunning: processRunning.get(name) ?? true,
-            connections: group.connections,
+            connections: enrichedConnections,
+            resolvedCompanies: [...companies],
+            hasTrackers,
         });
     }
 
@@ -352,9 +379,71 @@ async function checkProcessesRunning(processNames) {
 }
 
 // ---------------------------------------------------------------------------
-// 8) resolveIPs – IP-Adressen zu Firmennamen auflösen
+// 8) IP-Auflösung – WHOIS/IP-Ownership via ip-api.com Batch-API
 // ---------------------------------------------------------------------------
-const _dnsCache = new Map();
+const _ipCache = new Map();
+
+/**
+ * Prüft ob eine IP-Adresse privat/lokal ist (nicht an API senden).
+ */
+function isPrivateIP(ip) {
+    if (!ip) return true;
+    return (
+        ip === '0.0.0.0' ||
+        ip === '::' ||
+        ip === '::1' ||
+        ip === '127.0.0.1' ||
+        ip.startsWith('10.') ||
+        ip.startsWith('192.168.') ||
+        ip.startsWith('169.254.') ||
+        /^172\.(1[6-9]|2\d|3[01])\./.test(ip) ||
+        ip.startsWith('fe80:') ||
+        ip.startsWith('fd') ||
+        ip.startsWith('fc')
+    );
+}
+
+/**
+ * Minimaler HTTP-POST-Client für ip-api.com Batch-Anfragen.
+ */
+function httpPost(url, body, timeoutMs = 10000) {
+    return new Promise((resolve, reject) => {
+        const urlObj = new URL(url);
+        const options = {
+            hostname: urlObj.hostname,
+            port: urlObj.port || 80,
+            path: urlObj.pathname + urlObj.search,
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(body),
+            },
+        };
+
+        const req = http.request(options, (res) => {
+            let data = '';
+            res.on('data', (chunk) => { data += chunk; });
+            res.on('end', () => {
+                if (res.statusCode === 429) {
+                    reject(new Error('Rate limit erreicht (429)'));
+                } else if (res.statusCode >= 400) {
+                    reject(new Error(`HTTP ${res.statusCode}: ${data.slice(0, 200)}`));
+                } else {
+                    resolve(data);
+                }
+            });
+        });
+
+        req.on('error', reject);
+        req.setTimeout(timeoutMs, () => {
+            req.destroy();
+            reject(new Error('Timeout'));
+        });
+
+        req.write(body);
+        req.end();
+    });
+}
 
 const COMPANY_PATTERNS = [
     { patterns: ['microsoft', 'msedge', '.ms.', 'azure', 'office365', 'outlook', 'onedrive', 'live.com', 'msn.com', 'windows.com', 'bing.com'], company: 'Microsoft' },
@@ -379,6 +468,9 @@ const COMPANY_PATTERNS = [
     { patterns: ['taboola', 'outbrain'], company: 'Content-Werbung', isTracker: true },
 ];
 
+/**
+ * Matcht DNS-Hostname gegen COMPANY_PATTERNS (Fallback für DNS-Auflösung).
+ */
 function identifyCompany(hostname) {
     const lower = (hostname || '').toLowerCase();
     for (const entry of COMPANY_PATTERNS) {
@@ -386,7 +478,6 @@ function identifyCompany(hostname) {
             return { name: entry.company, isTracker: entry.isTracker || false };
         }
     }
-    // Fallback: Domain aus Hostname extrahieren
     if (hostname) {
         const parts = hostname.split('.');
         if (parts.length >= 2) {
@@ -396,28 +487,100 @@ function identifyCompany(hostname) {
     return { name: 'Unbekannt', isTracker: false };
 }
 
-async function resolveIPs(ipAddresses) {
+/**
+ * Matcht ip-api.com Antwort (org/isp/asname) gegen COMPANY_PATTERNS.
+ * Liefert bessere Namen als die rohen API-Daten (z.B. "MICROSOFT-CORP" → "Microsoft").
+ */
+function identifyCompanyFromAPI(apiEntry) {
+    const searchFields = [
+        apiEntry.org, apiEntry.isp, apiEntry.asname, apiEntry.as,
+    ].filter(Boolean).join(' ').toLowerCase();
+
+    for (const entry of COMPANY_PATTERNS) {
+        if (entry.patterns.some(p => searchFields.includes(p))) {
+            return { name: entry.company, isTracker: entry.isTracker || false };
+        }
+    }
+    return { name: '', isTracker: false };
+}
+
+/**
+ * IP-Adressen per ip-api.com Batch-API auflösen (Organisation, ISP, Land).
+ * Cached Ergebnisse in _ipCache für die gesamte Session.
+ * Fallback: DNS Reverse Lookup bei API-Ausfall.
+ */
+async function lookupIPs(ipAddresses) {
     if (!Array.isArray(ipAddresses) || ipAddresses.length === 0) return {};
 
     const results = {};
     const uncached = [];
 
     for (const ip of ipAddresses) {
-        if (_dnsCache.has(ip)) {
-            results[ip] = _dnsCache.get(ip);
-        } else {
+        if (_ipCache.has(ip)) {
+            results[ip] = _ipCache.get(ip);
+        } else if (!isPrivateIP(ip)) {
             uncached.push(ip);
         }
     }
 
     if (uncached.length === 0) return results;
 
-    // Batch: max 20 IPs auf einmal auflösen
-    const batch = uncached.slice(0, 20);
-    const ipList = batch.map(ip => `'${ip.replace(/'/g, "''")}'`).join(',');
+    // Deduplizieren und auf 100 begrenzen (ip-api.com Batch-Limit)
+    const batch = [...new Set(uncached)].slice(0, 100);
+    const requestBody = JSON.stringify(
+        batch.map(ip => ({
+            query: ip,
+            fields: 'status,query,org,isp,as,asname,country,countryCode',
+        }))
+    );
 
+    try {
+        const apiResponse = await httpPost('http://ip-api.com/batch', requestBody, 10000);
+        const data = JSON.parse(apiResponse);
+
+        for (const entry of data) {
+            if (!entry || !entry.query) continue;
+            const ip = entry.query;
+
+            // COMPANY_PATTERNS als Override für bekannte Firmen/Tracker
+            const override = identifyCompanyFromAPI(entry);
+
+            const resolved = {
+                org: override.name || entry.org || entry.isp || 'Unbekannt',
+                isp: entry.isp || '',
+                country: entry.country || '',
+                countryCode: entry.countryCode || '',
+                as: entry.as || '',
+                isTracker: override.isTracker || false,
+            };
+            _ipCache.set(ip, resolved);
+            results[ip] = resolved;
+        }
+
+        // IPs ohne API-Antwort als unbekannt cachen
+        for (const ip of batch) {
+            if (!results[ip]) {
+                const fallback = { org: 'Unbekannt', isp: '', country: '', countryCode: '', as: '', isTracker: false };
+                _ipCache.set(ip, fallback);
+                results[ip] = fallback;
+            }
+        }
+    } catch (err) {
+        console.error('ip-api.com Batch-Abfrage fehlgeschlagen:', err.message, '→ Fallback auf DNS');
+        await _fallbackDNSResolve(batch, results);
+    }
+
+    return results;
+}
+
+/**
+ * DNS Reverse Lookup als Fallback wenn ip-api.com nicht erreichbar ist.
+ */
+async function _fallbackDNSResolve(ipList, results) {
+    const batch = ipList.slice(0, 20);
+    const ipListStr = batch.map(ip => `'${ip.replace(/'/g, "''")}'`).join(',');
     const psScript = `
-        $ips = @(${ipList})
+        $ips = @(${ipListStr})
         $results = foreach ($ip in $ips) {
             try {
                 $dns = Resolve-DnsName -Name $ip -DnsOnly -Type PTR -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -433,28 +596,45 @@ async function resolveIPs(ipAddresses) {
         const { stdout } = await runPS(psScript, { timeout: 20000 });
         const raw = JSON.parse(stdout.trim());
         const arr = Array.isArray(raw) ? raw : [raw];
-
         for (const entry of arr) {
             const hostname = entry.hostname || '';
             const company = identifyCompany(hostname);
             const resolved = {
-                hostname,
-                company: company.name,
+                org: company.name,
+                isp: '',
+                country: '',
+                countryCode: '',
+                as: '',
                 isTracker: company.isTracker,
             };
-            _dnsCache.set(entry.ip, resolved);
+            _ipCache.set(entry.ip, resolved);
             results[entry.ip] = resolved;
         }
     } catch {
-        // Bei Timeout/Fehler: als unbekannt cachen
         for (const ip of batch) {
-            const fallback = { hostname: '', company: 'Unbekannt', isTracker: false };
-            _dnsCache.set(ip, fallback);
-            results[ip] = fallback;
+            if (!results[ip]) {
+                const fallback = { org: 'Unbekannt', isp: '', country: '', countryCode: '', as: '', isTracker: false };
+                _ipCache.set(ip, fallback);
+                results[ip] = fallback;
+            }
         }
     }
+}
 
-    return results;
+/**
+ * Rückwärtskompatible Wrapper-Funktion — delegiert an lookupIPs().
+ */
+async function resolveIPs(ipAddresses) {
+    const results = await lookupIPs(ipAddresses);
+    const transformed = {};
+    for (const [ip, info] of Object.entries(results)) {
+        transformed[ip] = {
+            hostname: '',
+            company: info.org,
+            isTracker: info.isTracker,
+        };
+    }
+    return transformed;
 }
 
 module.exports = {
@@ -466,4 +646,5 @@ module.exports = {
     getNetworkSummary,
     getGroupedConnections,
     resolveIPs,
+    lookupIPs,
 };

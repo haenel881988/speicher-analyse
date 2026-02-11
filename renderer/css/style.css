@@ -4468,8 +4468,20 @@ body {
 .network-status-safe { background: var(--success); }
 .network-status-danger { background: var(--danger); }
 .network-status-neutral { background: var(--text-muted); }
-.network-company { font-size: 11px; color: var(--accent-text); max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.network-company { font-size: 11px; color: var(--accent-text); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.network-isp { font-size: 11px; color: var(--text-muted); max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .network-tracker { color: var(--danger); font-weight: 600; }
+.network-tracker-badge {
+    font-size: 10px;
+    color: var(--danger);
+    font-weight: 600;
+    padding: 1px 6px;
+    border: 1px solid var(--danger);
+    border-radius: 8px;
+    flex-shrink: 0;
+}
+.network-row-tracker td { background: rgba(231, 76, 60, 0.06); }
+.network-state-pills { font-size: 10px; color: var(--text-secondary); }
 .network-privacy-badge {
     font-size: 10px;
     padding: 2px 8px;
