@@ -317,11 +317,13 @@ async function getGroupedConnections() {
         // Firmen pro Gruppe ermitteln
         const companies = new Set();
         let hasTrackers = false;
+        let hasHighRisk = false;
         for (const ip of group.uniqueRemoteIPs) {
             const info = resolvedMap[ip];
             if (info) {
                 if (info.org && info.org !== 'Unbekannt') companies.add(info.org);
                 if (info.isTracker) hasTrackers = true;
+                if (info.isHighRisk) hasHighRisk = true;
             }
         }
 
@@ -329,8 +331,8 @@ async function getGroupedConnections() {
         const enrichedConnections = group.connections.map(c => ({
             ...c,
             resolved: isPrivateIP(c.remoteAddress)
-                ? { org: 'Lokal', isp: '', country: '', countryCode: '', as: '', isTracker: false, isLocal: true }
-                : { ...(resolvedMap[c.remoteAddress] || { org: 'Unbekannt', isp: '', country: '', countryCode: '', as: '', isTracker: false }), isLocal: false },
+                ? { org: 'Lokal', isp: '', country: '', countryCode: '', as: '', isTracker: false, isHighRisk: false, isLocal: true }
+                : { ...(resolvedMap[c.remoteAddress] || { org: 'Unbekannt', isp: '', country: '', countryCode: '', as: '', isTracker: false, isHighRisk: false }), isLocal: false },
         }));
 
         result.push({
@@ -344,6 +346,7 @@ async function getGroupedConnections() {
             connections: enrichedConnections,
             resolvedCompanies: [...companies],
             hasTrackers,
+            hasHighRisk,
         });
     }
 
@@ -446,6 +449,11 @@ function httpPost(url, body, timeoutMs = 10000) {
     });
 }
 
+// ---------------------------------------------------------------------------
+// Hochrisiko-Länder (konfigurierbar)
+// ---------------------------------------------------------------------------
+const HIGH_RISK_COUNTRIES = new Set(['RU', 'CN', 'KP', 'IR']);
+
 const COMPANY_PATTERNS = [
     { patterns: ['microsoft', 'msedge', '.ms.', 'azure', 'office365', 'outlook', 'onedrive', 'live.com', 'msn.com', 'windows.com', 'bing.com'], company: 'Microsoft' },
     { patterns: ['google', 'goog', 'youtube', 'gstatic', 'googleapis', '1e100.net'], company: 'Google' },
@@ -546,13 +554,15 @@ async function lookupIPs(ipAddresses) {
             // COMPANY_PATTERNS als Override für bekannte Firmen/Tracker
             const override = identifyCompanyFromAPI(entry);
 
+            const countryCode = entry.countryCode || '';
             const resolved = {
                 org: override.name || entry.org || entry.isp || 'Unbekannt',
                 isp: entry.isp || '',
                 country: entry.country || '',
-                countryCode: entry.countryCode || '',
+                countryCode,
                 as: entry.as || '',
                 isTracker: override.isTracker || false,
+                isHighRisk: HIGH_RISK_COUNTRIES.has(countryCode),
             };
             _ipCache.set(ip, resolved);
             results[ip] = resolved;
@@ -561,7 +571,7 @@ async function lookupIPs(ipAddresses) {
         // IPs ohne API-Antwort als unbekannt cachen
         for (const ip of batch) {
             if (!results[ip]) {
-                const fallback = { org: 'Unbekannt', isp: '', country: '', countryCode: '', as: '', isTracker: false };
+                const fallback = { org: 'Unbekannt', isp: '', country: '', countryCode: '', as: '', isTracker: false, isHighRisk: false };
                 _ipCache.set(ip, fallback);
                 results[ip] = fallback;
             }
@@ -607,6 +617,7 @@ async function _fallbackDNSResolve(ipList, results) {
                 countryCode: '',
                 as: '',
                 isTracker: company.isTracker,
+                isHighRisk: false,
             };
             _ipCache.set(entry.ip, resolved);
             results[entry.ip] = resolved;
@@ -614,7 +625,7 @@ async function _fallbackDNSResolve(ipList, results) {
     } catch {
         for (const ip of batch) {
             if (!results[ip]) {
-                const fallback = { org: 'Unbekannt', isp: '', country: '', countryCode: '', as: '', isTracker: false };
+                const fallback = { org: 'Unbekannt', isp: '', country: '', countryCode: '', as: '', isTracker: false, isHighRisk: false };
                 _ipCache.set(ip, fallback);
                 results[ip] = fallback;
             }

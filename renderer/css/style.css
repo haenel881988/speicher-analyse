@@ -4527,6 +4527,27 @@ body {
     flex-shrink: 0;
 }
 .network-row-tracker td { background: rgba(231, 76, 60, 0.06); }
+.network-highrisk { color: #ff4444; font-weight: 700; }
+.network-highrisk-badge {
+    font-size: 10px;
+    color: #ff4444;
+    font-weight: 700;
+    padding: 1px 6px;
+    border: 1px solid #ff4444;
+    border-radius: 8px;
+    background: rgba(255, 68, 68, 0.1);
+    flex-shrink: 0;
+}
+.network-highrisk-label { font-size: 10px; font-weight: 400; opacity: 0.8; }
+.network-row-highrisk td { background: rgba(255, 68, 68, 0.1); }
+.network-stat-danger { color: #ff4444; }
+.network-stat-danger strong { color: #ff4444; }
+.network-devices-section { display: flex; flex-direction: column; gap: 12px; }
+.network-devices-toolbar { display: flex; align-items: center; gap: 12px; }
+.network-devices-table td { font-size: 12px; }
+.network-device-state { font-size: 11px; padding: 2px 8px; border-radius: 4px; }
+.network-device-reachable .network-device-state { background: rgba(46, 213, 115, 0.12); color: var(--success, #2ed573); }
+.network-device-stale .network-device-state { background: rgba(255, 165, 2, 0.12); color: var(--warning, #ffa502); }
 .network-state-pills { font-size: 10px; color: var(--text-secondary); }
 .network-privacy-badge {
     font-size: 10px;
@@ -4599,6 +4620,69 @@ body {
 .network-top-bar { flex: 1; height: 8px; background: var(--bg-tertiary); border-radius: 4px; overflow: hidden; }
 .network-top-bar-fill { height: 100%; background: var(--accent); border-radius: 4px; }
 .network-top-count { width: 40px; text-align: right; font-size: 12px; font-weight: 600; }
+
+/* ===== v8.0: Security Audit ===== */
+.security-page { padding: 20px; max-width: 800px; }
+.security-header { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
+.security-header h2 { margin: 0; }
+.security-toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 20px; }
+.security-summary { display: flex; gap: 12px; margin-bottom: 20px; }
+.security-summary-item {
+    flex: 1; text-align: center; padding: 16px; border-radius: 10px;
+    background: var(--bg-secondary); border: 1px solid var(--border);
+}
+.security-summary-count { display: block; font-size: 28px; font-weight: 700; }
+.security-summary-label { font-size: 12px; color: var(--text-secondary); }
+.security-summary-ok .security-summary-count { color: var(--success, #2ed573); }
+.security-summary-warn .security-summary-count { color: var(--warning, #ffa502); }
+.security-summary-danger .security-summary-count { color: var(--danger, #ff4757); }
+.security-checks { display: flex; flex-direction: column; gap: 8px; }
+.security-check-card {
+    display: flex; align-items: flex-start; gap: 14px; padding: 14px 18px;
+    background: var(--bg-secondary); border-radius: 8px;
+    border-left: 4px solid var(--border);
+}
+.security-status-ok { border-left-color: var(--success, #2ed573); }
+.security-status-warning { border-left-color: var(--warning, #ffa502); }
+.security-status-danger { border-left-color: var(--danger, #ff4757); }
+.security-status-error { border-left-color: var(--text-muted); }
+.security-check-icon { font-size: 20px; line-height: 1; min-width: 24px; text-align: center; }
+.security-status-ok .security-check-icon { color: var(--success, #2ed573); }
+.security-status-warning .security-check-icon { color: var(--warning, #ffa502); }
+.security-status-danger .security-check-icon { color: var(--danger, #ff4757); }
+.security-status-error .security-check-icon { color: var(--text-muted); }
+.security-check-label { font-weight: 600; font-size: 13px; margin-bottom: 2px; }
+.security-check-message { font-size: 12px; color: var(--text-secondary); }
+.security-diff { margin-bottom: 20px; padding: 14px; background: var(--bg-secondary); border-radius: 8px; }
+.security-diff h3 { margin: 0 0 10px 0; font-size: 14px; }
+.security-diff-item { padding: 8px 0; border-bottom: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.security-diff-item:last-child { border-bottom: none; }
+.security-diff-improved { }
+.security-diff-degraded { }
+.security-diff-icon { font-size: 12px; }
+.security-diff-improved .security-diff-icon { color: var(--success, #2ed573); }
+.security-diff-degraded .security-diff-icon { color: var(--danger, #ff4757); }
+.security-diff-old { text-decoration: line-through; opacity: 0.6; }
+.security-diff-detail { width: 100%; font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.security-label-ok { color: var(--success, #2ed573); font-weight: 600; }
+.security-label-warn { color: var(--warning, #ffa502); font-weight: 600; }
+.security-label-danger { color: var(--danger, #ff4757); font-weight: 600; }
+.security-label-error { color: var(--text-muted); font-weight: 600; }
+.security-history { }
+.security-history h3 { margin: 0 0 12px 0; font-size: 14px; }
+.security-history-list { display: flex; flex-direction: column; gap: 4px; }
+.security-history-entry {
+    display: flex; justify-content: space-between; padding: 8px 12px;
+    background: var(--bg-secondary); border-radius: 6px; font-size: 12px;
+}
+.security-history-date { color: var(--text-secondary); }
+.security-history-stats { display: flex; gap: 8px; align-items: center; }
+.security-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 2px; }
+.security-dot-ok { background: var(--success, #2ed573); }
+.security-dot-warn { background: var(--warning, #ffa502); }
+.security-dot-danger { background: var(--danger, #ff4757); }
+.network-btn-secondary { background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); }
+.network-btn-secondary:hover { background: var(--bg-secondary); }
 
 /* ===== v7.0: System Score ===== */
 .score-page { padding: 20px; max-width: 700px; }

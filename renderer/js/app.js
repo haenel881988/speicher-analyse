@@ -27,6 +27,7 @@ import { PrivacyView } from './privacy.js';
 import { SmartView } from './smart.js';
 import { SoftwareAuditView } from './software-audit.js';
 import { NetworkView } from './network.js';
+import { SecurityAuditView } from './security-audit.js';
 import { SystemScoreView } from './system-score.js';
 import { TerminalPanel } from './terminal-panel.js';
 
@@ -118,6 +119,7 @@ const privacyView = new PrivacyView(document.getElementById('view-privacy'));
 const smartView = new SmartView(document.getElementById('view-smart'));
 const softwareAuditView = new SoftwareAuditView(document.getElementById('view-software-audit'));
 const networkView = new NetworkView(document.getElementById('view-network'));
+const securityAuditView = new SecurityAuditView(document.getElementById('view-security-audit'));
 const systemScoreView = new SystemScoreView(document.getElementById('view-system-score'));
 
 // Global Terminal Panel (VS Code style, accessible from any tab via Ctrl+`)
@@ -698,6 +700,12 @@ async function autoLoadTab(tabName) {
             await softwareAuditView.init();
             setStatus('Bereit');
             break;
+        case 'security-audit':
+            tabLoaded['security-audit'] = true;
+            setStatus('Sicherheits-Check wird geladen...', true);
+            await securityAuditView.init();
+            setStatus('Bereit');
+            break;
         case 'network':
             setStatus('Netzwerk wird analysiert...', true);
             await networkView.init();
@@ -769,6 +777,10 @@ async function refreshCurrentView() {
             case 'software-audit':
                 softwareAuditView._loaded = false;
                 await softwareAuditView.init();
+                break;
+            case 'security-audit':
+                securityAuditView._loaded = false;
+                await securityAuditView.init();
                 break;
             case 'system-score':
                 await calculateAndShowSystemScore();
@@ -1346,6 +1358,25 @@ async function calculateAndShowSystemScore() {
                 results.audit = { orphanedCount: a.orphanedCount || 0, totalPrograms: a.totalPrograms || 0 };
             } catch { results.audit = { orphanedCount: 0, totalPrograms: 0 }; }
         }
+        // Security Audit: Letzte Checks laden für Score-Integration
+        try {
+            const secChecks = securityAuditView.getLastChecks();
+            if (secChecks) {
+                const { calculateSecurityScore } = await import('./security-score-helper.js').catch(() => ({ calculateSecurityScore: null }));
+                // Fallback: Score direkt vom Backend berechnen lassen
+                const history = await window.api.getAuditHistory();
+                if (history && history.length > 0) {
+                    const lastChecks = history[history.length - 1].checks;
+                    // Einfache Score-Berechnung im Frontend
+                    let secScore = 100;
+                    for (const c of lastChecks) {
+                        if (c.status === 'danger') secScore -= (c.id === 'antivirus' ? 30 : c.id === 'firewall' ? 20 : c.id === 'uac' ? 15 : 10);
+                        else if (c.status === 'warning') secScore -= (c.id === 'antivirus' ? 10 : c.id === 'signatures' ? 10 : 5);
+                    }
+                    results.security = { score: Math.max(0, secScore), available: true };
+                }
+            }
+        } catch { /* Security-Score optional */ }
         const scoreData = await window.api.getSystemScore(results);
         systemScoreView.update(scoreData);
     } catch (err) {

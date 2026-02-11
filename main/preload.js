@@ -239,6 +239,14 @@ contextBridge.exposeInMainWorld('api', {
     getNetworkSummary: () => ipcRenderer.invoke('get-network-summary'),
     getGroupedConnections: () => ipcRenderer.invoke('get-grouped-connections'),
     resolveIPs: (ipAddresses) => ipcRenderer.invoke('resolve-ips', ipAddresses),
+    scanLocalNetwork: () => ipcRenderer.invoke('scan-local-network'),
+
+    // === System Info ===
+    getSystemInfo: () => ipcRenderer.invoke('get-system-info'),
+
+    // === Security Audit ===
+    runSecurityAudit: () => ipcRenderer.invoke('run-security-audit'),
+    getAuditHistory: () => ipcRenderer.invoke('get-audit-history'),
 
     // === System Score ===
     getSystemScore: (results) => ipcRenderer.invoke('get-system-score', results),

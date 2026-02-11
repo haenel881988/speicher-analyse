@@ -18,6 +18,8 @@ export class NetworkView {
         this._lastRefreshTime = null;
         this._loaded = false;
         this._errorCount = 0;
+        this.localDevices = [];
+        this._devicesLoading = false;
     }
 
     async init() {
@@ -97,6 +99,7 @@ export class NetworkView {
         const s = this.summary || {};
         const timeStr = this._lastRefreshTime ? this._lastRefreshTime.toLocaleTimeString('de-DE') : '';
         const totalCompanies = new Set(this.groupedData.flatMap(g => g.resolvedCompanies || [])).size;
+        const highRiskCount = this.groupedData.filter(g => g.hasHighRisk).length;
 
         this.container.innerHTML = `
             <div class="network-page">
@@ -108,10 +111,12 @@ export class NetworkView {
                         <span class="network-stat"><strong>${s.listeningCount || 0}</strong> Lauschend</span>
                         <span class="network-stat"><strong>${s.uniqueRemoteIPs || 0}</strong> Remote-IPs</span>
                         <span class="network-stat"><strong>${totalCompanies}</strong> Firmen</span>
+                        ${highRiskCount > 0 ? `<span class="network-stat network-stat-danger"><strong>${highRiskCount}</strong> Hochrisiko</span>` : ''}
                     </div>
                 </div>
                 <div class="network-tabs">
                     <button class="network-tab ${this.activeSubTab === 'connections' ? 'active' : ''}" data-subtab="connections">Verbindungen</button>
+                    <button class="network-tab ${this.activeSubTab === 'devices' ? 'active' : ''}" data-subtab="devices">Lokale Geräte${this.localDevices.length > 0 ? ` (${this.localDevices.length})` : ''}</button>
                     <button class="network-tab ${this.activeSubTab === 'bandwidth' ? 'active' : ''}" data-subtab="bandwidth">Bandbreite</button>
                     <button class="network-tab ${this.activeSubTab === 'top' ? 'active' : ''}" data-subtab="top">Top-Prozesse</button>
                 </div>
@@ -137,6 +142,7 @@ export class NetworkView {
     _renderSubTab() {
         switch (this.activeSubTab) {
             case 'connections': return this._renderGroupedConnections();
+            case 'devices': return this._renderLocalDevices();
             case 'bandwidth': return this._renderBandwidth();
             case 'top': return this._renderTopProcesses();
             default: return '';
@@ -178,6 +184,7 @@ export class NetworkView {
                         <span class="network-group-badge">${g.connectionCount}</span>
                         <span class="network-group-ips">${g.uniqueIPCount} IP${g.uniqueIPCount !== 1 ? 's' : ''}${companySummary ? ' (' + this._esc(companySummary) + ')' : ''}</span>
                         ${g.hasTrackers ? '<span class="network-tracker-badge">Tracker</span>' : ''}
+                        ${g.hasHighRisk ? '<span class="network-highrisk-badge">&#9888; Hochrisiko</span>' : ''}
                         <span class="network-group-states">
                             ${Object.entries(g.states).map(([state, count]) =>
                                 `<span class="network-state-pill">${state}: ${count}</span>`
@@ -211,6 +218,7 @@ export class NetworkView {
         for (const [ip, connections] of ipGroups) {
             const info = connections[0].resolved || {};
             const isTracker = info.isTracker;
+            const isHighRisk = info.isHighRisk;
             const flag = this._countryFlag(info.countryCode);
             const ports = [...new Set(connections.map(c => c.remotePort).filter(Boolean))].sort((a, b) => a - b);
             const states = {};
@@ -218,10 +226,11 @@ export class NetworkView {
                 states[c.state] = (states[c.state] || 0) + 1;
             }
             const stateStr = Object.entries(states).map(([s, n]) => `${s}: ${n}`).join(', ');
+            const rowClass = isHighRisk ? 'network-row-highrisk' : isTracker ? 'network-row-tracker' : '';
 
-            rows += `<tr class="${isTracker ? 'network-row-tracker' : ''}">
+            rows += `<tr class="${rowClass}">
                 <td class="network-ip">${this._esc(ip)}</td>
-                <td class="network-company ${isTracker ? 'network-tracker' : ''}">${flag ? flag + ' ' : ''}${this._esc(info.org || 'Unbekannt')}${isTracker ? ' &#128065;' : ''}</td>
+                <td class="network-company ${isHighRisk ? 'network-highrisk' : isTracker ? 'network-tracker' : ''}">${flag ? flag + ' ' : ''}${this._esc(info.org || 'Unbekannt')}${isHighRisk ? ' &#9888;' : isTracker ? ' &#128065;' : ''}${isHighRisk ? ` <span class="network-highrisk-label">${this._esc(info.country)}</span>` : ''}</td>
                 <td class="network-isp" title="${this._esc(info.isp || '')}">${this._esc(info.isp && info.isp !== info.org ? info.isp : '')}</td>
                 <td>${ports.join(', ') || '-'}</td>
                 <td>${connections.length}</td>
@@ -260,6 +269,59 @@ export class NetworkView {
         const cc = countryCode.toUpperCase();
         const offset = 127397;
         return String.fromCodePoint(cc.charCodeAt(0) + offset, cc.charCodeAt(1) + offset);
+    }
+
+    _renderLocalDevices() {
+        if (this._devicesLoading) {
+            return '<div class="loading-state">Netzwerk wird gescannt...</div>';
+        }
+
+        const scanBtn = `<button class="network-btn" id="network-scan-devices">Netzwerk scannen</button>`;
+
+        if (this.localDevices.length === 0) {
+            return `<div class="network-devices-section">
+                <div class="network-devices-toolbar">${scanBtn}</div>
+                <div class="network-empty">Noch kein Scan durchgeführt. Klicke "Netzwerk scannen" um Geräte im lokalen Netzwerk zu finden.</div>
+            </div>`;
+        }
+
+        let filtered = this.localDevices;
+        if (this.filter) {
+            const q = this.filter.toLowerCase();
+            filtered = filtered.filter(d =>
+                d.ip.includes(q) || d.mac.toLowerCase().includes(q) ||
+                d.hostname.toLowerCase().includes(q) || d.vendor.toLowerCase().includes(q)
+            );
+        }
+
+        const rows = filtered.map(d => {
+            const stateClass = d.state === 'Erreichbar' ? 'network-device-reachable' :
+                d.state === 'Veraltet' ? 'network-device-stale' : '';
+            return `<tr class="${stateClass}">
+                <td>${this._esc(d.hostname) || '<span style="color:var(--text-muted)">—</span>'}</td>
+                <td class="network-ip">${this._esc(d.ip)}</td>
+                <td style="font-family:monospace;font-size:11px">${this._esc(d.mac)}</td>
+                <td>${this._esc(d.vendor) || '<span style="color:var(--text-muted)">Unbekannt</span>'}</td>
+                <td><span class="network-device-state ${stateClass}">${this._esc(d.state)}</span></td>
+            </tr>`;
+        }).join('');
+
+        return `<div class="network-devices-section">
+            <div class="network-devices-toolbar">
+                ${scanBtn}
+                <span class="network-timestamp">${filtered.length} Gerät${filtered.length !== 1 ? 'e' : ''} gefunden</span>
+            </div>
+            <table class="network-table network-devices-table">
+                <thead><tr>
+                    <th>Hostname</th>
+                    <th>IP-Adresse</th>
+                    <th>MAC-Adresse</th>
+                    <th>Hersteller</th>
+                    <th>Status</th>
+                </tr></thead>
+                <tbody>${rows}</tbody>
+            </table>
+        </div>`;
     }
 
     _renderBandwidth() {
@@ -367,6 +429,24 @@ export class NetworkView {
                 this.render();
             };
         });
+
+        // Device scan
+        const scanDevicesBtn = this.container.querySelector('#network-scan-devices');
+        if (scanDevicesBtn) {
+            scanDevicesBtn.onclick = async () => {
+                this._devicesLoading = true;
+                this.render();
+                try {
+                    this.localDevices = await window.api.scanLocalNetwork();
+                } catch (err) {
+                    console.error('Geräte-Scan Fehler:', err);
+                    this.localDevices = [];
+                    showToast('Geräte-Scan fehlgeschlagen: ' + err.message, 'error');
+                }
+                this._devicesLoading = false;
+                this.render();
+            };
+        }
 
         // Block buttons
         this.container.querySelectorAll('button[data-block]').forEach(btn => {

@@ -1025,6 +1025,36 @@ function register(mainWindow) {
         return network.resolveIPs(ipAddresses);
     });
 
+    // === System Info ===
+    ipcMain.handle('get-system-info', async () => {
+        const os = require('os');
+        return {
+            computerName: os.hostname(),
+            platform: os.platform(),
+            release: os.release(),
+            arch: os.arch(),
+            totalMemory: os.totalmem(),
+            freeMemory: os.freemem(),
+        };
+    });
+
+    // === Security Audit ===
+    ipcMain.handle('run-security-audit', async () => {
+        const { runSecurityAudit } = require('./security-audit');
+        return runSecurityAudit();
+    });
+
+    ipcMain.handle('get-audit-history', async () => {
+        const { getAuditHistory } = require('./security-audit');
+        return getAuditHistory();
+    });
+
+    // === Network Scanner (Geräte-Erkennung) ===
+    ipcMain.handle('scan-local-network', async () => {
+        const { scanLocalNetwork } = require('./network-scanner');
+        return scanLocalNetwork();
+    });
+
     // === System Score ===
     ipcMain.handle('get-system-score', async (_event, results) => {
         const { calculateSystemScore } = require('./system-score');
