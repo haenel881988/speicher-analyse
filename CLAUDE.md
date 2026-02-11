@@ -64,6 +64,46 @@ Wenn der User ein Problem meldet und die KI die Ursache nicht im Quellcode finde
 
 ---
 
+## DIREKTIVE: Skill-First-Prinzip (UNVERHANDELBAR)
+
+**Bevor auch nur eine Zeile Code geschrieben wird, MUSS geprüft werden ob ein passender Skill existiert.**
+
+### Ablauf
+
+1. **Skill-Check:** Bei JEDER Aufgabe zuerst prüfen: Gibt es unter `.claude/skills/` einen Skill der zu dieser Aufgabe passt?
+
+2. **Skill vorhanden → Skill verwenden.** Kein Freestyle, kein "ich mache es mal schnell so". Der Skill definiert den Workflow, die Konventionen und die Qualitätsstandards. Er wird befolgt.
+
+3. **Kein Skill vorhanden, aber wiederkehrendes Muster erkannt → Skill ZUERST erstellen.**
+   - Wenn die Aufgabe ein Muster ist das in Zukunft wieder vorkommen wird (neuer IPC-Handler, neuer Tab, neuer PowerShell-Befehl, etc.), wird ZUERST der Skill erstellt
+   - Dann wird der neue Skill angewendet
+   - So wächst die Skill-Bibliothek organisch mit dem Projekt
+
+4. **Einmalige Aufgabe ohne Muster → Direkt arbeiten.** Nur bei echten Einmal-Aufgaben (z.B. einen spezifischen Bug fixen der kein Muster hat) darf ohne Skill gearbeitet werden. Im Zweifel: Skill erstellen.
+
+### Verfügbare Skills
+
+| Skill | Aufruf | Anwendungsfall |
+|-------|--------|----------------|
+| `/fix-bug` | `/fix-bug [beschreibung]` | Jeder Bug-Fix |
+| `/deep-analyze` | `/deep-analyze [problem]` | Problemanalyse vor dem Fix |
+| `/new-feature` | `/new-feature [name]` | Komplett neues Feature (Backend + Frontend) |
+| `/add-ipc` | `/add-ipc [handler] [modul]` | Neuer IPC-Handler |
+| `/add-sidebar-tab` | `/add-sidebar-tab [name] [gruppe]` | Neuer Sidebar-Tab mit View |
+| `/powershell-cmd` | `/powershell-cmd [name] [modul]` | Neuer PowerShell-Befehl |
+| `/changelog` | `/changelog [typ] [beschreibung]` | Änderungsprotokoll aktualisieren |
+| `/git-release` | `/git-release [version]` | Release erstellen (Version + Tag + Push) |
+| `/audit-code` | `/audit-code [datei/modul/all]` | Codequalitäts-Audit |
+
+### Warum diese Direktive existiert
+
+- **Konsistenz:** Jeder IPC-Handler, jeder Tab, jeder PowerShell-Befehl folgt dem gleichen Pattern
+- **Qualität:** Skills enthalten alle Lessons Learned und verhindern bekannte Fehler
+- **Effizienz:** Kein Rad wird neu erfunden, kein Pattern wird vergessen
+- **Nachvollziehbarkeit:** Simon kann die Skills lesen und weiß exakt was Claude tut
+
+---
+
 # Git Workflow
 
 **Immer ausführen, nach jeder Änderung.:**
