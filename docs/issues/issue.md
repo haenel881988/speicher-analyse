@@ -141,32 +141,33 @@ Die App hat beim Speichern nur die Ordner-Struktur gesichert, aber NICHT die Dat
 5. Prüfen: Zeigt jede Einstellung betroffene Apps (z.B. "Google Maps", "Spotify")?
 6. Prüfen: Hat jede Einstellung ein farbiges Symbol (grün/gelb/rot)?
 
-**Status:** Fix implementiert, wartet auf Simons Test
+**Simons Feedback (11.02.2026):**
+Gute Umsetzung, jedoch ist das Privacy-Dashboard für einen Laien nicht hilfreich. Soll er das jetzt schützen oder nicht? Generell muss ich wissen, welche Einstellungen welche Auswirkungen auf mein System haben. Achtung: Windows-Updates können die Einstellungen unbrauchbar machen.
 
-**Simons Feedback**
-Gute Umsetzung, jedoch ist  das privacy dashboard für ein laien nicht hilfreich. Soll er das jetzt schützen oder nicht?
-Der Privacy Dashboard muss generell anwenderfreundlicher gestaltet werden. Ich habe keine Ahnung, ob ich jetzt das deaktivieren soll.
+**Was jetzt geändert wurde (Überarbeitung):**
+- Jede Einstellung zeigt jetzt eine verständliche **Erklärung** an (was diese Einstellung macht)
+- Neue Rubrik **"Was passiert beim Deaktivieren"** mit konkreten Auswirkungen
+- Klare **Handlungsempfehlung** bei jeder Einstellung:
+  - Grün: "Deaktivieren empfohlen" — keine deiner Apps braucht das
+  - Gelb: "Vorsicht" — einige deiner Apps könnten betroffen sein
+  - Rot: "Nicht deaktivieren" — zu viele deiner Apps brauchen das
+- Bei "Offen" steht jetzt: "Diese Einstellung teilt Daten mit Microsoft oder Werbepartnern"
+- Bei "Geschützt" steht: "Deine Daten werden nicht gesendet"
+- Technische Details (Registry-Pfade) wurden aus der Anzeige entfernt
 
-Telemetrie Tasks: Soll ich das jetzt deaktivieren?
+**Was Simon testen soll:**
+1. Privacy-Dashboard öffnen
+2. 30-60 Sekunden warten bis die App-Analyse fertig ist
+3. Prüfen: Zeigt jede Einstellung eine verständliche Erklärung?
+4. Prüfen: Gibt es bei jeder Einstellung eine klare Empfehlung (grün/gelb/rot)?
+5. Prüfen: Steht bei "Offen"-Einstellungen was das konkret bedeutet?
+6. Prüfen: Ist jetzt klar, welche Einstellungen deaktiviert werden sollten und welche nicht?
 
-Generell muss ich Wissen, welche  Einstellungen welche Auswirkungen auf  mein System haben.
+**Offene Punkte für später:**
+- Windows-Update-Warnung: Hinweis dass Updates Einstellungen zurücksetzen können
+- Regelmässige Prüfung der Einstellungen (z.B. beim Scan automatisch mitprüfen)
 
-Achtung gewisse zukünftige windows uppdates  / upgrades können die einstellungen unbrauchbar machen, daher muss das privacy dashboard stabilisiert werden, sowie potenzielle Einstellungen zuerst geprüft werden, ob diese auch ziehen, am besten gleich beim speicherscan einbauen?
-
-Immer  mit skills arbeiten! Danke dir
-
-
-**Akzeptanzkriterien — was Simon sehen soll:**
-- [ ] Lade-Hinweis erscheint sofort beim Öffnen des Privacy-Dashboards
-- [ ] Nach 30-60 Sekunden: Banner mit Zusammenfassung ("X Programme analysiert")
-- [ ] Bei "Standort" steht z.B.: "Google Maps, Facebook können nicht mehr auf deinen Standort zugreifen"
-- [ ] Bei "Werbe-ID" steht z.B.: "Spotify, Steam zeigen weniger passende Werbung"
-- [ ] Jede Einstellung hat ein farbiges Symbol: grün, gelb oder rot
-- [ ] Alle Texte sind verständlich ohne IT-Kenntnisse
-
-
-Simons Feedback: Unklar, soll ich jetzt die Einstellungen deaktivieren oder nicht?
-Vielleicht erläuterungen / erklärungen?
+**Status:** Überarbeitung implementiert, wartet auf Simons Test
 
 ---
 
