@@ -9,6 +9,7 @@ Archiv: [`archiv/aenderungsprotokoll_v7.3-v7.5.md`](archiv/aenderungsprotokoll_v
 
 | # | Datum | Version | Typ | Beschreibung |
 |---|-------|---------|-----|-------------|
+| 25 | 2026-02-11 | v7.2.1 | feature | **Netzwerk-Monitor: IP-Ownership via ip-api.com** - DNS Reverse Lookup durch echte WHOIS/IP-Datenbank ersetzt. ip-api.com Batch-API löst alle IPs in einer Anfrage auf (Organisation, ISP, Land, Länderflagge). Lokale Adressen (0.0.0.0) ausgeblendet. Verbindungen zur gleichen IP gruppiert. Tracker rot markiert. Firmenübersicht im Gruppen-Header. Fallback auf DNS bei API-Ausfall. |
 | 1 | 2026-02-10 | v7.5 | fix | **PDF toHex Polyfill** - pdf.js v5.4 nutzt `Uint8Array.prototype.toHex()` das in Chrome 130 (Electron 33) nicht existiert. Polyfill in index.html eingefügt. Zusätzlich Worker Blob-URL-Fix für file:// Protokoll. |
 | 2 | 2026-02-10 | v7.5 | fix | **PDF Worker-Kontext Polyfill** - toHex/fromHex Polyfill wurde nur im Main-Page-Kontext geladen, aber pdf.js ruft toHex() im Worker auf. Fix: Polyfill wird jetzt direkt in den Worker-Blob injiziert (vor dem pdf.js Worker-Code), damit es im Worker Execution Context verfügbar ist. |
 | 3 | 2026-02-10 | v7.5 | feature | **Speicherfarben konfigurierbar** - Farbliche Hervorhebung großer Dateien/Ordner (rot >1GB, orange >100MB, gelb >10MB) ist jetzt standardmäßig deaktiviert. Neue Preference `showSizeColors` mit Toggle in Einstellungen → Allgemein. |
