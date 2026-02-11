@@ -218,6 +218,7 @@ contextBridge.exposeInMainWorld('api', {
     checkSideloading: () => ipcRenderer.invoke('check-sideloading'),
     fixSideloading: () => ipcRenderer.invoke('fix-sideloading'),
     fixSideloadingWithElevation: () => ipcRenderer.invoke('fix-sideloading-with-elevation'),
+    getPrivacyRecommendations: () => ipcRenderer.invoke('get-privacy-recommendations'),
 
     // === S.M.A.R.T. Disk Health ===
     getDiskHealth: () => ipcRenderer.invoke('get-disk-health'),

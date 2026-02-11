@@ -21,6 +21,11 @@ const PRIVACY_SETTINGS = [
         category: 'werbung',
         name: 'Werbe-ID',
         description: 'Ermöglicht personalisierte Werbung anhand einer eindeutigen Geräte-ID.',
+        explanation: 'Windows vergibt deinem Gerät eine eindeutige Nummer, mit der Werbetreibende dich wiedererkennen können. Apps und Webseiten nutzen diese Nummer, um dir personalisierte Werbung zu zeigen.',
+        impacts: [
+            'Werbung in Apps wird weniger auf dich zugeschnitten',
+            'Kostenlose Apps zeigen trotzdem Werbung, nur weniger passende',
+        ],
         registryPath: 'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\AdvertisingInfo',
         registryKey: 'Enabled',
         recommendedValue: 0,
@@ -33,6 +38,11 @@ const PRIVACY_SETTINGS = [
         category: 'telemetrie',
         name: 'Cortana',
         description: 'Erlaubt Cortana, Sprach- und Suchdaten zu sammeln und zu verarbeiten.',
+        explanation: 'Cortana hört auf deine Sprachbefehle und merkt sich deine Suchanfragen, um bessere Vorschläge zu machen. Dabei werden diese Daten an Microsoft gesendet.',
+        impacts: [
+            'Cortana-Sprachbefehle funktionieren nicht mehr',
+            'Suchvorschläge in der Taskleiste werden weniger personalisiert',
+        ],
         registryPath: 'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Search',
         registryKey: 'CortanaConsent',
         recommendedValue: 0,
@@ -45,6 +55,10 @@ const PRIVACY_SETTINGS = [
         category: 'telemetrie',
         name: 'Feedback-Häufigkeit',
         description: 'Bestimmt, wie oft Windows nach Feedback fragt.',
+        explanation: 'Windows fragt dich regelmäßig, ob du zufrieden bist und ob bestimmte Funktionen gut funktionieren. Die Antworten werden an Microsoft geschickt.',
+        impacts: [
+            'Keine Feedback-Popups mehr von Windows',
+        ],
         registryPath: 'HKCU\\SOFTWARE\\Microsoft\\Siuf\\Rules',
         registryKey: 'NumberOfSIUFInPeriod',
         recommendedValue: 0,
@@ -57,6 +71,11 @@ const PRIVACY_SETTINGS = [
         category: 'diagnose',
         name: 'Handschrift- und Eingabedaten',
         description: 'Sammelt Tipp- und Handschriftmuster zur Verbesserung der Spracherkennung.',
+        explanation: 'Windows beobachtet, wie du tippst und schreibst, um die Rechtschreibprüfung und Wortvorschläge zu verbessern. Diese Muster werden an Microsoft gesendet.',
+        impacts: [
+            'Wortvorschläge beim Tippen werden weniger präzise',
+            'Handschrifterkennung (Tablet/Stift) lernt nicht mehr dazu',
+        ],
         registryPath: 'HKCU\\SOFTWARE\\Microsoft\\InputPersonalization',
         registryKey: 'RestrictImplicitTextCollection',
         recommendedValue: 1,
@@ -69,6 +88,10 @@ const PRIVACY_SETTINGS = [
         category: 'diagnose',
         name: 'Diagnose-Benachrichtigungen',
         description: 'Steuert die Anzeige von Diagnose-Benachrichtigungen.',
+        explanation: 'Windows zeigt Benachrichtigungen über gesammelte Diagnosedaten an. Diese dienen nur der Information, senden aber selbst auch Daten.',
+        impacts: [
+            'Keine Diagnose-Benachrichtigungen mehr',
+        ],
         registryPath: 'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Diagnostics\\DiagTrack',
         registryKey: 'ShowedToastAtLevel',
         recommendedValue: 0,
@@ -81,6 +104,11 @@ const PRIVACY_SETTINGS = [
         category: 'diagnose',
         name: 'App-Diagnosezugriff',
         description: 'Erlaubt Apps den Zugriff auf Diagnoseinformationen anderer Apps.',
+        explanation: 'Wenn aktiviert, können installierte Apps sehen, welche anderen Apps du nutzt und wie sie sich verhalten. Das ist ein Sicherheitsrisiko.',
+        impacts: [
+            'Apps können keine Informationen über andere Apps mehr abfragen',
+            'Einige Diagnose-Tools von Drittanbietern funktionieren eingeschränkt',
+        ],
         registryPath: 'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\appDiagnostics',
         registryKey: 'Value',
         recommendedValue: 'Deny',
@@ -93,6 +121,13 @@ const PRIVACY_SETTINGS = [
         category: 'standort',
         name: 'Standortzugriff',
         description: 'Erlaubt Apps den Zugriff auf Ihren Standort.',
+        explanation: 'Wenn aktiviert, können Apps erkennen wo du dich gerade befindest. Das wird für Navigation, Wetter und ortsbasierte Dienste genutzt.',
+        impacts: [
+            'Keine ortsbasierten Empfehlungen oder Navigation mehr',
+            'Wetter-Apps zeigen kein lokales Wetter',
+            'Find My Device funktioniert nicht mehr',
+            'Zeitzone wird nicht mehr automatisch erkannt',
+        ],
         registryPath: 'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\location',
         registryKey: 'Value',
         recommendedValue: 'Deny',
@@ -107,9 +142,15 @@ const PRIVACY_SETTINGS = [
         category: 'telemetrie',
         name: 'Telemetrie (Gruppenrichtlinie)',
         description: 'Sendet Diagnose- und Nutzungsdaten an Microsoft. Richtlinienebene.',
+        explanation: 'Windows sendet regelmäßig Informationen darüber, welche Apps du nutzt, wie lange und welche Fehler auftreten. Mit dieser Einstellung reduzierst du das auf das technisch notwendige Minimum.',
+        impacts: [
+            'Windows kann weniger gezielte Updates liefern',
+            'Einige Kompatibilitätsprüfungen entfallen',
+            'Microsoft erhält weniger Fehlerberichte von deinem System',
+        ],
         registryPath: 'HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\DataCollection',
         registryKey: 'AllowTelemetry',
-        recommendedValue: 1, // Minimum auf Pro (0=Security ist nur Enterprise/Education)
+        recommendedValue: 1,
         valueType: 'REG_DWORD',
         riskLevel: 'high',
         tier: 'advanced',
@@ -120,9 +161,13 @@ const PRIVACY_SETTINGS = [
         category: 'telemetrie',
         name: 'Telemetrie (Datensammlung)',
         description: 'Steuert den Umfang der an Microsoft gesendeten Diagnosedaten.',
+        explanation: 'Wie die Gruppenrichtlinie oben, aber über einen anderen Registry-Pfad. Beide müssen gesetzt werden, damit die Telemetrie wirklich reduziert wird.',
+        impacts: [
+            'Gleiche Auswirkungen wie Telemetrie-Gruppenrichtlinie',
+        ],
         registryPath: 'HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\DataCollection',
         registryKey: 'AllowTelemetry',
-        recommendedValue: 1, // Minimum auf Pro
+        recommendedValue: 1,
         valueType: 'REG_DWORD',
         riskLevel: 'high',
         tier: 'advanced',
@@ -133,6 +178,11 @@ const PRIVACY_SETTINGS = [
         category: 'telemetrie',
         name: 'WiFi Sense',
         description: 'Automatische Verbindung mit vorgeschlagenen WLAN-Hotspots und Freigabe von Netzwerken.',
+        explanation: 'Windows verbindet sich automatisch mit WLANs, die Microsoft als sicher einstuft, und teilt dein WLAN-Passwort mit Kontakten. Das ist ein Sicherheitsrisiko.',
+        impacts: [
+            'Keine automatische Verbindung mit vorgeschlagenen Hotspots mehr',
+            'WLAN-Passwörter werden nicht mehr mit Kontakten geteilt',
+        ],
         registryPath: 'HKLM\\SOFTWARE\\Microsoft\\WcmSvc\\wifinetworkmanager\\config',
         registryKey: 'AutoConnectAllowedOEM',
         recommendedValue: 0,
@@ -146,6 +196,12 @@ const PRIVACY_SETTINGS = [
         category: 'aktivitaet',
         name: 'Aktivitätsverlauf',
         description: 'Erfasst Ihre Aktivitäten (geöffnete Apps, Dateien, Webseiten) und zeigt sie in der Zeitachse an.',
+        explanation: 'Windows merkt sich alles was du tust: welche Programme du öffnest, welche Dateien du bearbeitest und welche Webseiten du besuchst. Diese Informationen werden in einer Zeitachse angezeigt.',
+        impacts: [
+            'Windows-Zeitachse (Timeline) in Alt+Tab wird leer',
+            'Geräteübergreifende Aufgaben funktionieren nicht mehr',
+            'Windows merkt sich nicht mehr, woran du zuletzt gearbeitet hast',
+        ],
         registryPath: 'HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\System',
         registryKey: 'EnableActivityFeed',
         recommendedValue: 0,
@@ -159,6 +215,11 @@ const PRIVACY_SETTINGS = [
         category: 'aktivitaet',
         name: 'Aktivitäten veröffentlichen',
         description: 'Sendet Ihren Aktivitätsverlauf an Microsoft-Server.',
+        explanation: 'Dein Aktivitätsverlauf wird nicht nur lokal gespeichert, sondern auch an Microsoft-Server gesendet. So kann Microsoft nachvollziehen, was du auf deinem PC machst.',
+        impacts: [
+            'Aktivitäten werden nicht mehr mit Microsoft-Servern synchronisiert',
+            'Auf anderen Geräten siehst du nicht mehr, woran du hier gearbeitet hast',
+        ],
         registryPath: 'HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\System',
         registryKey: 'PublishUserActivities',
         recommendedValue: 0,
@@ -167,6 +228,61 @@ const PRIVACY_SETTINGS = [
         tier: 'advanced',
         warning: 'Erfordert Administratorrechte. Verhindert die Synchronisation von Aktivitäten mit Microsoft-Servern.',
     },
+];
+
+// ============================================================================
+// App-Permissions-Datenbank
+// ============================================================================
+// Zuordnung: App-Muster → benötigte Datenschutz-Berechtigungen
+// patterns: Substrings die im App-Namen oder Publisher gesucht werden (case-insensitive)
+// needs: Array von Privacy-Setting-IDs die diese App-Kategorie betreffen
+
+const APP_PERMISSIONS = [
+    // Navigation & Standort
+    { patterns: ['google maps', 'google earth'], needs: ['standort-zugriff'], label: 'Navigation' },
+    { patterns: ['uber', 'bolt', 'free now', 'freenow'], needs: ['standort-zugriff'], label: 'Fahrdienst' },
+    { patterns: ['lieferando', 'just eat', 'delivery hero', 'wolt', 'doordash'], needs: ['standort-zugriff'], label: 'Lieferdienst' },
+    { patterns: ['weather', 'wetter', 'accuweather', 'windy'], needs: ['standort-zugriff'], label: 'Wetter' },
+
+    // Social Media & Dating (Standort + Werbung)
+    { patterns: ['facebook', 'meta platforms'], needs: ['standort-zugriff', 'werbung-id'], label: 'Social Media' },
+    { patterns: ['instagram'], needs: ['standort-zugriff', 'werbung-id'], label: 'Social Media' },
+    { patterns: ['tiktok'], needs: ['werbung-id'], label: 'Social Media' },
+    { patterns: ['twitter', 'x corp'], needs: ['werbung-id'], label: 'Social Media' },
+    { patterns: ['snapchat'], needs: ['standort-zugriff', 'werbung-id'], label: 'Social Media' },
+    { patterns: ['tinder', 'lovoo', 'bumble', 'badoo', 'grindr'], needs: ['standort-zugriff', 'werbung-id'], label: 'Dating' },
+
+    // Kommunikation (Cortana + Diagnosedaten)
+    { patterns: ['microsoft teams', 'teams'], needs: ['cortana-consent', 'app-diagnose'], label: 'Kommunikation' },
+    { patterns: ['zoom'], needs: ['app-diagnose'], label: 'Kommunikation' },
+    { patterns: ['discord'], needs: ['app-diagnose'], label: 'Kommunikation' },
+    { patterns: ['skype'], needs: ['cortana-consent', 'app-diagnose'], label: 'Kommunikation' },
+    { patterns: ['slack'], needs: ['app-diagnose'], label: 'Kommunikation' },
+
+    // Browser (Telemetrie + Standort + Werbung)
+    { patterns: ['google chrome', 'chromium'], needs: ['standort-zugriff', 'werbung-id'], label: 'Browser' },
+    { patterns: ['mozilla firefox'], needs: ['standort-zugriff'], label: 'Browser' },
+    { patterns: ['opera'], needs: ['standort-zugriff', 'werbung-id'], label: 'Browser' },
+    { patterns: ['brave'], needs: ['standort-zugriff'], label: 'Browser' },
+
+    // Gaming (Werbung + Telemetrie)
+    { patterns: ['steam', 'valve'], needs: ['werbung-id'], label: 'Gaming' },
+    { patterns: ['epic games'], needs: ['werbung-id'], label: 'Gaming' },
+    { patterns: ['riot games', 'league of legends', 'valorant'], needs: ['werbung-id'], label: 'Gaming' },
+    { patterns: ['ea app', 'electronic arts', 'origin'], needs: ['werbung-id', 'app-diagnose'], label: 'Gaming' },
+    { patterns: ['ubisoft', 'uplay'], needs: ['werbung-id'], label: 'Gaming' },
+    { patterns: ['xbox', 'game bar'], needs: ['werbung-id', 'aktivitaet-feed'], label: 'Gaming' },
+
+    // Produktivität (Telemetrie + Aktivität)
+    { patterns: ['microsoft office', 'microsoft 365', 'office 365'], needs: ['telemetrie-policy', 'aktivitaet-feed'], label: 'Office' },
+    { patterns: ['visual studio', 'vs code', 'vscode'], needs: ['telemetrie-policy', 'app-diagnose'], label: 'Entwicklung' },
+    { patterns: ['adobe', 'creative cloud'], needs: ['werbung-id', 'app-diagnose'], label: 'Kreativ-Software' },
+
+    // Musik & Streaming (Werbung)
+    { patterns: ['spotify'], needs: ['werbung-id'], label: 'Musik' },
+    { patterns: ['amazon music', 'amazon prime'], needs: ['werbung-id'], label: 'Streaming' },
+    { patterns: ['netflix'], needs: ['werbung-id'], label: 'Streaming' },
+    { patterns: ['disney'], needs: ['werbung-id'], label: 'Streaming' },
 ];
 
 // Bekannte Telemetrie-Aufgaben (Namensteile)
@@ -538,6 +654,68 @@ async function disableScheduledTask(taskPath) {
 }
 
 // ============================================================================
+// Intelligente, app-bewusste Datenschutz-Empfehlungen
+// ============================================================================
+
+/**
+ * Korreliert installierte Apps mit Datenschutz-Einstellungen.
+ * Gibt personalisierte Empfehlungen pro Einstellung zurück.
+ * @param {Array} programs - Installierte Programme aus software-audit.js
+ * @returns {Array<{settingId, recommendation, affectedApps, reason}>}
+ */
+function getSmartRecommendations(programs) {
+    if (!programs || programs.length === 0) return [];
+
+    // Für jede Privacy-Setting: welche installierten Apps sind betroffen?
+    const settingApps = new Map(); // settingId → Set<{name, label}>
+
+    for (const perm of APP_PERMISSIONS) {
+        for (const program of programs) {
+            const searchText = `${program.name || ''} ${program.publisher || ''}`.toLowerCase();
+            const matched = perm.patterns.some(p => searchText.includes(p.toLowerCase()));
+            if (!matched) continue;
+
+            for (const settingId of perm.needs) {
+                if (!settingApps.has(settingId)) settingApps.set(settingId, []);
+                const list = settingApps.get(settingId);
+                // Duplikate vermeiden (gleiche App kann über mehrere Patterns matchen)
+                if (!list.some(a => a.name === program.name)) {
+                    list.push({ name: program.name, label: perm.label });
+                }
+            }
+        }
+    }
+
+    // Pro Einstellung: Empfehlung generieren
+    return PRIVACY_SETTINGS.map(setting => {
+        const apps = settingApps.get(setting.id) || [];
+        const count = apps.length;
+
+        let recommendation, reason;
+        if (count === 0) {
+            recommendation = 'safe';
+            reason = 'Keine deiner installierten Apps benötigt diese Funktion.';
+        } else if (count <= 2) {
+            recommendation = 'caution';
+            const names = apps.map(a => a.name).join(', ');
+            reason = `${count} App${count > 1 ? 's' : ''} nutzt diese Funktion: ${names}`;
+        } else {
+            recommendation = 'risky';
+            const names = apps.slice(0, 3).map(a => a.name).join(', ');
+            const more = count > 3 ? ` und ${count - 3} weitere` : '';
+            reason = `${count} Apps benötigen diese Funktion aktiv: ${names}${more}`;
+        }
+
+        return {
+            settingId: setting.id,
+            recommendation, // 'safe' | 'caution' | 'risky'
+            affectedApps: apps,
+            reason,
+        };
+    });
+}
+
+// ============================================================================
 // Modul-Exporte
 // ============================================================================
 
@@ -551,4 +729,6 @@ module.exports = {
     checkSideloading,
     fixSideloading,
     getWindowsEdition,
+    getSmartRecommendations,
+    PRIVACY_SETTINGS,
 };

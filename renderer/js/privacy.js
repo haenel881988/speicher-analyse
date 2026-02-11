@@ -12,8 +12,11 @@ export class PrivacyView {
         this.score = 0;
         this.edition = null;
         this.sideloading = null;
+        this.recommendations = new Map(); // settingId → { recommendation, affectedApps, reason }
+        this.programCount = 0;
         this._loaded = false;
         this._advancedOpen = false;
+        this._recsLoaded = false;
     }
 
     async init() {
@@ -43,6 +46,11 @@ export class PrivacyView {
             this.score = this._calcScore();
             this._loaded = true;
             this.render();
+
+            // Smarte Empfehlungen nachladen (nicht-blockierend)
+            if (!this._recsLoaded) {
+                this._loadRecommendations();
+            }
         } catch (err) {
             this._loaded = false;
             this.container.innerHTML = `
@@ -59,6 +67,25 @@ export class PrivacyView {
                     await this.init();
                 };
             }
+        }
+    }
+
+    async _loadRecommendations() {
+        try {
+            const data = await window.api.getPrivacyRecommendations();
+            if (data?.error) {
+                console.warn('[Privacy] Empfehlungen nicht verfügbar:', data.error);
+                return;
+            }
+            this.recommendations.clear();
+            for (const rec of (data.recommendations || [])) {
+                this.recommendations.set(rec.settingId, rec);
+            }
+            this.programCount = data.programCount || 0;
+            this._recsLoaded = true;
+            this.render(); // Re-Render mit Empfehlungen
+        } catch (err) {
+            console.warn('[Privacy] Empfehlungen konnten nicht geladen werden:', err.message);
         }
     }
 
@@ -145,6 +172,20 @@ export class PrivacyView {
             </div>`;
         }
 
+        // Empfehlungs-Banner
+        let recBannerHtml = '';
+        if (this._recsLoaded && this.recommendations.size > 0) {
+            const safeCount = [...this.recommendations.values()].filter(r => r.recommendation === 'safe').length;
+            const cautionCount = [...this.recommendations.values()].filter(r => r.recommendation === 'caution').length;
+            const riskyCount = [...this.recommendations.values()].filter(r => r.recommendation === 'risky').length;
+            recBannerHtml = `<div class="privacy-rec-banner">
+                <strong>App-Analyse:</strong> ${this.programCount} installierte Programme analysiert &mdash;
+                <span class="risk-badge risk-safe">&#10003; ${safeCount} sicher</span>
+                ${cautionCount > 0 ? `<span class="risk-badge risk-medium">&#9888; ${cautionCount} Vorsicht</span>` : ''}
+                ${riskyCount > 0 ? `<span class="risk-badge risk-high">&#9888; ${riskyCount} Risiko</span>` : ''}
+            </div>`;
+        }
+
         this.container.innerHTML = `
             <div class="privacy-page">
                 ${sideloadingHtml}
@@ -157,6 +198,7 @@ export class PrivacyView {
                         <h2>Privacy-Dashboard</h2>
                         <p>${this.settings.filter(s => s.isPrivate).length} von ${this.settings.length} Einstellungen sind datenschutzfreundlich.</p>
                         ${editionHtml}
+                        ${recBannerHtml}
                         <button class="privacy-btn-apply-all" id="privacy-apply-all" title="Wendet nur die sicheren Standard-Einstellungen an (keine erweiterten)">Alle Standard optimieren</button>
                     </div>
                 </div>
@@ -193,11 +235,40 @@ export class PrivacyView {
         const statusText = s.isPrivate ? 'Geschützt' : 'Offen';
         const warningHtml = s.warning ? `<div class="privacy-setting-warning">${this._esc(s.warning)}</div>` : '';
 
+        // Smarte Empfehlung für diese Einstellung
+        const rec = this.recommendations.get(s.id);
+        let recHtml = '';
+        if (rec) {
+            const recColors = { safe: 'risk-safe', caution: 'risk-medium', risky: 'risk-high' };
+            const recLabels = { safe: 'Sicher', caution: 'Vorsicht', risky: 'Risiko' };
+            const recIcons = { safe: '&#10003;', caution: '&#9888;', risky: '&#9888;' };
+            const badgeClass = recColors[rec.recommendation] || 'risk-medium';
+            const badgeLabel = recLabels[rec.recommendation] || 'Prüfen';
+            const badgeIcon = recIcons[rec.recommendation] || '';
+
+            recHtml = `<div class="privacy-recommendation privacy-rec-${rec.recommendation}">
+                <span class="risk-badge ${badgeClass}">${badgeIcon} ${badgeLabel}</span>
+                <span class="privacy-rec-reason">${this._esc(rec.reason)}</span>
+                ${rec.affectedApps.length > 0 ? `<div class="privacy-rec-apps">${rec.affectedApps.slice(0, 5).map(a =>
+                    `<span class="privacy-rec-app" title="${this._esc(a.label)}">${this._esc(a.name)}</span>`
+                ).join('')}${rec.affectedApps.length > 5 ? `<span class="privacy-rec-app">+${rec.affectedApps.length - 5}</span>` : ''}</div>` : ''}
+            </div>`;
+        }
+
+        // Laienverständliche Erklärung (aus Backend)
+        const explanationHtml = s.explanation ? `<div class="privacy-setting-explanation">${this._esc(s.explanation)}</div>` : '';
+
+        // Auswirkungen
+        const impactsHtml = s.impacts?.length > 0 ? `<div class="privacy-setting-impacts"><strong>Auswirkungen:</strong><ul>${s.impacts.map(i => `<li>${this._esc(i)}</li>`).join('')}</ul></div>` : '';
+
         return `<div class="privacy-setting ${isAdvanced ? 'privacy-setting-advanced' : ''}" data-id="${s.id}">
             <div class="privacy-setting-info">
                 <strong>${this._esc(s.name)}</strong>
                 <span class="privacy-setting-desc">${this._esc(s.description)}</span>
+                ${explanationHtml}
+                ${impactsHtml}
                 ${warningHtml}
+                ${recHtml}
                 <span class="privacy-setting-path">${this._esc(s.registryPath)}\\${this._esc(s.registryKey)}</span>
             </div>
             <div class="privacy-setting-actions">

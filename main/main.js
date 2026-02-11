@@ -61,8 +61,9 @@ if (!gotLock) {
             mainWindow.show();
         });
 
-        // Minimize to tray or quit (depends on preference)
-        let trayNotified = false;
+        // X-Button (Schließen) = App IMMER beenden. Keine Ausnahme.
+        // Standard-Windows-Verhalten: X = Schließen, _ = Minimieren.
+        // Minimize-to-Tray betrifft NUR den Minimieren-Button (siehe tray.js).
         mainWindow.on('close', (e) => {
             if (isQuitting) return; // App will beenden → durchlassen
 
@@ -73,36 +74,10 @@ if (!gotLock) {
                 return;
             }
 
-            // Preferences erst nach IPC-Register verfügbar - hier lazy laden
-            let minimizeToTray = false; // Default: X = App beenden
-            try {
-                const { preferences } = require('./ipc-handlers');
-                minimizeToTray = preferences.get('minimizeToTray');
-            } catch { /* default: false = App beenden */ }
-
-            if (minimizeToTray) {
-                e.preventDefault();
-                mainWindow.hide();
-
-                // Einmalige Tray-Benachrichtigung beim ersten Minimieren
-                if (!trayNotified) {
-                    trayNotified = true;
-                    try {
-                        const { Notification } = require('electron');
-                        if (Notification.isSupported()) {
-                            new Notification({
-                                title: 'Speicher Analyse',
-                                body: 'App läuft weiter im System-Tray. Rechtsklick auf Tray-Icon → Beenden.',
-                                silent: true,
-                            }).show();
-                        }
-                    } catch { /* ignore */ }
-                }
-            } else {
-                // minimizeToTray deaktiviert → App wirklich beenden
-                isQuitting = true;
-                app.quit();
-            }
+            // X = Beenden. Immer. Ohne Ausnahme.
+            e.preventDefault();
+            isQuitting = true;
+            app.quit();
         });
 
         // Build application menu

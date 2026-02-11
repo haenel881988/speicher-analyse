@@ -13,6 +13,8 @@ Minimieren ist zum minieren da, maximieren zum maximieren und schliessen zum sch
 
 DIESE LOGIK MÜSSTE DOCH LOGISCH SEIN!!!! ODER WARUM ZUR HÖLLE IST SCHLIESSEN = MINIMIEREN??? WTF????
 
+**Fix implementiert (2026-02-11):**
+Wurzelursache: `main/main.js` close-Handler prüfte `minimizeToTray`-Preference — wenn aktiv, wurde `e.preventDefault()` + `mainWindow.hide()` aufgerufen statt die App zu beenden. Fix: Close-Handler vereinfacht — X beendet die App IMMER. Minimize-to-Tray betrifft ausschließlich den Minimieren-Button (tray.js). Warte auf Simons Bestätigung.
 
 
 ## Scandaten
@@ -22,11 +24,17 @@ Eine akribische und minutiöse tiefenanalyse und tiefenrecherche ist zwingend n�
 **dritte Iteration: Erneuter Versuch**
 Sobald ich die App öffne, beginnt die App zu scannen! Lüfter drehen hoch - die Daten werden NICHT wiederhergestellt!!!
 
+**Fix implementiert (2026-02-11):**
+Kaskadierende Folge von Issue #1 (Schließ-Funktion). X versteckte das Fenster statt es zu schließen → User beendete per Task-Manager → `before-quit` Event feuerte nie → Session wurde nie gespeichert → keine Daten zum Wiederherstellen. Fix: Issue #1 behebt auch dieses Problem — X löst jetzt `app.quit()` aus → `before-quit` feuert → Session wird korrekt gespeichert. Die Session-Infrastruktur selbst (session.js, ipc-handlers.js) funktioniert korrekt. Warte auf Simons Bestätigung.
+
 ## Speichergrösse Verzeichnisse
 Die Speicherfarben sollen standardmässig deaktiviert sein, nur die Speichergrösse, die Zahlen sollen angezeigt werden. Dies soll in den Einstellungen aktivierbar werden.
 
 **Dritte Iterration: Erneuter Versuch:**
 Die Ordnergrössen werden endlich angezeigt.
+
+**Analyse (2026-02-11):**
+Bereits vollständig implementiert: `preferences.js:33` hat `showSizeColors: false` als Standard, Toggle in Einstellungen vorhanden (`renderer/js/settings.js:183-191`), Explorer respektiert die Einstellung. Kein Code-Fix nötig. Warte auf Simons Bestätigung.
 
 ## PDF
 Die PDFs können nicht mal gelesen werden. Die PDF soll direkt in der App geöffnet werden können.
@@ -155,3 +163,14 @@ Alle Texte müssen so geschrieben sein, dass jemand ohne IT-Kenntnisse sie verst
 - [ ] Empfehlungs-Ampel (grün/gelb/rot) pro Einstellung
 - [ ] Alle Texte sind für Laien verständlich (keine Fachbegriffe)
 - [ ] Simon bestätigt, dass das Feature wie gewünscht funktioniert
+
+**Implementierung (2026-02-11):**
+Alle 6 technischen Kriterien implementiert:
+- `main/privacy.js`: 12 Einstellungen mit `explanation` (laienverständlich) + `impacts` (Auswirkungen-Array)
+- `main/privacy.js`: `APP_PERMISSIONS` Datenbank (35+ App-Patterns → Privacy-Setting-Zuordnungen)
+- `main/privacy.js`: `getSmartRecommendations(programs)` Korrelations-Funktion (safe/caution/risky)
+- `main/ipc-handlers.js`: `get-privacy-recommendations` IPC-Handler (ruft Software-Audit + Korrelation auf)
+- `main/preload.js`: `getPrivacyRecommendations()` API-Methode
+- `renderer/js/privacy.js`: Erklärungen, Auswirkungen, Empfehlungs-Badges, betroffene Apps, Zusammenfassungs-Banner
+- `renderer/css/style.css`: CSS für Erklärungen, Empfehlungen, App-Tags, Banner
+Warte auf Simons Bestätigung.

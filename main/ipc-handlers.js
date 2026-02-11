@@ -894,6 +894,21 @@ function register(mainWindow) {
         }
     });
 
+    ipcMain.handle('get-privacy-recommendations', async () => {
+        try {
+            const privacy = require('./privacy');
+            const audit = require('./software-audit');
+            // Erst installierte Programme ermitteln, dann Korrelation berechnen
+            const programs = await audit.auditAll();
+            if (programs?.error) return { error: programs.error };
+            const recommendations = privacy.getSmartRecommendations(programs);
+            return { recommendations, programCount: programs.length };
+        } catch (err) {
+            console.error('[Privacy] Recommendations-Fehler:', err.message);
+            return { error: err.message };
+        }
+    });
+
     // === S.M.A.R.T. Disk Health ===
     ipcMain.handle('get-disk-health', async () => {
         const smart = require('./smart');
