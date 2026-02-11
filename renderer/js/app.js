@@ -329,6 +329,18 @@ async function init() {
             } else {
                 console.log('[Session] Keine Session-Daten vorhanden (Datei fehlt oder leer)');
             }
+
+            // Pending-Action-Ergebnis nach Admin-Neustart anzeigen
+            if (restored && restored.pendingAction) {
+                const pa = restored.pendingAction;
+                if (pa.action === 'fix-sideloading') {
+                    if (pa.success) {
+                        showToast('App-Sideloading wurde erfolgreich repariert!', 'success');
+                    } else {
+                        showToast('Sideloading-Reparatur fehlgeschlagen: ' + (pa.error || 'Unbekannter Fehler'), 'error');
+                    }
+                }
+            }
         } catch (err) {
             console.error('[Session] Restore FEHLER:', err);
         }

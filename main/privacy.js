@@ -285,7 +285,8 @@ async function checkSideloading() {
 
 /**
  * Repariert App-Sideloading (setzt AllowAllTrustedApps auf 1).
- * @returns {Promise<{success: boolean, error?: string}>}
+ * Gibt needsAdmin=true zurück wenn Admin-Rechte benötigt werden.
+ * @returns {Promise<{success: boolean, needsAdmin?: boolean, error?: string}>}
  */
 async function fixSideloading() {
     try {
@@ -296,7 +297,8 @@ async function fixSideloading() {
         if (message.includes('Zugriff') || message.includes('Access')) {
             return {
                 success: false,
-                error: 'Administratorrechte erforderlich. Bitte die App als Administrator starten.',
+                needsAdmin: true,
+                error: 'Administratorrechte erforderlich.',
             };
         }
         return { success: false, error: message };

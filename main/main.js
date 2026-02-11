@@ -150,19 +150,55 @@ if (!gotLock) {
         // Watches renderer/ and main/ for file changes.
         // - Renderer changes (CSS/JS/HTML): auto-reload the window
         // - Main process changes: full app relaunch
+        // IMPORTANT: Uses mtime tracking to prevent ghost events on Windows.
+        // fs.watch() on Windows fires for access-time changes, antivirus scans,
+        // and search indexer activity — mtime comparison eliminates false positives.
         const rendererDir = path.join(__dirname, '..', 'renderer');
         const mainDir = __dirname;
         let reloadTimer = null;
+        const knownMtimes = new Map(); // path → mtime for change detection
+        const RELOAD_EXTENSIONS = new Set(['.js', '.css', '.html', '.htm']);
+        let lastReloadTime = 0;
+        const MIN_RELOAD_INTERVAL = 2000; // Min. 2s between reloads
 
-        function debounceReload(callback, delay = 300) {
+        function debounceReload(callback, delay = 500) {
             if (reloadTimer) clearTimeout(reloadTimer);
             reloadTimer = setTimeout(callback, delay);
+        }
+
+        /**
+         * Checks if a file was actually modified (mtime changed).
+         * Returns false for ghost events (access-time, antivirus, indexer).
+         */
+        function hasFileActuallyChanged(filePath) {
+            try {
+                const stat = fs.statSync(filePath);
+                const mtime = stat.mtimeMs;
+                const known = knownMtimes.get(filePath);
+                if (known === mtime) return false; // Same mtime → ghost event
+                knownMtimes.set(filePath, mtime);
+                return known !== undefined; // First time seen = not a change
+            } catch {
+                return false; // File deleted or inaccessible
+            }
         }
 
         try {
             fs.watch(rendererDir, { recursive: true }, (_event, filename) => {
                 if (!filename || !mainWindow) return;
+                const ext = path.extname(filename).toLowerCase();
+                if (!RELOAD_EXTENSIONS.has(ext)) return; // Ignore non-source files
+                if (filename.includes('node_modules')) return;
+
+                const fullPath = path.join(rendererDir, filename);
+                if (!hasFileActuallyChanged(fullPath)) return;
+
+                // Enforce minimum interval between reloads
+                const now = Date.now();
+                if (now - lastReloadTime < MIN_RELOAD_INTERVAL) return;
+
                 debounceReload(() => {
+                    lastReloadTime = Date.now();
                     console.log(`[Auto-Reload] Renderer geändert: ${filename}`);
                     mainWindow.webContents.reloadIgnoringCache();
                 });
@@ -170,11 +206,20 @@ if (!gotLock) {
 
             fs.watch(mainDir, { recursive: false }, (_event, filename) => {
                 if (!filename || !mainWindow || !filename.endsWith('.js')) return;
+                if (filename.includes('node_modules')) return;
+
+                const fullPath = path.join(mainDir, filename);
+                if (!hasFileActuallyChanged(fullPath)) return;
+
+                const now = Date.now();
+                if (now - lastReloadTime < MIN_RELOAD_INTERVAL) return;
+
                 debounceReload(() => {
+                    lastReloadTime = Date.now();
                     console.log(`[Auto-Reload] Main-Prozess geändert: ${filename} → App wird neu gestartet...`);
                     app.relaunch();
                     app.exit(0);
-                }, 500);
+                }, 1000);
             });
         } catch (err) {
             console.error('Auto-Reload watcher error:', err);

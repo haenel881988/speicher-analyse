@@ -11,6 +11,7 @@ const execAsync = promisify(exec);
 
 const SESSION_DIR = path.join(process.env.APPDATA || process.env.HOME || '.', 'speicher-analyse');
 const SESSION_FILE = path.join(SESSION_DIR, 'elevation-session.json.gz');
+const PENDING_ACTIONS_FILE = path.join(SESSION_DIR, 'pending-actions.json');
 
 async function isAdmin() {
     try {
@@ -109,12 +110,56 @@ function reconstructScanner(session) {
     return scanner;
 }
 
+// ============================================================================
+// Pending Actions (Aufgaben die nach Admin-Neustart automatisch ausgeführt werden)
+// ============================================================================
+
+/**
+ * Speichert eine Aktion die nach Admin-Neustart ausgeführt werden soll.
+ * @param {string} action - Aktions-ID (z.B. 'fix-sideloading')
+ */
+async function savePendingAction(action) {
+    await fs.promises.mkdir(SESSION_DIR, { recursive: true });
+    const data = { action, timestamp: Date.now() };
+    await fs.promises.writeFile(PENDING_ACTIONS_FILE, JSON.stringify(data), 'utf8');
+}
+
+/**
+ * Liest und löscht die pending Action nach Admin-Neustart.
+ * @returns {Promise<string|null>} Aktions-ID oder null
+ */
+async function loadAndClearPendingAction() {
+    if (!fs.existsSync(PENDING_ACTIONS_FILE)) return null;
+
+    try {
+        const content = await fs.promises.readFile(PENDING_ACTIONS_FILE, 'utf8');
+        const data = JSON.parse(content);
+
+        // Löschen nach dem Lesen (einmalig)
+        await fs.promises.unlink(PENDING_ACTIONS_FILE).catch(() => {});
+
+        // Nur Aktionen der letzten 60 Sekunden akzeptieren (Schutz vor verwaisten Dateien)
+        if (Date.now() - data.timestamp > 60000) return null;
+
+        return data.action || null;
+    } catch {
+        await fs.promises.unlink(PENDING_ACTIONS_FILE).catch(() => {});
+        return null;
+    }
+}
+
 /**
  * Save session data and restart the app with admin privileges.
+ * Optional: pendingAction wird nach dem Neustart automatisch ausgeführt.
  */
-async function restartAsAdmin(scans) {
+async function restartAsAdmin(scans, pendingAction) {
     // Save current scan data
     await saveSessionForElevation(scans);
+
+    // Save pending action if specified
+    if (pendingAction) {
+        await savePendingAction(pendingAction);
+    }
 
     // Get the electron executable and app path
     const electronExe = process.execPath;
@@ -132,8 +177,9 @@ async function restartAsAdmin(scans) {
         app.quit();
     } catch (err) {
         // User cancelled UAC dialog or error
-        // Clean up session file since we're not restarting
+        // Clean up session + pending action files since we're not restarting
         await fs.promises.unlink(SESSION_FILE).catch(() => {});
+        await fs.promises.unlink(PENDING_ACTIONS_FILE).catch(() => {});
         throw new Error('Admin-Neustart abgebrochen: ' + (err.message || ''));
     }
 }
@@ -145,4 +191,6 @@ module.exports = {
     loadElevatedSession,
     reconstructScanner,
     restartAsAdmin,
+    savePendingAction,
+    loadAndClearPendingAction,
 };

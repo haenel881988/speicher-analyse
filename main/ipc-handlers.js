@@ -671,7 +671,20 @@ function register(mainWindow) {
     // Priority: Elevation session > Persistent session
     let restoredSessions = null;
     let restoredUiState = null;
+    let pendingActionResult = null; // Ergebnis einer Auto-Aktion nach Admin-Neustart
     const sessionLoadPromise = (async () => {
+        // 0. Check + execute pending actions (from admin elevation restart)
+        const pendingAction = await admin.loadAndClearPendingAction();
+        if (pendingAction) {
+            console.log(`[Admin] Pending-Action gefunden: ${pendingAction}`);
+            if (pendingAction === 'fix-sideloading') {
+                const privacy = require('./privacy');
+                const result = await privacy.fixSideloading();
+                pendingActionResult = { action: pendingAction, ...result };
+                console.log(`[Admin] Sideloading-Fix: ${result.success ? 'ERFOLGREICH' : 'FEHLGESCHLAGEN: ' + result.error}`);
+            }
+        }
+
         // 1. Check for elevation session (priority - one-time, gets deleted)
         const elevatedSessions = await admin.loadElevatedSession();
         if (elevatedSessions && elevatedSessions.length > 0) {
@@ -729,9 +742,18 @@ function register(mainWindow) {
         await sessionLoadPromise;
         const data = restoredSessions;
         const ui = restoredUiState;
+        const action = pendingActionResult;
         restoredSessions = null; // one-time read
         restoredUiState = null;
-        return data ? { sessions: data, ui } : null;
+        pendingActionResult = null;
+        const result = data ? { sessions: data, ui } : null;
+        // Attach pending action result if available
+        if (action && result) {
+            result.pendingAction = action;
+        } else if (action) {
+            return { sessions: null, ui: null, pendingAction: action };
+        }
+        return result;
     });
 
     // === File Tags ===
@@ -855,6 +877,21 @@ function register(mainWindow) {
     ipcMain.handle('fix-sideloading', async () => {
         const privacy = require('./privacy');
         return privacy.fixSideloading();
+    });
+
+    ipcMain.handle('fix-sideloading-with-elevation', async () => {
+        // Erst prüfen ob wir bereits Admin sind
+        if (await admin.isAdmin()) {
+            const privacy = require('./privacy');
+            return privacy.fixSideloading();
+        }
+        // Nicht Admin → Neustart mit Admin-Rechten + Pending-Action
+        try {
+            await admin.restartAsAdmin(scans, 'fix-sideloading');
+            return { success: true, restarting: true };
+        } catch (err) {
+            return { success: false, error: err.message };
+        }
     });
 
     // === S.M.A.R.T. Disk Health ===

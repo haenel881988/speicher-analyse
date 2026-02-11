@@ -276,17 +276,33 @@ export class PrivacyView {
             };
         });
 
-        // Sideloading fix
+        // Sideloading fix (mit automatischer Admin-Elevation)
         const fixBtn = this.container.querySelector('#privacy-fix-sideloading');
         if (fixBtn) {
             fixBtn.onclick = async () => {
                 fixBtn.disabled = true;
                 fixBtn.textContent = 'Wird repariert...';
                 try {
+                    // Erst direkt versuchen
                     const result = await window.api.fixSideloading();
                     if (result.success) {
                         showToast('App-Sideloading wurde erfolgreich aktiviert!', 'success');
                         await this.scan();
+                    } else if (result.needsAdmin) {
+                        // Admin-Rechte nötig → Bestätigungsdialog
+                        const confirmed = await window.api.showConfirmDialog({
+                            type: 'question',
+                            title: 'Administratorrechte erforderlich',
+                            message: 'Zum Reparieren des App-Sideloading werden Administratorrechte benötigt.\n\nDie App wird als Administrator neu gestartet und die Reparatur automatisch durchgeführt. Alle Einstellungen bleiben erhalten.',
+                            buttons: ['Abbrechen', 'Als Administrator neu starten'],
+                            defaultId: 1,
+                            cancelId: 0,
+                        });
+                        if (confirmed.response === 1) {
+                            fixBtn.textContent = 'Wird als Admin neu gestartet...';
+                            await window.api.fixSideloadingWithElevation();
+                            // App wird neu gestartet, kein weiterer Code nötig
+                        }
                     } else {
                         showToast(result.error || 'Fehler beim Reparieren', 'error');
                     }
