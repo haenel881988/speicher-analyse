@@ -1,10 +1,6 @@
 ---
 name: new-feature
-description: Scaffolding für ein neues Feature im Electron-Projekt. Erstellt Backend-Modul, IPC-Handler, Preload-Eintrag und Renderer-View nach den Projektkonventionen.
-disable-model-invocation: true
-user-invocable: true
-allowed-tools: Read, Edit, Write, Glob, Grep, Bash
-argument-hint: [feature-name] [beschreibung]
+description: Scaffolding für ein neues Feature im Electron-Projekt. Erstellt Backend-Modul, IPC-Handler, Preload-Eintrag und Renderer-View nach den Projektkonventionen. Nutze diesen Skill wenn ein komplett neues Feature von Grund auf implementiert werden soll (Backend + Frontend). Für nur einen Sidebar-Tab nutze /add-sidebar-tab, für nur einen IPC-Handler nutze /add-ipc. Aufruf mit /new-feature [feature-name] [beschreibung].
 ---
 
 # Neues Feature scaffolden
@@ -143,7 +139,8 @@ export class FeatureNameView {
 - Constructor nimmt Container-Element
 - `init()`, `render()`, `destroy()` Lifecycle
 - Fehlerbehandlung in `loadData()`
-- Alle UI-Texte auf Deutsch
+- Alle UI-Texte auf Deutsch mit korrekten Umlauten (ä, ö, ü, ß)
+- **KRITISCH:** `_loaded` Flag muss bei Fehler zurückgesetzt werden (sonst kann User nie erneut laden)
 
 ### 5. HTML-Eintrag in `renderer/index.html`
 
@@ -163,3 +160,10 @@ Füge hinzu:
 1. Erstelle eine Zusammenfassung der erstellten/geänderten Dateien
 2. Liste die nächsten Schritte auf (was der Entwickler implementieren muss)
 3. Weise auf relevante bestehende Patterns hin die als Referenz dienen können
+
+## Verwandte Skills
+
+- `/add-ipc` - Wenn nur ein einzelner IPC-Handler benötigt wird (ohne View)
+- `/add-sidebar-tab` - Wenn nur ein Sidebar-Tab mit View benötigt wird (ohne Backend)
+- `/powershell-cmd` - Wenn das Feature PowerShell-Befehle einbindet
+- `/changelog` - Nach Fertigstellung zum Dokumentieren der Änderung

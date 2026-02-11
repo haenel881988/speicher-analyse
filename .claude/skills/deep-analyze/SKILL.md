@@ -1,12 +1,6 @@
 ---
 name: deep-analyze
-description: Tiefenanalyse eines Problems gemäß der OBERSTEN DIREKTIVE. Verfolgt den vollständigen Datenfluss Main→IPC→Preload→Renderer und identifiziert die Wurzelursache.
-disable-model-invocation: false
-user-invocable: true
-allowed-tools: Read, Grep, Glob, Bash
-argument-hint: [problem-beschreibung oder datei-pfad]
-context: fork
-agent: general-purpose
+description: Tiefenanalyse eines Problems gemäß der OBERSTEN DIREKTIVE. Verfolgt den vollständigen Datenfluss Main→IPC→Preload→Renderer und identifiziert die Wurzelursache. Aufruf mit /deep-analyze [problem-beschreibung oder datei-pfad].
 ---
 
 # Tiefenanalyse (OBERSTE DIREKTIVE)
@@ -109,9 +103,26 @@ Konkreter Code-Vorschlag
 Was könnte durch den Fix brechen?
 ```
 
+## Phase 6: CSS & UI-Analyse (falls visuelles Problem)
+
+1. **CSS-Variablen:** Stimmen die Werte in `renderer/css/style.css`?
+2. **Theme-Konflikte:** Dark/Light Theme korrekt implementiert?
+3. **WCAG-Kontrast:** Text-auf-Hintergrund mindestens 4.5:1?
+4. **Akzentfarben:** `--accent` nur für Borders/Backgrounds, nie für Content-Text?
+5. **Hot-Reload:** Werden CSS-Änderungen tatsächlich geladen? (Smart Reload prüfen)
+6. **display:none + Animationen:** Verbrauchen versteckte Animationen Ressourcen?
+
+## Phase 7: PowerShell-Analyse (falls PS involviert)
+
+1. Wird `runPS()` aus cmd-utils.js verwendet? (nie direktes `execFile('powershell.exe', ...)`)
+2. Ist der Timeout ausreichend? (Minimum 30s wegen Cold Start)
+3. Werden PS-Prozesse sequenziell aufgerufen? (nie parallel)
+4. Multi-Line: Werden Newlines beibehalten? (nie `.replace(/\n/g, ' ')`)
+
 ## Wichtige Hinweise
 
 - **Visuelles Ergebnis ist die Wahrheit.** Nicht der Code, nicht die Theorie.
 - **Einmal melden reicht.** Der User darf das gleiche Problem nie zweimal melden müssen.
 - **Keine Zwischenlösungen.** Der Code muss sich selbst korrigieren.
 - **Beweislast liegt bei der KI.** Nicht beim User.
+- **Verwandte Skills:** Nach der Analyse kann `/fix-bug` für die Umsetzung verwendet werden.

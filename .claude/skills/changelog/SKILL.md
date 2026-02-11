@@ -1,10 +1,6 @@
 ---
 name: changelog
-description: Fügt einen neuen Eintrag zum Änderungsprotokoll hinzu und archiviert automatisch bei >30 Einträgen. Nutze diesen Skill nach jeder Code-Änderung.
-disable-model-invocation: false
-user-invocable: true
-allowed-tools: Read, Edit, Write, Bash, Glob
-argument-hint: [typ] [beschreibung]
+description: Fügt einen neuen Eintrag zum Änderungsprotokoll hinzu und archiviert automatisch bei >30 Einträgen. Nutze diesen Skill nach jeder Code-Änderung oder wenn das Änderungsprotokoll aktualisiert werden soll. Kann auch ohne Argumente aufgerufen werden - leitet Typ und Beschreibung dann aus den letzten Git-Änderungen ab. Aufruf mit /changelog [typ] [beschreibung].
 ---
 
 # Änderungsprotokoll aktualisieren
@@ -60,3 +56,20 @@ Gib eine kurze Zusammenfassung aus:
 - Welcher Eintrag hinzugefügt wurde
 - Aktuelle Anzahl Einträge (von max. 30)
 - Ob archiviert wurde
+
+## Typ-Referenz
+
+| Typ | Wann verwenden | Beispiel |
+|-----|---------------|----------|
+| `feature` | Komplett neue Funktionalität | Neues Privacy-Dashboard |
+| `fix` | Fehlerbehebung | GPU-Cache-Locking behoben |
+| `improve` | Bestehende Funktion verbessert | Schnellere Suche im Explorer |
+| `refactor` | Code-Struktur ohne Funktionsänderung | IPC-Handler modularisiert |
+| `docs` | Nur Dokumentation | Projektplan aktualisiert |
+
+## Hinweise
+
+- **Sprache:** Deutsch mit korrekten Umlauten (ä, ö, ü, ß)
+- **Keine Emojis** im Änderungsprotokoll
+- **Kurztitel fett** gefolgt von Details nach Bindestrich
+- **NIEMALS** eine Änderung als "Fertig" markieren bevor Simon es bestätigt hat
