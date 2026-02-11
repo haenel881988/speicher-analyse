@@ -103,21 +103,52 @@ function register(mainWindow) {
     });
 
     // === Bulk Folder Sizes (for Explorer enrichment from scan data) ===
+    // Sucht automatisch in allen verfügbaren Scans wenn der angegebene Scan
+    // die Daten nicht hat (z.B. anderes Laufwerk gescannt).
     ipcMain.handle('get-folder-sizes-bulk', async (_event, scanId, folderPaths, parentPath) => {
-        const scanner = scans.get(scanId);
-        if (!scanner || !scanner.isComplete) return null;
+        // Hilfsfunktion: Knoten im Tree suchen (mit Drive-Letter-Normalisierung)
+        const findNode = (tree, fp) => {
+            let node = tree.get(fp);
+            if (!node && fp.length >= 2 && fp[1] === ':') {
+                const alt = (fp[0] === fp[0].toUpperCase()
+                    ? fp[0].toLowerCase() : fp[0].toUpperCase()) + fp.slice(1);
+                node = tree.get(alt);
+            }
+            return node;
+        };
+
+        // Primären Scanner versuchen
+        let scanner = scans.get(scanId);
+        if (scanner && scanner.isComplete) {
+            // Prüfen ob dieser Scanner Daten für den Pfad hat
+            const testPath = parentPath || (folderPaths.length > 0 ? folderPaths[0] : null);
+            if (testPath && !findNode(scanner.tree, testPath)) {
+                // Dieser Scanner hat keine Daten für diesen Pfad → anderen suchen
+                scanner = null;
+            }
+        } else {
+            scanner = null;
+        }
+
+        // Fallback: Passenden Scanner in allen verfügbaren Scans suchen
+        if (!scanner) {
+            const testPath = parentPath || (folderPaths.length > 0 ? folderPaths[0] : null);
+            if (testPath) {
+                for (const [, s] of scans) {
+                    if (s.isComplete && findNode(s.tree, testPath)) {
+                        scanner = s;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (!scanner) return null;
 
         const result = { folders: {}, parent: null };
 
         for (const fp of folderPaths) {
-            // Direkter Lookup (schnell)
-            let node = scanner.tree.get(fp);
-            // Fallback: Pfad-Normalisierung (Laufwerksbuchstabe Gross/Klein)
-            if (!node && fp.length >= 2 && fp[1] === ':') {
-                const alt = (fp[0] === fp[0].toUpperCase()
-                    ? fp[0].toLowerCase() : fp[0].toUpperCase()) + fp.slice(1);
-                node = scanner.tree.get(alt);
-            }
+            const node = findNode(scanner.tree, fp);
             if (node) {
                 result.folders[fp] = {
                     size: node.size,
@@ -129,12 +160,7 @@ function register(mainWindow) {
         }
 
         if (parentPath) {
-            let parentNode = scanner.tree.get(parentPath);
-            if (!parentNode && parentPath.length >= 2 && parentPath[1] === ':') {
-                const alt = (parentPath[0] === parentPath[0].toUpperCase()
-                    ? parentPath[0].toLowerCase() : parentPath[0].toUpperCase()) + parentPath.slice(1);
-                parentNode = scanner.tree.get(alt);
-            }
+            const parentNode = findNode(scanner.tree, parentPath);
             if (parentNode) result.parent = { size: parentNode.size };
         }
 

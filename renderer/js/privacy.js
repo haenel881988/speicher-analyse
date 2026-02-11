@@ -75,6 +75,9 @@ export class PrivacyView {
             const data = await window.api.getPrivacyRecommendations();
             if (data?.error) {
                 console.warn('[Privacy] Empfehlungen nicht verfügbar:', data.error);
+                this._recsLoaded = true;
+                this._recsError = true;
+                this.render();
                 return;
             }
             this.recommendations.clear();
@@ -83,9 +86,13 @@ export class PrivacyView {
             }
             this.programCount = data.programCount || 0;
             this._recsLoaded = true;
+            this._recsError = false;
             this.render(); // Re-Render mit Empfehlungen
         } catch (err) {
             console.warn('[Privacy] Empfehlungen konnten nicht geladen werden:', err.message);
+            this._recsLoaded = true;
+            this._recsError = true;
+            this.render();
         }
     }
 
@@ -183,6 +190,15 @@ export class PrivacyView {
                 <span class="risk-badge risk-safe">&#10003; ${safeCount} sicher</span>
                 ${cautionCount > 0 ? `<span class="risk-badge risk-medium">&#9888; ${cautionCount} Vorsicht</span>` : ''}
                 ${riskyCount > 0 ? `<span class="risk-badge risk-high">&#9888; ${riskyCount} Risiko</span>` : ''}
+            </div>`;
+        } else if (!this._recsLoaded) {
+            recBannerHtml = `<div class="privacy-rec-banner privacy-rec-loading">
+                <span class="mini-spinner"></span>
+                <strong>App-Analyse läuft...</strong> Deine installierten Programme werden geprüft, um dir zu zeigen welche Apps von den Einstellungen betroffen sind.
+            </div>`;
+        } else if (this._recsError) {
+            recBannerHtml = `<div class="privacy-rec-banner">
+                <strong>App-Analyse:</strong> Konnte nicht durchgeführt werden. <button class="privacy-btn-small" id="privacy-retry-recs">Erneut versuchen</button>
             </div>`;
         }
 
@@ -297,6 +313,17 @@ export class PrivacyView {
                 }
                 applyAllBtn.disabled = false;
                 applyAllBtn.textContent = 'Alle Standard optimieren';
+            };
+        }
+
+        // Retry recommendations
+        const retryRecs = this.container.querySelector('#privacy-retry-recs');
+        if (retryRecs) {
+            retryRecs.onclick = () => {
+                this._recsLoaded = false;
+                this._recsError = false;
+                this.render();
+                this._loadRecommendations();
             };
         }
 

@@ -4200,6 +4200,8 @@ body {
     color: var(--text-secondary);
 }
 .privacy-rec-banner strong { color: var(--text-primary); }
+.privacy-rec-loading { opacity: 0.85; }
+.privacy-rec-loading .mini-spinner { display: inline-block; vertical-align: middle; }
 
 /* ===== v7.0: S.M.A.R.T. Disk Health ===== */
 .smart-page { padding: 20px; }

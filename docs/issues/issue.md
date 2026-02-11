@@ -54,14 +54,20 @@
 - Muss auf allen Laufwerken funktionieren
 - Daten aus der vorherigen Sitzung müssen auch die Grössen mitbringen
 
-**Status:** Offen — Tiefenanalyse nötig
+**Was bisher gemacht wurde:**
+- Tiefenanalyse abgeschlossen: Wenn du mehrere Laufwerke gescannt hattest, hat der Explorer bisher immer nur das zuletzt gescannte Laufwerk benutzt — selbst wenn die Daten für das andere Laufwerk noch da waren
+- Fix: Der Explorer sucht jetzt automatisch die passenden Scan-Daten für das Laufwerk, das du gerade anschaust
+- Farbmarkierungen (rot/gelb/grün) sind standardmässig ausgeschaltet — nur die Zahlen werden angezeigt
+- Wichtig: Ordner die Windows-geschützt sind (z.B. "System Volume Information") können nicht gescannt werden — dort werden keine Grössen angezeigt, das ist normal
 
-**Planung:**
-1. **Analyse:** Die App starten und systematisch prüfen, welche Ordner keine Grössen zeigen (direkt nach dem Start mit gespeicherten Daten, und nach einem frischen Scan)
-2. **Ursache finden:** Herausfinden warum bestimmte Ordner keine Grössen haben — liegt es am Scan, am Speichern, am Wiederherstellen, oder an der Anzeige?
-3. **Fix:** Die eigentliche Ursache beheben (keine Workarounds)
-4. **Farben:** Prüfen dass die Farbmarkierungen wirklich standardmässig aus sind
-5. **Test:** Auf mindestens 2 verschiedenen Laufwerken testen
+**Was Simon testen soll:**
+1. Laufwerk C: scannen
+2. Laufwerk D: scannen (falls vorhanden)
+3. Im Explorer zwischen C: und D: hin und her navigieren
+4. Prüfen: Werden die Ordnergrössen auf beiden Laufwerken als Zahlen angezeigt?
+5. App schliessen und wieder öffnen — werden die Grössen wiederhergestellt?
+
+**Status:** Fix implementiert, wartet auf Simons Test
 
 ---
 
@@ -78,19 +84,28 @@
 - Das Zusammenfassungs-Banner oben fehlt (z.B. "35 Apps analysiert — 5 sicher, 3 Vorsicht, 2 Risiko")
 - Die Empfehlungs-Ampel (grün/gelb/rot) pro Einstellung fehlt
 
-**Status:** Teilweise implementiert, App-Erkennung nicht sichtbar — Tiefenanalyse nötig
+**Was bisher gemacht wurde:**
+- Tiefenanalyse abgeschlossen: Die App-Erkennung und das Zusammenfassungs-Banner funktionieren — aber die Analyse aller installierten Programme braucht ca. 30-60 Sekunden
+- Bisher wurde in dieser Zeit nichts angezeigt, man dachte die Funktion sei kaputt
+- Fix: Jetzt erscheint sofort ein Lade-Hinweis "App-Analyse läuft..." mit einem Lade-Symbol, sobald das Privacy-Dashboard geöffnet wird
+- Wenn die Analyse fertig ist, erscheint automatisch das Banner und die App-Tags
+- Bei einem Fehler wird eine "Erneut versuchen"-Taste angezeigt
 
-**Planung:**
-1. **Analyse:** Herausfinden warum die App-Erkennung zwar im Hintergrund existiert, aber nicht in der Anzeige ankommt
-2. **Fix:** Die Verbindung zwischen App-Erkennung und Anzeige reparieren
-3. **Sichtbar machen:** Bei jeder Einstellung die betroffenen Apps als kleine Tags anzeigen (z.B. "Google Maps", "Spotify", "Facebook")
-4. **Banner:** Oben im Dashboard eine Zusammenfassung anzeigen: "X installierte Apps analysiert"
-5. **Ampel:** Grün (keine Apps betroffen = sicher deaktivierbar), Gelb (wenige Apps betroffen), Rot (viele Apps betroffen)
+**Was Simon testen soll:**
+1. Privacy-Dashboard öffnen
+2. Prüfen: Erscheint sofort ein Lade-Hinweis "App-Analyse läuft..."?
+3. 30-60 Sekunden warten
+4. Prüfen: Erscheint dann ein Banner "X installierte Programme analysiert"?
+5. Prüfen: Zeigt jede Einstellung betroffene Apps (z.B. "Google Maps", "Spotify")?
+6. Prüfen: Hat jede Einstellung ein farbiges Symbol (grün/gelb/rot)?
+
+**Status:** Fix implementiert, wartet auf Simons Test
 
 **Akzeptanzkriterien — was Simon sehen soll:**
+- [ ] Lade-Hinweis erscheint sofort beim Öffnen des Privacy-Dashboards
+- [ ] Nach 30-60 Sekunden: Banner mit Zusammenfassung ("X Programme analysiert")
 - [ ] Bei "Standort" steht z.B.: "Google Maps, Facebook können nicht mehr auf deinen Standort zugreifen"
 - [ ] Bei "Werbe-ID" steht z.B.: "Spotify, Steam zeigen weniger passende Werbung"
-- [ ] Oben im Dashboard steht eine Zusammenfassung wie viele Apps analysiert wurden
 - [ ] Jede Einstellung hat ein farbiges Symbol: grün, gelb oder rot
 - [ ] Alle Texte sind verständlich ohne IT-Kenntnisse
 
@@ -128,12 +143,21 @@
 - Die Vorschau rechts soll nicht verkleinert werden
 - Schön wäre: Fensterinhalte (Terminal, Vorschau) in eigenständige Fenster loslösen können
 
-**Status:** Offen
+**Was bisher gemacht wurde:**
+- Tiefenanalyse: Das Terminal war an der falschen Stelle im Fenster-Aufbau platziert — neben dem Hauptbereich statt darin
+- Fix: Das Terminal sitzt jetzt im mittleren Inhaltsbereich und nimmt nicht mehr die volle Fensterbreite ein
+- Die Seitenleiste und die Vorschau werden nicht mehr überdeckt
 
-**Planung:**
-1. **Terminal-Breite:** Terminal nur im mittleren Bereich anzeigen (zwischen Seitenleiste und Vorschau)
-2. **Seitenleiste schützen:** Seitenleiste bleibt immer sichtbar, wird nie überdeckt
-3. **Loslösbare Fenster:** Möglichkeit, Terminal und Vorschau als eigenständige Fenster abzutrennen (Drag & Drop oder Button)
+**Was Simon testen soll:**
+1. Terminal öffnen (Strg+`)
+2. Prüfen: Ist das Terminal nur so breit wie der mittlere Bereich?
+3. Prüfen: Ist die Seitenleiste links noch sichtbar?
+4. Prüfen: Ist die Vorschau rechts noch sichtbar (wenn geöffnet)?
+
+**Status:** Fix implementiert, wartet auf Simons Test
+
+**Noch offen (für später):**
+- Loslösbare Fenster: Terminal und Vorschau als eigenständige Fenster abtrennen können
 
 ---
 
@@ -158,10 +182,10 @@
 
 # Prioritäten-Reihenfolge
 
-| Prio | Issue | Nächster Schritt |
-|------|-------|-----------------|
-| 1 | Ordnergrössen (#3) | Tiefenanalyse: Warum fehlen Grössen bei bestimmten Ordnern? |
-| 2 | Privacy App-Empfehlungen (#4) | Tiefenanalyse: Warum werden die erkannten Apps nicht angezeigt? |
-| 3 | Scandaten (#2) | Auf Simons Test warten |
-| 4 | Terminal-Breite (#6) | Planung und Umsetzung |
-| 5 | PDF Vollansicht (#5) | Planung und Umsetzung |
+| Prio | Issue | Status |
+|------|-------|--------|
+| 1 | Ordnergrössen (#3) | Fix implementiert — wartet auf Simons Test |
+| 2 | Privacy App-Empfehlungen (#4) | Fix implementiert — wartet auf Simons Test |
+| 3 | Terminal-Breite (#6) | Fix implementiert — wartet auf Simons Test |
+| 4 | Scandaten (#2) | Fix implementiert — wartet auf Simons Test |
+| 5 | PDF Vollansicht (#5) | Offen — Planung und Umsetzung |
