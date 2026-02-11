@@ -104,6 +104,32 @@ Wenn der User ein Problem meldet und die KI die Ursache nicht im Quellcode finde
 
 ---
 
+## DIREKTIVE: Kommunikation mit Simon (UNVERHANDELBAR)
+
+**Simon ist der Endanwender dieser App. Er ist kein Entwickler. Alle Kommunikation muss entsprechend angepasst sein.**
+
+### Regeln
+
+1. **Keine technischen Begriffe** in Issue-Updates, Status-Meldungen oder Zusammenfassungen. Simon versteht keine Code-Referenzen wie "IPC-Handler", "Preload", "CSS-Klassen", "Registry-Keys" oder Dateinamen.
+
+2. **Stattdessen beschreiben was der User SIEHT oder TUN kann:**
+   - FALSCH: "IPC-Handler `get-privacy-recommendations` implementiert, Preload-API ergänzt"
+   - RICHTIG: "Im Privacy-Dashboard wird jetzt bei jeder Einstellung angezeigt, welche deiner installierten Apps betroffen wären"
+
+3. **Issue-Updates in Alltagssprache:**
+   - FALSCH: "Root Cause in `main/main.js:67` — `minimizeToTray` Preference Check im close-Handler"
+   - RICHTIG: "Das Problem war: Beim Klicken auf X wurde die App nur versteckt statt beendet. Jetzt wird die App immer komplett geschlossen."
+
+4. **Keine Code-Details in der Issue-Datei.** Die Issue-Datei ist Simons Dokument. Technische Details gehören ins Änderungsprotokoll.
+
+5. **Bestätigung = funktionaler Test.** Wenn Simon etwas bestätigen soll, beschreiben WAS er sehen/testen soll:
+   - FALSCH: "Bitte bestätige dass `showSizeColors: false` in preferences.js korrekt ist"
+   - RICHTIG: "Bitte öffne den Explorer und prüfe: Werden die Ordnergrössen als Zahlen angezeigt (ohne bunte Farben)?"
+
+6. **Planung in der Issue-Datei** muss beschreiben was sich für den User ändert, nicht welche Dateien angefasst werden.
+
+---
+
 # Git Workflow
 
 **Immer ausführen, nach jeder Änderung.:**

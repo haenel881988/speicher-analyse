@@ -110,7 +110,14 @@ function register(mainWindow) {
         const result = { folders: {}, parent: null };
 
         for (const fp of folderPaths) {
-            const node = scanner.tree.get(fp);
+            // Direkter Lookup (schnell)
+            let node = scanner.tree.get(fp);
+            // Fallback: Pfad-Normalisierung (Laufwerksbuchstabe Gross/Klein)
+            if (!node && fp.length >= 2 && fp[1] === ':') {
+                const alt = (fp[0] === fp[0].toUpperCase()
+                    ? fp[0].toLowerCase() : fp[0].toUpperCase()) + fp.slice(1);
+                node = scanner.tree.get(alt);
+            }
             if (node) {
                 result.folders[fp] = {
                     size: node.size,
@@ -122,7 +129,12 @@ function register(mainWindow) {
         }
 
         if (parentPath) {
-            const parentNode = scanner.tree.get(parentPath);
+            let parentNode = scanner.tree.get(parentPath);
+            if (!parentNode && parentPath.length >= 2 && parentPath[1] === ':') {
+                const alt = (parentPath[0] === parentPath[0].toUpperCase()
+                    ? parentPath[0].toLowerCase() : parentPath[0].toUpperCase()) + parentPath.slice(1);
+                parentNode = scanner.tree.get(alt);
+            }
             if (parentNode) result.parent = { size: parentNode.size };
         }
 
@@ -899,10 +911,12 @@ function register(mainWindow) {
             const privacy = require('./privacy');
             const audit = require('./software-audit');
             // Erst installierte Programme ermitteln, dann Korrelation berechnen
-            const programs = await audit.auditAll();
-            if (programs?.error) return { error: programs.error };
-            const recommendations = privacy.getSmartRecommendations(programs);
-            return { recommendations, programCount: programs.length };
+            const auditResult = await audit.auditAll();
+            if (auditResult?.error) return { error: auditResult.error };
+            // auditAll() gibt {programs: Array, orphanedCount, totalPrograms, totalSizeKB} zurück
+            const programList = auditResult.programs || [];
+            const recommendations = privacy.getSmartRecommendations(programList);
+            return { recommendations, programCount: programList.length };
         } catch (err) {
             console.error('[Privacy] Recommendations-Fehler:', err.message);
             return { error: err.message };

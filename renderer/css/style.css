@@ -3094,6 +3094,11 @@ body {
     color: var(--success);
     font-weight: 600;
 }
+.explorer-status-no-scan {
+    font-size: 10px;
+    color: var(--text-muted);
+    font-style: italic;
+}
 
 .explorer-size-bar {
     margin-top: 2px;

@@ -209,6 +209,7 @@ export class ExplorerView {
         // Enrich folder sizes from scan data (if scan available)
         this._folderSizes = null;
         this._parentFolderSize = 0;
+        this._hasScanData = false;
         const scanId = this.getScanId();
         if (scanId) {
             const folderPaths = this.entries.filter(e => e.isDirectory).map(e => e.path);
@@ -218,6 +219,9 @@ export class ExplorerView {
                     if (data && data.folders) {
                         this._folderSizes = data.folders;
                         this._parentFolderSize = data.parent?.size || 0;
+                        // Prüfe ob tatsächlich Grössen vorhanden sind
+                        const hasAnySize = Object.keys(data.folders).length > 0;
+                        this._hasScanData = hasAnySize;
                         for (const entry of this.entries) {
                             if (entry.isDirectory && data.folders[entry.path]) {
                                 entry.size = data.folders[entry.path].size;
@@ -1055,6 +1059,13 @@ export class ExplorerView {
             html += `<span class="explorer-status-scan-hint">Scan</span>`;
         } else {
             html += `<span>${formatBytes(filesTotalSize)}</span>`;
+            // Hinweis: Kein Scan für dieses Laufwerk
+            const scanId = this.getScanId();
+            if (dirs > 0 && !this._hasScanData) {
+                html += scanId
+                    ? `<span class="explorer-status-no-scan" title="Dieses Laufwerk wurde nicht gescannt">Ordnergrössen: anderes Laufwerk gescannt</span>`
+                    : `<span class="explorer-status-no-scan" title="Bitte zuerst einen Scan durchführen">Ordnergrössen: Scan erforderlich</span>`;
+            }
         }
 
         if (result.truncated) {
