@@ -215,7 +215,10 @@ export class PrivacyView {
                         <p>${this.settings.filter(s => s.isPrivate).length} von ${this.settings.length} Einstellungen sind datenschutzfreundlich.</p>
                         ${editionHtml}
                         ${recBannerHtml}
-                        <button class="privacy-btn-apply-all" id="privacy-apply-all" title="Wendet nur die sicheren Standard-Einstellungen an (keine erweiterten)">Alle Standard optimieren</button>
+                        <div class="privacy-header-actions">
+                            <button class="privacy-btn-apply-all" id="privacy-apply-all" title="Wendet nur die sicheren Standard-Einstellungen an (keine erweiterten)">Alle Standard optimieren</button>
+                            <button class="privacy-btn-reset-all" id="privacy-reset-all" title="Setzt alle Standard-Einstellungen auf Windows-Standardwerte zurück">Alle zurücksetzen</button>
+                        </div>
                     </div>
                 </div>
                 <div class="privacy-section">
@@ -269,15 +272,17 @@ export class PrivacyView {
             </div>`;
         }
 
-        // Details (aufklappbar): Erklärung + Auswirkungen
-        const hasDetails = s.explanation || (s.impacts?.length > 0) || s.warning;
+        // Details (aufklappbar): Erklärung + Risiko + Auswirkungen
+        const hasDetails = s.explanation || s.riskExplanation || (s.impacts?.length > 0) || s.warning;
         let detailsHtml = '';
         if (hasDetails) {
+            const riskPart = s.riskExplanation ? `<div class="privacy-detail-risk"><strong>Warum ist das ein Risiko?</strong><p>${this._esc(s.riskExplanation)}</p></div>` : '';
             const explanationPart = s.explanation ? `<p class="privacy-detail-text">${this._esc(s.explanation)}</p>` : '';
             const impactsPart = s.impacts?.length > 0 ? `<div class="privacy-detail-impacts"><strong>Beim Deaktivieren:</strong><ul>${s.impacts.map(i => `<li>${this._esc(i)}</li>`).join('')}</ul></div>` : '';
             detailsHtml = `<details class="privacy-details">
                 <summary>Details</summary>
                 <div class="privacy-details-content">
+                    ${riskPart}
                     ${explanationPart}
                     ${impactsPart}
                     ${warningHtml}
@@ -290,7 +295,10 @@ export class PrivacyView {
                 <div class="privacy-setting-header">
                     <strong>${this._esc(s.name)}</strong>
                     <span class="risk-badge risk-${statusClass}">${statusText}</span>
-                    ${!s.isPrivate ? `<button class="privacy-btn-small ${isAdvanced ? 'privacy-btn-advanced' : ''}" data-setting="${s.id}" ${isAdvanced ? 'data-advanced="true"' : ''}>${isAdvanced ? 'Ändern...' : 'Schützen'}</button>` : ''}
+                    ${!s.isPrivate
+                        ? `<button class="privacy-btn-small ${isAdvanced ? 'privacy-btn-advanced' : ''}" data-setting="${s.id}" ${isAdvanced ? 'data-advanced="true"' : ''}>${isAdvanced ? 'Ändern...' : 'Schützen'}</button>`
+                        : `<button class="privacy-btn-small privacy-btn-reset" data-reset="${s.id}" ${isAdvanced ? 'data-advanced="true"' : ''}>Zurücksetzen</button>`
+                    }
                 </div>
                 <span class="privacy-setting-desc">${this._esc(s.description)}</span>
                 ${recHtml}
@@ -320,6 +328,68 @@ export class PrivacyView {
                 applyAllBtn.textContent = 'Alle Standard optimieren';
             };
         }
+
+        // Reset all (nur Standard)
+        const resetAllBtn = this.container.querySelector('#privacy-reset-all');
+        if (resetAllBtn) {
+            resetAllBtn.onclick = async () => {
+                const confirmed = await window.api.showConfirmDialog({
+                    type: 'warning',
+                    title: 'Alle zurücksetzen?',
+                    message: 'Alle Standard-Einstellungen werden auf Windows-Standardwerte zurückgesetzt.\n\nDein System sendet dann wieder Daten an Microsoft.\n\nFortfahren?',
+                    buttons: ['Abbrechen', 'Zurücksetzen'],
+                    defaultId: 0,
+                    cancelId: 0,
+                });
+                if (confirmed.response !== 1) return;
+                resetAllBtn.disabled = true;
+                resetAllBtn.textContent = 'Wird zurückgesetzt...';
+                try {
+                    const result = await window.api.resetAllPrivacy();
+                    let msg = `${result.reset} Einstellungen zurückgesetzt`;
+                    if (result.skipped > 0) msg += ` (${result.skipped} erweiterte übersprungen)`;
+                    if (result.failed > 0) msg += `, ${result.failed} fehlgeschlagen`;
+                    showToast(msg, result.failed > 0 ? 'warning' : 'success');
+                    await this.scan();
+                } catch (err) {
+                    showToast('Fehler: ' + err.message, 'error');
+                }
+                resetAllBtn.disabled = false;
+                resetAllBtn.textContent = 'Alle zurücksetzen';
+            };
+        }
+
+        // Reset individual settings
+        this.container.querySelectorAll('button[data-reset]').forEach(btn => {
+            btn.onclick = async () => {
+                const isAdvanced = btn.dataset.advanced === 'true';
+                if (isAdvanced) {
+                    const setting = this.settings.find(s => s.id === btn.dataset.reset);
+                    const confirmed = await window.api.showConfirmDialog({
+                        type: 'warning',
+                        title: 'Erweiterte Einstellung zurücksetzen',
+                        message: `${setting?.name || 'Einstellung'}\n\nDiese Einstellung wird auf den Windows-Standard zurückgesetzt.\nDein System sendet dann wieder mehr Daten an Microsoft.\n\nFortfahren?`,
+                        buttons: ['Abbrechen', 'Zurücksetzen'],
+                        defaultId: 0,
+                        cancelId: 0,
+                    });
+                    if (confirmed.response !== 1) return;
+                }
+                btn.disabled = true;
+                try {
+                    const result = await window.api.resetPrivacySetting(btn.dataset.reset);
+                    if (result.success) {
+                        showToast('Einstellung auf Windows-Standard zurückgesetzt', 'success');
+                        await this.scan();
+                    } else {
+                        showToast(result.error || 'Fehler', 'error');
+                    }
+                } catch (err) {
+                    showToast('Fehler: ' + err.message, 'error');
+                }
+                btn.disabled = false;
+            };
+        });
 
         // Retry recommendations
         const retryRecs = this.container.querySelector('#privacy-retry-recs');

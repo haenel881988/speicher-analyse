@@ -897,6 +897,16 @@ function register(mainWindow) {
         return privacy.applyAllPrivacy();
     });
 
+    ipcMain.handle('reset-privacy-setting', async (_event, id) => {
+        const privacy = require('./privacy');
+        return privacy.resetPrivacySetting(id);
+    });
+
+    ipcMain.handle('reset-all-privacy', async () => {
+        const privacy = require('./privacy');
+        return privacy.resetAllPrivacy();
+    });
+
     ipcMain.handle('get-scheduled-tasks-audit', async () => {
         const privacy = require('./privacy');
         return privacy.getScheduledTasksAudit();

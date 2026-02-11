@@ -22,6 +22,7 @@ const PRIVACY_SETTINGS = [
         name: 'Werbe-ID',
         description: 'Ermöglicht personalisierte Werbung anhand einer eindeutigen Geräte-ID.',
         explanation: 'Windows vergibt deinem Gerät eine eindeutige Nummer, mit der Werbetreibende dich wiedererkennen können. Apps und Webseiten nutzen diese Nummer, um dir personalisierte Werbung zu zeigen.',
+        riskExplanation: 'Werbetreibende wie Google, Facebook und App-Entwickler nutzen diese ID, um ein Profil über dich aufzubauen: was du kaufst, welche Apps du nutzt, welche Webseiten du besuchst. Dieses Profil wird zwischen Unternehmen gehandelt — du wirst zum Produkt.',
         impacts: [
             'Werbung in Apps wird weniger auf dich zugeschnitten',
             'Kostenlose Apps zeigen trotzdem Werbung, nur weniger passende',
@@ -29,6 +30,7 @@ const PRIVACY_SETTINGS = [
         registryPath: 'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\AdvertisingInfo',
         registryKey: 'Enabled',
         recommendedValue: 0,
+        defaultValue: 1,
         valueType: 'REG_DWORD',
         riskLevel: 'moderate',
         tier: 'standard',
@@ -39,6 +41,7 @@ const PRIVACY_SETTINGS = [
         name: 'Cortana',
         description: 'Erlaubt Cortana, Sprach- und Suchdaten zu sammeln und zu verarbeiten.',
         explanation: 'Cortana hört auf deine Sprachbefehle und merkt sich deine Suchanfragen, um bessere Vorschläge zu machen. Dabei werden diese Daten an Microsoft gesendet.',
+        riskExplanation: 'Alles was du sagst oder in die Suche tippst, wird an Microsoft-Server übertragen und dort gespeichert. Microsoft kann damit ein Profil deiner Interessen, Gewohnheiten und sogar deiner Stimme erstellen.',
         impacts: [
             'Cortana-Sprachbefehle funktionieren nicht mehr',
             'Suchvorschläge in der Taskleiste werden weniger personalisiert',
@@ -46,6 +49,7 @@ const PRIVACY_SETTINGS = [
         registryPath: 'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Search',
         registryKey: 'CortanaConsent',
         recommendedValue: 0,
+        defaultValue: 1,
         valueType: 'REG_DWORD',
         riskLevel: 'moderate',
         tier: 'standard',
@@ -56,12 +60,14 @@ const PRIVACY_SETTINGS = [
         name: 'Feedback-Häufigkeit',
         description: 'Bestimmt, wie oft Windows nach Feedback fragt.',
         explanation: 'Windows fragt dich regelmäßig, ob du zufrieden bist und ob bestimmte Funktionen gut funktionieren. Die Antworten werden an Microsoft geschickt.',
+        riskExplanation: 'Jede Feedback-Antwort enthält Informationen über dein System, deine Apps und dein Nutzungsverhalten. Microsoft sammelt diese Daten systematisch — auch wenn du nur "Nein" klickst, wird die Anfrage selbst als Datenpunkt gespeichert.',
         impacts: [
             'Keine Feedback-Popups mehr von Windows',
         ],
         registryPath: 'HKCU\\SOFTWARE\\Microsoft\\Siuf\\Rules',
         registryKey: 'NumberOfSIUFInPeriod',
         recommendedValue: 0,
+        defaultValue: 1,
         valueType: 'REG_DWORD',
         riskLevel: 'moderate',
         tier: 'standard',
@@ -72,6 +78,7 @@ const PRIVACY_SETTINGS = [
         name: 'Handschrift- und Eingabedaten',
         description: 'Sammelt Tipp- und Handschriftmuster zur Verbesserung der Spracherkennung.',
         explanation: 'Windows beobachtet, wie du tippst und schreibst, um die Rechtschreibprüfung und Wortvorschläge zu verbessern. Diese Muster werden an Microsoft gesendet.',
+        riskExplanation: 'Dein Tippverhalten ist wie ein Fingerabdruck — Geschwindigkeit, häufige Tippfehler und Wortmuster sind einzigartig. Diese Daten können dich identifizieren, selbst wenn du anonym surfst. Microsoft speichert diese Muster auf ihren Servern.',
         impacts: [
             'Wortvorschläge beim Tippen werden weniger präzise',
             'Handschrifterkennung (Tablet/Stift) lernt nicht mehr dazu',
@@ -79,6 +86,7 @@ const PRIVACY_SETTINGS = [
         registryPath: 'HKCU\\SOFTWARE\\Microsoft\\InputPersonalization',
         registryKey: 'RestrictImplicitTextCollection',
         recommendedValue: 1,
+        defaultValue: 0,
         valueType: 'REG_DWORD',
         riskLevel: 'moderate',
         tier: 'standard',
@@ -89,12 +97,14 @@ const PRIVACY_SETTINGS = [
         name: 'Diagnose-Benachrichtigungen',
         description: 'Steuert die Anzeige von Diagnose-Benachrichtigungen.',
         explanation: 'Windows zeigt Benachrichtigungen über gesammelte Diagnosedaten an. Diese dienen nur der Information, senden aber selbst auch Daten.',
+        riskExplanation: 'Die Benachrichtigungen selbst senden Telemetriedaten an Microsoft zurück — wann du sie siehst, ob du sie wegklickst, und auf welchem Level die Datensammlung steht. So weiß Microsoft auch, ob du die Einstellungen geändert hast.',
         impacts: [
             'Keine Diagnose-Benachrichtigungen mehr',
         ],
         registryPath: 'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Diagnostics\\DiagTrack',
         registryKey: 'ShowedToastAtLevel',
         recommendedValue: 0,
+        defaultValue: 1,
         valueType: 'REG_DWORD',
         riskLevel: 'moderate',
         tier: 'standard',
@@ -105,6 +115,7 @@ const PRIVACY_SETTINGS = [
         name: 'App-Diagnosezugriff',
         description: 'Erlaubt Apps den Zugriff auf Diagnoseinformationen anderer Apps.',
         explanation: 'Wenn aktiviert, können installierte Apps sehen, welche anderen Apps du nutzt und wie sie sich verhalten. Das ist ein Sicherheitsrisiko.',
+        riskExplanation: 'Apps wie Spotify, Discord oder Chrome können sehen, welche anderen Programme du gerade nutzt, wie lange und wie oft. Das ermöglicht Cross-App-Tracking — Unternehmen erfahren mehr über dich als nötig.',
         impacts: [
             'Apps können keine Informationen über andere Apps mehr abfragen',
             'Einige Diagnose-Tools von Drittanbietern funktionieren eingeschränkt',
@@ -112,6 +123,7 @@ const PRIVACY_SETTINGS = [
         registryPath: 'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\appDiagnostics',
         registryKey: 'Value',
         recommendedValue: 'Deny',
+        defaultValue: 'Allow',
         valueType: 'REG_SZ',
         riskLevel: 'moderate',
         tier: 'standard',
@@ -122,6 +134,7 @@ const PRIVACY_SETTINGS = [
         name: 'Standortzugriff',
         description: 'Erlaubt Apps den Zugriff auf Ihren Standort.',
         explanation: 'Wenn aktiviert, können Apps erkennen wo du dich gerade befindest. Das wird für Navigation, Wetter und ortsbasierte Dienste genutzt.',
+        riskExplanation: 'Dein genauer Standort verrät wo du wohnst, wo du arbeitest, welche Geschäfte du besuchst und wann du zu Hause bist. Apps wie Facebook, Instagram und Wetter-Apps senden diese Daten an Werbenetzwerke. Standortdaten gehören zu den wertvollsten persönlichen Daten.',
         impacts: [
             'Keine ortsbasierten Empfehlungen oder Navigation mehr',
             'Wetter-Apps zeigen kein lokales Wetter',
@@ -131,6 +144,7 @@ const PRIVACY_SETTINGS = [
         registryPath: 'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\location',
         registryKey: 'Value',
         recommendedValue: 'Deny',
+        defaultValue: 'Allow',
         valueType: 'REG_SZ',
         riskLevel: 'moderate',
         tier: 'standard',
@@ -143,6 +157,7 @@ const PRIVACY_SETTINGS = [
         name: 'Telemetrie (Gruppenrichtlinie)',
         description: 'Sendet Diagnose- und Nutzungsdaten an Microsoft. Richtlinienebene.',
         explanation: 'Windows sendet regelmäßig Informationen darüber, welche Apps du nutzt, wie lange und welche Fehler auftreten. Mit dieser Einstellung reduzierst du das auf das technisch notwendige Minimum.',
+        riskExplanation: 'Microsoft sammelt im Standardmodus umfangreiche Daten: welche Programme du nutzt, wie lange dein PC an ist, welche Webseiten du besuchst, welche Dateien du öffnest. Diese Daten werden zur "Produktverbesserung" verwendet, aber auch für gezielte Werbung in Windows.',
         impacts: [
             'Windows kann weniger gezielte Updates liefern',
             'Einige Kompatibilitätsprüfungen entfallen',
@@ -151,6 +166,7 @@ const PRIVACY_SETTINGS = [
         registryPath: 'HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\DataCollection',
         registryKey: 'AllowTelemetry',
         recommendedValue: 1,
+        defaultValue: 3,
         valueType: 'REG_DWORD',
         riskLevel: 'high',
         tier: 'advanced',
@@ -162,12 +178,14 @@ const PRIVACY_SETTINGS = [
         name: 'Telemetrie (Datensammlung)',
         description: 'Steuert den Umfang der an Microsoft gesendeten Diagnosedaten.',
         explanation: 'Wie die Gruppenrichtlinie oben, aber über einen anderen Registry-Pfad. Beide müssen gesetzt werden, damit die Telemetrie wirklich reduziert wird.',
+        riskExplanation: 'Ohne diese Einstellung sendet Windows auf Level 3 ("Vollständig") alles: Absturzberichte mit Speicherinhalten, besuchte Webseiten, App-Nutzung, Sprachdaten. Auf Level 1 werden nur technisch notwendige Daten gesendet.',
         impacts: [
             'Gleiche Auswirkungen wie Telemetrie-Gruppenrichtlinie',
         ],
         registryPath: 'HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\DataCollection',
         registryKey: 'AllowTelemetry',
         recommendedValue: 1,
+        defaultValue: 3,
         valueType: 'REG_DWORD',
         riskLevel: 'high',
         tier: 'advanced',
@@ -179,6 +197,7 @@ const PRIVACY_SETTINGS = [
         name: 'WiFi Sense',
         description: 'Automatische Verbindung mit vorgeschlagenen WLAN-Hotspots und Freigabe von Netzwerken.',
         explanation: 'Windows verbindet sich automatisch mit WLANs, die Microsoft als sicher einstuft, und teilt dein WLAN-Passwort mit Kontakten. Das ist ein Sicherheitsrisiko.',
+        riskExplanation: 'Dein WLAN-Passwort wird an Microsoft-Server gesendet und mit deinen Kontakten geteilt. Jeder dieser Kontakte kann sich dann in dein WLAN einloggen. Außerdem verbindet sich dein PC automatisch mit fremden Netzwerken — ein Einfallstor für Angreifer.',
         impacts: [
             'Keine automatische Verbindung mit vorgeschlagenen Hotspots mehr',
             'WLAN-Passwörter werden nicht mehr mit Kontakten geteilt',
@@ -186,6 +205,7 @@ const PRIVACY_SETTINGS = [
         registryPath: 'HKLM\\SOFTWARE\\Microsoft\\WcmSvc\\wifinetworkmanager\\config',
         registryKey: 'AutoConnectAllowedOEM',
         recommendedValue: 0,
+        defaultValue: 1,
         valueType: 'REG_DWORD',
         riskLevel: 'moderate',
         tier: 'advanced',
@@ -197,6 +217,7 @@ const PRIVACY_SETTINGS = [
         name: 'Aktivitätsverlauf',
         description: 'Erfasst Ihre Aktivitäten (geöffnete Apps, Dateien, Webseiten) und zeigt sie in der Zeitachse an.',
         explanation: 'Windows merkt sich alles was du tust: welche Programme du öffnest, welche Dateien du bearbeitest und welche Webseiten du besuchst. Diese Informationen werden in einer Zeitachse angezeigt.',
+        riskExplanation: 'Windows protokolliert lückenlos: jede geöffnete Datei, jede besuchte Webseite, jedes gestartete Programm — mit Zeitstempel. Das ist wie ein Tagebuch deiner gesamten PC-Nutzung, das an Microsoft gesendet werden kann.',
         impacts: [
             'Windows-Zeitachse (Timeline) in Alt+Tab wird leer',
             'Geräteübergreifende Aufgaben funktionieren nicht mehr',
@@ -205,6 +226,7 @@ const PRIVACY_SETTINGS = [
         registryPath: 'HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\System',
         registryKey: 'EnableActivityFeed',
         recommendedValue: 0,
+        defaultValue: 1,
         valueType: 'REG_DWORD',
         riskLevel: 'high',
         tier: 'advanced',
@@ -216,6 +238,7 @@ const PRIVACY_SETTINGS = [
         name: 'Aktivitäten veröffentlichen',
         description: 'Sendet Ihren Aktivitätsverlauf an Microsoft-Server.',
         explanation: 'Dein Aktivitätsverlauf wird nicht nur lokal gespeichert, sondern auch an Microsoft-Server gesendet. So kann Microsoft nachvollziehen, was du auf deinem PC machst.',
+        riskExplanation: 'Deine komplette PC-Aktivität (geöffnete Dateien, Programme, Zeitpunkte) wird an Microsoft-Server übertragen. Dort kann nachvollzogen werden, wann du was gemacht hast — ein vollständiges Nutzungsprofil.',
         impacts: [
             'Aktivitäten werden nicht mehr mit Microsoft-Servern synchronisiert',
             'Auf anderen Geräten siehst du nicht mehr, woran du hier gearbeitet hast',
@@ -223,6 +246,7 @@ const PRIVACY_SETTINGS = [
         registryPath: 'HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\System',
         registryKey: 'PublishUserActivities',
         recommendedValue: 0,
+        defaultValue: 1,
         valueType: 'REG_DWORD',
         riskLevel: 'high',
         tier: 'advanced',
@@ -448,6 +472,7 @@ async function getPrivacySettings() {
                     name: setting.name,
                     description: setting.description,
                     explanation: setting.explanation || null,
+                    riskExplanation: setting.riskExplanation || null,
                     impacts: setting.impacts || [],
                     registryPath: setting.registryPath,
                     registryKey: setting.registryKey,
@@ -475,6 +500,7 @@ async function getPrivacySettings() {
             name: setting.name,
             description: setting.description,
             explanation: setting.explanation || null,
+            riskExplanation: setting.riskExplanation || null,
             impacts: setting.impacts || [],
             registryPath: setting.registryPath,
             registryKey: setting.registryKey,
@@ -548,6 +574,71 @@ async function applyAllPrivacy() {
 
         if (outcome.status === 'fulfilled' && outcome.value.success) {
             results.applied++;
+        } else {
+            results.failed++;
+            const error = outcome.status === 'fulfilled'
+                ? outcome.value.error
+                : (outcome.reason?.message || String(outcome.reason));
+            results.errors.push(`${setting.name}: ${error}`);
+        }
+    }
+
+    return results;
+}
+
+/**
+ * Setzt eine einzelne Datenschutzeinstellung auf den Windows-Standardwert zurück.
+ * @param {string} id - Die ID der Einstellung
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+async function resetPrivacySetting(id) {
+    const setting = PRIVACY_SETTINGS.find(s => s.id === id);
+    if (!setting) {
+        return { success: false, error: `Einstellung mit ID "${id}" nicht gefunden.` };
+    }
+    if (setting.defaultValue === undefined) {
+        return { success: false, error: `Kein Standardwert für "${setting.name}" hinterlegt.` };
+    }
+
+    try {
+        await writeRegistryValue(
+            setting.registryPath,
+            setting.registryKey,
+            setting.defaultValue,
+            setting.valueType
+        );
+        return { success: true };
+    } catch (err) {
+        const message = err.stderr || err.message || String(err);
+        if (setting.registryPath.startsWith('HKLM') && (message.includes('Zugriff') || message.includes('Access'))) {
+            return {
+                success: false,
+                error: `Administratorrechte erforderlich für: ${setting.name}`,
+            };
+        }
+        return { success: false, error: message };
+    }
+}
+
+/**
+ * Setzt alle Standard-Einstellungen auf Windows-Standardwerte zurück.
+ * @returns {Promise<{reset: number, failed: number, skipped: number, errors: string[]}>}
+ */
+async function resetAllPrivacy() {
+    const results = { reset: 0, failed: 0, skipped: 0, errors: [] };
+
+    const standardSettings = PRIVACY_SETTINGS.filter(s => s.tier === 'standard');
+    results.skipped = PRIVACY_SETTINGS.length - standardSettings.length;
+
+    const outcomes = await Promise.allSettled(
+        standardSettings.map(setting => resetPrivacySetting(setting.id))
+    );
+
+    for (let i = 0; i < outcomes.length; i++) {
+        const outcome = outcomes[i];
+        const setting = standardSettings[i];
+        if (outcome.status === 'fulfilled' && outcome.value.success) {
+            results.reset++;
         } else {
             results.failed++;
             const error = outcome.status === 'fulfilled'
@@ -731,6 +822,8 @@ module.exports = {
     getPrivacySettings,
     applyPrivacySetting,
     applyAllPrivacy,
+    resetPrivacySetting,
+    resetAllPrivacy,
     getPrivacyScore,
     getScheduledTasksAudit,
     disableScheduledTask,

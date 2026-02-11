@@ -213,6 +213,8 @@ contextBridge.exposeInMainWorld('api', {
     getPrivacySettings: () => ipcRenderer.invoke('get-privacy-settings'),
     applyPrivacySetting: (id) => ipcRenderer.invoke('apply-privacy-setting', id),
     applyAllPrivacy: () => ipcRenderer.invoke('apply-all-privacy'),
+    resetPrivacySetting: (id) => ipcRenderer.invoke('reset-privacy-setting', id),
+    resetAllPrivacy: () => ipcRenderer.invoke('reset-all-privacy'),
     getScheduledTasksAudit: () => ipcRenderer.invoke('get-scheduled-tasks-audit'),
     disableScheduledTask: (taskPath) => ipcRenderer.invoke('disable-scheduled-task', taskPath),
     checkSideloading: () => ipcRenderer.invoke('check-sideloading'),
