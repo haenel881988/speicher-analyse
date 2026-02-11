@@ -4066,6 +4066,26 @@ body {
     margin-bottom: 4px;
 }
 .privacy-detail-risk p { margin: 0; color: var(--text-secondary); line-height: 1.4; font-size: 12px; }
+.privacy-network-link {
+    margin-top: 24px;
+    padding: 16px;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    text-align: center;
+}
+.privacy-btn-network {
+    padding: 8px 20px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+}
+.privacy-btn-network:hover { opacity: 0.85; }
+.privacy-network-hint { display: block; margin-top: 6px; font-size: 11px; color: var(--text-secondary); }
 .privacy-table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .privacy-table th { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); color: var(--text-secondary); font-size: 11px; }
 .privacy-table td { padding: 6px 8px; border-bottom: 1px solid var(--bg-tertiary); }
@@ -4392,6 +4412,111 @@ body {
 .network-btn-small:hover { background: var(--danger); color: #fff; }
 .network-truncated { padding: 8px; text-align: center; color: var(--text-secondary); font-size: 11px; }
 .network-empty { padding: 24px; text-align: center; color: var(--text-secondary); }
+
+/* Grouped connections */
+.network-groups { display: flex; flex-direction: column; gap: 4px; }
+.network-group {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+}
+.network-group-ghost {
+    border-color: var(--danger);
+    background: rgba(255, 71, 87, 0.04);
+}
+.network-group-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    cursor: pointer;
+    background: var(--bg-secondary);
+}
+.network-group-header:hover { background: var(--bg-tertiary); }
+.network-group-arrow { font-size: 10px; width: 14px; color: var(--text-secondary); flex-shrink: 0; }
+.network-group-name { flex: 1; font-size: 13px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.network-group-badge {
+    background: var(--accent);
+    color: #fff;
+    padding: 1px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+.network-group-ips { font-size: 11px; color: var(--text-secondary); flex-shrink: 0; }
+.network-group-states { display: flex; gap: 4px; flex-shrink: 0; }
+.network-state-pill {
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+}
+.network-ghost-warning {
+    font-size: 11px;
+    color: var(--danger);
+    font-weight: 600;
+    flex-shrink: 0;
+}
+.network-group-detail { padding: 0 12px 12px; }
+.network-status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+.network-status-safe { background: var(--success); }
+.network-status-danger { background: var(--danger); }
+.network-status-neutral { background: var(--text-muted); }
+.network-company { font-size: 11px; color: var(--accent-text); max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.network-tracker { color: var(--danger); font-weight: 600; }
+.network-privacy-badge {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: rgba(108, 92, 231, 0.15);
+    color: var(--accent-text);
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+/* Snapshot / Echtzeit Toggle */
+.network-toggle-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+.network-toggle-label input[type="checkbox"] { display: none; }
+.network-toggle-slider {
+    width: 32px; height: 18px;
+    background: var(--bg-tertiary);
+    border-radius: 9px;
+    position: relative;
+    transition: background 0.2s;
+    border: 1px solid var(--border);
+}
+.network-toggle-slider::before {
+    content: '';
+    width: 14px; height: 14px;
+    background: var(--text-secondary);
+    border-radius: 50%;
+    position: absolute;
+    top: 1px; left: 1px;
+    transition: transform 0.2s;
+}
+.network-toggle-label input:checked + .network-toggle-slider {
+    background: var(--accent);
+    border-color: var(--accent);
+}
+.network-toggle-label input:checked + .network-toggle-slider::before {
+    transform: translateX(14px);
+    background: #fff;
+}
+.network-timestamp { font-size: 11px; color: var(--text-muted); flex-shrink: 0; }
+.network-recording-indicator { font-size: 11px; color: var(--danger); font-weight: 600; flex-shrink: 0; }
 
 .network-bandwidth-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
 .network-adapter-card {

@@ -372,6 +372,11 @@ async function init() {
         switchToTab('explorer');
         dualPanel.getActiveExplorer()?.navigateTo(folderPath);
     });
+
+    // Cross-view navigation (z.B. Privacy → Netzwerk)
+    document.addEventListener('navigate-to-tab', (e) => {
+        if (e.detail?.tab) switchToTab(e.detail.tab);
+    });
 }
 
 // ===== Sidebar =====

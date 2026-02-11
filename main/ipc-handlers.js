@@ -1007,6 +1007,16 @@ function register(mainWindow) {
         return network.getNetworkSummary();
     });
 
+    ipcMain.handle('get-grouped-connections', async () => {
+        const network = require('./network');
+        return network.getGroupedConnections();
+    });
+
+    ipcMain.handle('resolve-ips', async (_event, ipAddresses) => {
+        const network = require('./network');
+        return network.resolveIPs(ipAddresses);
+    });
+
     // === System Score ===
     ipcMain.handle('get-system-score', async (_event, results) => {
         const { calculateSystemScore } = require('./system-score');

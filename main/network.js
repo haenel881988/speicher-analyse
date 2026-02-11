@@ -272,6 +272,191 @@ async function getNetworkSummary() {
     }
 }
 
+// ---------------------------------------------------------------------------
+// 7) getGroupedConnections – Verbindungen nach Prozess gruppiert
+// ---------------------------------------------------------------------------
+async function getGroupedConnections() {
+    const connections = await getConnections();
+
+    // Nach Prozess gruppieren
+    const groups = new Map();
+    for (const conn of connections) {
+        const key = conn.processName || 'System';
+        if (!groups.has(key)) {
+            groups.set(key, {
+                processName: key,
+                processPath: conn.processPath || '',
+                connections: [],
+                uniqueRemoteIPs: new Set(),
+                states: {},
+            });
+        }
+        const group = groups.get(key);
+        group.connections.push(conn);
+        if (conn.remoteAddress && conn.remoteAddress !== '0.0.0.0' &&
+            conn.remoteAddress !== '::' && conn.remoteAddress !== '127.0.0.1' &&
+            conn.remoteAddress !== '::1') {
+            group.uniqueRemoteIPs.add(conn.remoteAddress);
+        }
+        group.states[conn.state] = (group.states[conn.state] || 0) + 1;
+    }
+
+    // Prozess-Status prüfen (läuft der Prozess noch?)
+    const processRunning = await checkProcessesRunning([...groups.keys()]);
+
+    // In serialisierbares Array umwandeln
+    const result = [];
+    for (const [name, group] of groups) {
+        result.push({
+            processName: group.processName,
+            processPath: group.processPath,
+            connectionCount: group.connections.length,
+            uniqueIPCount: group.uniqueRemoteIPs.size,
+            uniqueIPs: [...group.uniqueRemoteIPs],
+            states: group.states,
+            isRunning: processRunning.get(name) ?? true,
+            connections: group.connections,
+        });
+    }
+
+    // Nach Verbindungsanzahl absteigend sortieren
+    result.sort((a, b) => b.connectionCount - a.connectionCount);
+    return result;
+}
+
+/**
+ * Prüft welche Prozesse tatsächlich laufen.
+ */
+async function checkProcessesRunning(processNames) {
+    const result = new Map();
+    try {
+        const names = processNames.filter(n => n && n !== 'System' && n !== '');
+        if (names.length === 0) return result;
+
+        const psScript = `
+            Get-Process -ErrorAction SilentlyContinue | Select-Object -ExpandProperty ProcessName -Unique | ConvertTo-Json -Compress
+        `.trim();
+
+        const { stdout } = await runPS(psScript, { timeout: 15000 });
+        const runningNames = JSON.parse(stdout.trim());
+        const runningSet = new Set(Array.isArray(runningNames) ? runningNames : [runningNames]);
+
+        for (const name of processNames) {
+            result.set(name, name === 'System' || name === '' || runningSet.has(name));
+        }
+    } catch {
+        // Bei Fehler: alle als laufend annehmen
+        for (const name of processNames) result.set(name, true);
+    }
+    return result;
+}
+
+// ---------------------------------------------------------------------------
+// 8) resolveIPs – IP-Adressen zu Firmennamen auflösen
+// ---------------------------------------------------------------------------
+const _dnsCache = new Map();
+
+const COMPANY_PATTERNS = [
+    { patterns: ['microsoft', 'msedge', '.ms.', 'azure', 'office365', 'outlook', 'onedrive', 'live.com', 'msn.com', 'windows.com', 'bing.com'], company: 'Microsoft' },
+    { patterns: ['google', 'goog', 'youtube', 'gstatic', 'googleapis', '1e100.net'], company: 'Google' },
+    { patterns: ['facebook', 'fbcdn', 'fb.com', 'meta.com', 'instagram', 'whatsapp'], company: 'Meta (Facebook)' },
+    { patterns: ['amazon', 'aws', 'cloudfront', 'a2z'], company: 'Amazon/AWS' },
+    { patterns: ['apple', 'icloud'], company: 'Apple' },
+    { patterns: ['akamai', 'akam'], company: 'Akamai (CDN)' },
+    { patterns: ['cloudflare', 'cf-'], company: 'Cloudflare (CDN)' },
+    { patterns: ['spotify'], company: 'Spotify' },
+    { patterns: ['steam', 'valve', 'steampowered'], company: 'Valve (Steam)' },
+    { patterns: ['discord', 'discordapp'], company: 'Discord' },
+    { patterns: ['tiktok', 'bytedance', 'musical.ly'], company: 'ByteDance (TikTok)' },
+    { patterns: ['twitter', 'twimg', 'x.com'], company: 'X (Twitter)' },
+    { patterns: ['netflix'], company: 'Netflix' },
+    { patterns: ['adobe'], company: 'Adobe' },
+    // Tracker / Werbenetzwerke
+    { patterns: ['doubleclick', 'googlesyndication', 'googleadservices', 'googleads'], company: 'Google Werbung', isTracker: true },
+    { patterns: ['scorecardresearch', 'quantserve', 'analytics'], company: 'Tracking/Analyse', isTracker: true },
+    { patterns: ['adnxs', 'appnexus'], company: 'Xandr Werbung', isTracker: true },
+    { patterns: ['criteo'], company: 'Criteo Werbung', isTracker: true },
+    { patterns: ['taboola', 'outbrain'], company: 'Content-Werbung', isTracker: true },
+];
+
+function identifyCompany(hostname) {
+    const lower = (hostname || '').toLowerCase();
+    for (const entry of COMPANY_PATTERNS) {
+        if (entry.patterns.some(p => lower.includes(p))) {
+            return { name: entry.company, isTracker: entry.isTracker || false };
+        }
+    }
+    // Fallback: Domain aus Hostname extrahieren
+    if (hostname) {
+        const parts = hostname.split('.');
+        if (parts.length >= 2) {
+            return { name: parts.slice(-2).join('.'), isTracker: false };
+        }
+    }
+    return { name: 'Unbekannt', isTracker: false };
+}
+
+async function resolveIPs(ipAddresses) {
+    if (!Array.isArray(ipAddresses) || ipAddresses.length === 0) return {};
+
+    const results = {};
+    const uncached = [];
+
+    for (const ip of ipAddresses) {
+        if (_dnsCache.has(ip)) {
+            results[ip] = _dnsCache.get(ip);
+        } else {
+            uncached.push(ip);
+        }
+    }
+
+    if (uncached.length === 0) return results;
+
+    // Batch: max 20 IPs auf einmal auflösen
+    const batch = uncached.slice(0, 20);
+    const ipList = batch.map(ip => `'${ip.replace(/'/g, "''")}'`).join(',');
+
+    const psScript = `
+        $ips = @(${ipList})
+        $results = foreach ($ip in $ips) {
+            try {
+                $dns = Resolve-DnsName -Name $ip -DnsOnly -Type PTR -ErrorAction SilentlyContinue | Select-Object -First 1
+                [PSCustomObject]@{ ip = $ip; hostname = if ($dns) { $dns.NameHost } else { '' } }
+            } catch {
+                [PSCustomObject]@{ ip = $ip; hostname = '' }
+            }
+        }
+        $results | ConvertTo-Json -Compress
+    `.trim();
+
+    try {
+        const { stdout } = await runPS(psScript, { timeout: 20000 });
+        const raw = JSON.parse(stdout.trim());
+        const arr = Array.isArray(raw) ? raw : [raw];
+
+        for (const entry of arr) {
+            const hostname = entry.hostname || '';
+            const company = identifyCompany(hostname);
+            const resolved = {
+                hostname,
+                company: company.name,
+                isTracker: company.isTracker,
+            };
+            _dnsCache.set(entry.ip, resolved);
+            results[entry.ip] = resolved;
+        }
+    } catch {
+        // Bei Timeout/Fehler: als unbekannt cachen
+        for (const ip of batch) {
+            const fallback = { hostname: '', company: 'Unbekannt', isTracker: false };
+            _dnsCache.set(ip, fallback);
+            results[ip] = fallback;
+        }
+    }
+
+    return results;
+}
+
 module.exports = {
     getConnections,
     getBandwidth,
@@ -279,4 +464,6 @@ module.exports = {
     blockProcess,
     unblockProcess,
     getNetworkSummary,
+    getGroupedConnections,
+    resolveIPs,
 };

@@ -1,25 +1,31 @@
 /**
- * Network Monitor View - Live network connections, bandwidth, and firewall management.
+ * Network Monitor View - Grouped connections by process, IP resolution,
+ * snapshot mode with optional real-time polling, ghost process detection.
  */
 import { showToast } from './tree.js';
 
 export class NetworkView {
     constructor(container) {
         this.container = container;
-        this.connections = [];
+        this.groupedData = [];
         this.bandwidth = [];
         this.summary = null;
         this.pollInterval = null;
         this.activeSubTab = 'connections';
-        this.sortCol = 'processName';
-        this.sortAsc = true;
         this.filter = '';
+        this.snapshotMode = true;
+        this._expandedGroups = new Set();
+        this._resolvedIPs = new Map(); // ip → { hostname, company, isTracker }
+        this._lastRefreshTime = null;
         this._loaded = false;
+        this._errorCount = 0;
     }
 
     async init() {
         this.container.innerHTML = '<div class="loading-state">Netzwerk wird analysiert...</div>';
         this._errorCount = 0;
+        this.snapshotMode = true;
+        this.stopPolling();
         await this.refresh();
     }
 
@@ -29,12 +35,13 @@ export class NetworkView {
             const summary = await window.api.getNetworkSummary();
             this.summary = summary;
 
-            const connections = await window.api.getConnections();
-            this.connections = connections || [];
+            const grouped = await window.api.getGroupedConnections();
+            this.groupedData = grouped || [];
 
             const bandwidth = await window.api.getBandwidth();
             this.bandwidth = bandwidth || [];
 
+            this._lastRefreshTime = new Date();
             this._lastError = null;
             this._errorCount = 0;
             this._loaded = true;
@@ -45,7 +52,6 @@ export class NetworkView {
             this._loaded = false;
             this._errorCount = (this._errorCount || 0) + 1;
 
-            // Bei wiederholten Fehlern Auto-Refresh stoppen
             if (this._errorCount >= 3 && this.pollInterval) {
                 this.stopPolling();
             }
@@ -90,6 +96,8 @@ export class NetworkView {
 
     render() {
         const s = this.summary || {};
+        const timeStr = this._lastRefreshTime ? this._lastRefreshTime.toLocaleTimeString('de-DE') : '';
+
         this.container.innerHTML = `
             <div class="network-page">
                 <div class="network-header">
@@ -107,9 +115,15 @@ export class NetworkView {
                     <button class="network-tab ${this.activeSubTab === 'top' ? 'active' : ''}" data-subtab="top">Top-Prozesse</button>
                 </div>
                 <div class="network-toolbar">
-                    <input type="text" class="network-search" placeholder="Filtern..." value="${this._esc(this.filter)}">
-                    <button class="network-btn" id="network-refresh">Aktualisieren</button>
-                    <button class="network-btn" id="network-auto-refresh">${this.pollInterval ? 'Auto-Stop' : 'Auto-Refresh (5s)'}</button>
+                    <input type="text" class="network-search" placeholder="Filtern nach Prozess oder IP..." value="${this._esc(this.filter)}">
+                    <button class="network-btn" id="network-refresh">${this.snapshotMode ? 'Snapshot aufnehmen' : 'Aktualisieren'}</button>
+                    <label class="network-toggle-label">
+                        <input type="checkbox" id="network-realtime-toggle" ${!this.snapshotMode ? 'checked' : ''}>
+                        <span class="network-toggle-slider"></span>
+                        <span>Echtzeit</span>
+                    </label>
+                    ${timeStr ? `<span class="network-timestamp">Stand: ${timeStr}</span>` : ''}
+                    ${!this.snapshotMode && this.pollInterval ? `<span class="network-recording-indicator">&#9679; Aufnahme (${this.groupedData.length} Apps, ${s.totalConnections || 0} Verbindungen)</span>` : ''}
                 </div>
                 <div class="network-content">
                     ${this._renderSubTab()}
@@ -121,59 +135,120 @@ export class NetworkView {
 
     _renderSubTab() {
         switch (this.activeSubTab) {
-            case 'connections': return this._renderConnections();
+            case 'connections': return this._renderGroupedConnections();
             case 'bandwidth': return this._renderBandwidth();
             case 'top': return this._renderTopProcesses();
             default: return '';
         }
     }
 
-    _renderConnections() {
-        let conns = this.connections;
+    _renderGroupedConnections() {
+        if (!this.groupedData || this.groupedData.length === 0) {
+            return '<div class="network-empty">Keine Verbindungen gefunden</div>';
+        }
+
+        let groups = this.groupedData;
         if (this.filter) {
             const q = this.filter.toLowerCase();
-            conns = conns.filter(c =>
-                (c.processName || '').toLowerCase().includes(q) ||
-                (c.remoteAddress || '').includes(q) ||
-                String(c.remotePort).includes(q)
+            groups = groups.filter(g =>
+                g.processName.toLowerCase().includes(q) ||
+                g.uniqueIPs.some(ip => ip.includes(q)) ||
+                this._groupHasCompanyMatch(g, q)
             );
         }
-        conns = [...conns].sort((a, b) => {
-            const va = a[this.sortCol] || '', vb = b[this.sortCol] || '';
-            if (typeof va === 'number') return this.sortAsc ? va - vb : vb - va;
-            return this.sortAsc ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
+
+        return `<div class="network-groups">
+            ${groups.map(g => {
+                const hasEstablished = g.states.Established > 0;
+                const statusColor = !g.isRunning ? 'danger' :
+                    hasEstablished ? 'safe' : 'neutral';
+                const ghostWarning = !g.isRunning && g.connectionCount > 0;
+                const expanded = this._expandedGroups.has(g.processName);
+
+                return `<div class="network-group ${ghostWarning ? 'network-group-ghost' : ''}" data-process="${this._esc(g.processName)}">
+                    <div class="network-group-header" data-toggle="${this._esc(g.processName)}">
+                        <span class="network-group-arrow">${expanded ? '&#9660;' : '&#9654;'}</span>
+                        <span class="network-status-dot network-status-${statusColor}"></span>
+                        <strong class="network-group-name">${this._esc(g.processName)}</strong>
+                        <span class="network-group-badge">${g.connectionCount}</span>
+                        <span class="network-group-ips">${g.uniqueIPCount} IP${g.uniqueIPCount !== 1 ? 's' : ''}</span>
+                        <span class="network-group-states">
+                            ${Object.entries(g.states).map(([state, count]) =>
+                                `<span class="network-state-pill">${state}: ${count}</span>`
+                            ).join('')}
+                        </span>
+                        ${ghostWarning ? '<span class="network-ghost-warning">Hintergrund-Aktivität!</span>' : ''}
+                        ${g.processPath ? `<button class="network-btn-small" data-block="${this._esc(g.processName)}" data-path="${this._esc(g.processPath)}">Blockieren</button>` : ''}
+                    </div>
+                    ${expanded ? this._renderGroupDetail(g) : ''}
+                </div>`;
+            }).join('')}
+        </div>`;
+    }
+
+    _renderGroupDetail(g) {
+        // Verbindungen nach Remote-IP gruppieren
+        const ipGroups = new Map();
+        for (const c of g.connections) {
+            const ip = c.remoteAddress || '0.0.0.0';
+            if (!ipGroups.has(ip)) ipGroups.set(ip, []);
+            ipGroups.get(ip).push(c);
+        }
+
+        return `<div class="network-group-detail">
+            <table class="network-table">
+                <thead><tr>
+                    <th>Remote-IP</th>
+                    <th>Firma</th>
+                    <th>Port</th>
+                    <th>Status</th>
+                    <th>Lokal</th>
+                </tr></thead>
+                <tbody>
+                    ${g.connections.map(c => {
+                        const info = this._resolvedIPs.get(c.remoteAddress);
+                        const companyText = info ? info.company : '...';
+                        const isTracker = info?.isTracker;
+                        const isLocal = c.remoteAddress === '127.0.0.1' || c.remoteAddress === '::1' || c.remoteAddress === '0.0.0.0';
+                        const stateClass = c.state === 'Established' ? 'safe' :
+                            c.state === 'Listen' ? 'moderate' : 'neutral';
+
+                        return `<tr class="${isLocal ? 'network-row-local' : ''}">
+                            <td class="network-ip" title="${this._esc(info?.hostname || '')}">${this._esc(c.remoteAddress || '-')}</td>
+                            <td class="network-company ${isTracker ? 'network-tracker' : ''}">${this._esc(companyText)}${isTracker ? ' &#128065;' : ''}</td>
+                            <td>${c.remotePort || '-'}</td>
+                            <td><span class="risk-badge risk-${stateClass}">${c.state}</span></td>
+                            <td>${c.localPort}</td>
+                        </tr>`;
+                    }).join('')}
+                </tbody>
+            </table>
+        </div>`;
+    }
+
+    _groupHasCompanyMatch(group, query) {
+        return group.uniqueIPs.some(ip => {
+            const info = this._resolvedIPs.get(ip);
+            return info && info.company.toLowerCase().includes(query);
         });
+    }
 
-        if (conns.length === 0) return '<div class="network-empty">Keine Verbindungen gefunden</div>';
+    async _resolveGroupIPs(processName) {
+        const group = this.groupedData.find(g => g.processName === processName);
+        if (!group) return;
 
-        return `<table class="network-table">
-            <thead>
-                <tr>
-                    <th data-col="processName" class="sortable">Prozess</th>
-                    <th data-col="localPort" class="sortable">Lokal</th>
-                    <th data-col="remoteAddress" class="sortable">Remote-IP</th>
-                    <th data-col="remotePort" class="sortable">Port</th>
-                    <th data-col="state" class="sortable">Status</th>
-                    <th></th>
-                </tr>
-            </thead>
-            <tbody>
-                ${conns.slice(0, 500).map(c => {
-                    const stateClass = c.state === 'Established' ? 'safe' :
-                        c.state === 'Listen' ? 'moderate' : 'neutral';
-                    const isLocal = c.remoteAddress === '127.0.0.1' || c.remoteAddress === '::1' || c.remoteAddress === '0.0.0.0';
-                    return `<tr class="${isLocal ? 'network-row-local' : ''}">
-                        <td title="${this._esc(c.processPath || '')}">${this._esc(c.processName || 'System')}</td>
-                        <td>${c.localPort}</td>
-                        <td class="network-ip">${this._esc(c.remoteAddress || '-')}</td>
-                        <td>${c.remotePort || '-'}</td>
-                        <td><span class="risk-badge risk-${stateClass}">${c.state}</span></td>
-                        <td>${c.processName && !isLocal ? `<button class="network-btn-small" data-block="${this._esc(c.processName)}" data-path="${this._esc(c.processPath || '')}">Blockieren</button>` : ''}</td>
-                    </tr>`;
-                }).join('')}
-            </tbody>
-        </table>
-        ${conns.length > 500 ? `<div class="network-truncated">${conns.length - 500} weitere ausgeblendet</div>` : ''}`;
+        const unresolvedIPs = group.uniqueIPs.filter(ip => !this._resolvedIPs.has(ip));
+        if (unresolvedIPs.length === 0) return;
+
+        try {
+            const resolved = await window.api.resolveIPs(unresolvedIPs);
+            for (const [ip, info] of Object.entries(resolved)) {
+                this._resolvedIPs.set(ip, info);
+            }
+            this.render();
+        } catch (err) {
+            console.warn('IP-Auflösung fehlgeschlagen:', err.message);
+        }
     }
 
     _renderBandwidth() {
@@ -249,37 +324,45 @@ export class NetworkView {
         if (refreshBtn) {
             refreshBtn.onclick = async () => {
                 refreshBtn.disabled = true;
+                refreshBtn.textContent = 'Wird geladen...';
                 await this.refresh();
-                refreshBtn.disabled = false;
             };
         }
 
-        // Auto-refresh
-        const autoBtn = this.container.querySelector('#network-auto-refresh');
-        if (autoBtn) {
-            autoBtn.onclick = () => {
-                if (this.pollInterval) {
-                    this.stopPolling();
+        // Echtzeit-Toggle
+        const realtimeToggle = this.container.querySelector('#network-realtime-toggle');
+        if (realtimeToggle) {
+            realtimeToggle.onchange = () => {
+                this.snapshotMode = !realtimeToggle.checked;
+                if (!this.snapshotMode) {
+                    this.startPolling(5000);
                 } else {
-                    this.startPolling();
+                    this.stopPolling();
                 }
                 this.render();
             };
         }
 
-        // Sort
-        this.container.querySelectorAll('th.sortable').forEach(th => {
-            th.onclick = () => {
-                const col = th.dataset.col;
-                if (this.sortCol === col) this.sortAsc = !this.sortAsc;
-                else { this.sortCol = col; this.sortAsc = true; }
+        // Group toggle (aufklappen/zuklappen)
+        this.container.querySelectorAll('[data-toggle]').forEach(header => {
+            header.onclick = (e) => {
+                // Nicht toggler wenn Block-Button geklickt
+                if (e.target.closest('button')) return;
+                const processName = header.dataset.toggle;
+                if (this._expandedGroups.has(processName)) {
+                    this._expandedGroups.delete(processName);
+                } else {
+                    this._expandedGroups.add(processName);
+                    this._resolveGroupIPs(processName);
+                }
                 this.render();
             };
         });
 
         // Block buttons
         this.container.querySelectorAll('button[data-block]').forEach(btn => {
-            btn.onclick = async () => {
+            btn.onclick = async (e) => {
+                e.stopPropagation();
                 const name = btn.dataset.block;
                 const processPath = btn.dataset.path;
                 btn.disabled = true;

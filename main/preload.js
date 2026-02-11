@@ -236,6 +236,8 @@ contextBridge.exposeInMainWorld('api', {
     blockProcess: (name, path) => ipcRenderer.invoke('block-process', name, path),
     unblockProcess: (ruleName) => ipcRenderer.invoke('unblock-process', ruleName),
     getNetworkSummary: () => ipcRenderer.invoke('get-network-summary'),
+    getGroupedConnections: () => ipcRenderer.invoke('get-grouped-connections'),
+    resolveIPs: (ipAddresses) => ipcRenderer.invoke('resolve-ips', ipAddresses),
 
     // === System Score ===
     getSystemScore: (results) => ipcRenderer.invoke('get-system-score', results),

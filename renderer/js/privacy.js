@@ -228,6 +228,10 @@ export class PrivacyView {
                 </div>
                 ${advancedHtml}
                 ${tasksHtml}
+                <div class="privacy-network-link">
+                    <button class="privacy-btn-network" id="privacy-goto-network">Netzwerk-Aktivität ansehen &rarr;</button>
+                    <span class="privacy-network-hint">Zeigt welche Apps gerade Daten senden und an wen</span>
+                </div>
             </div>`;
 
         this._wireEvents();
@@ -505,6 +509,14 @@ export class PrivacyView {
                 btn.disabled = false;
             };
         });
+
+        // Link zum Netzwerk-Monitor
+        const gotoNetwork = this.container.querySelector('#privacy-goto-network');
+        if (gotoNetwork) {
+            gotoNetwork.onclick = () => {
+                document.dispatchEvent(new CustomEvent('navigate-to-tab', { detail: { tab: 'network' } }));
+            };
+        }
     }
 
     getScore() {
