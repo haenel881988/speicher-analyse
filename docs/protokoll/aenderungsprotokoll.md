@@ -78,3 +78,21 @@ Siehe auch: [`archiv/aenderungsprotokoll_v7.0-v7.2.md`](archiv/aenderungsprotoko
 **Lösung:** `buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)` für sauberen ArrayBuffer.
 
 **Lehre:** NIEMALS `buffer.buffer` direkt über IPC senden. Immer `.slice()` für einen sauberen ArrayBuffer verwenden.
+
+---
+
+### #8: Electron Admin-Elevation: Single-Instance Lock Race Condition (2026-02-11)
+
+**Problem:** `Start-Process -Verb RunAs` startet den neuen Prozess, PowerShell gibt Return, und `app.quit()` wird aufgerufen. Aber `app.quit()` ist ASYNC — bis die alte Instanz den Lock freigibt, hat die neue Instanz bereits `requestSingleInstanceLock()` aufgerufen, `false` bekommen, und sich sofort beendet. Ergebnis: App schließt sich und nichts passiert.
+
+**Lösung:** 4 Fixes zusammen:
+1. `app.releaseSingleInstanceLock()` EXPLIZIT VOR dem Spawn der neuen Instanz aufrufen (Electron API seit v15)
+2. `app.exit(0)` statt `app.quit()` — sofortiger Exit ohne async Event-Queue
+3. `execFileAsync` statt `execAsync` — bypassed cmd.exe komplett (keine Double-Quote-Nesting-Probleme)
+4. `app._isElevating` Flag — verhindert dass Window-Close/Tray/window-all-closed während der UAC-Wartezeit `app.quit()` aufrufen
+
+**Lehre:**
+- `app.quit()` ist ASYNC und feuert Events (before-quit, will-quit, window-all-closed). Für Elevation immer `app.exit(0)` verwenden.
+- `requestSingleInstanceLock()` muss EXPLIZIT mit `releaseSingleInstanceLock()` freigegeben werden bevor die neue Instanz startet. Sich auf `app.quit()` verlassen funktioniert nicht (Race Condition).
+- `exec()` geht durch `cmd.exe /c "..."` — fragile Verschachtelung bei PowerShell-Befehlen. `execFile()` spawnt direkt.
+- Während Elevation (UAC-Wartezeit bis 120s) muss ALLES was `app.quit()` aufrufen könnte blockiert werden: Window-Close, window-all-closed, Tray-Menü. Sonst wird `before-quit` gefeuert, Cleanup-Code räumt die scans-Map ab, und die Elevation-Daten sind weg.
