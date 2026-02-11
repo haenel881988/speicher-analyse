@@ -65,3 +65,93 @@ Simon fällt auf, dass er der KI sehr oft, mehrmals insistieren muss, dass das g
 
 Aus diesem Grund bittet Simon die KI, in der Claude Datei zu hinterlegen, dass für jedes Problem eine akribische und minutiöse tiefenanalyse und tiefenrecherche durchgeführt werden muss.
 Es kann nicht sein, dass Simon, die Fehler mehrmals der KI mitteilen muss.
+
+---
+
+## Privacy Dashboard: Intelligente, App-bewusste Datenschutz-Empfehlungen
+
+**Gemeldet:** 2026-02-11
+**Status:** Offen
+**Priorität:** Feature-Request
+
+### Problem
+
+Das Privacy-Dashboard zeigt aktuell nur technische Einstellungsnamen wie "Standort: Offen/Geschützt" an. Ein normaler Benutzer versteht nicht:
+1. Was genau diese Einstellung bewirkt
+2. Welche Auswirkungen das Ändern auf sein System und seine installierten Apps hat
+3. Ob er diese Einstellung überhaupt ändern sollte, basierend auf seiner tatsächlichen Nutzung
+
+Die Windows-Edition-Anzeige ("Microsoft Windows 11 Pro — Erweiterte Einstellungen mit Vorsicht verwenden") ist ebenfalls zu technisch und nichtssagend.
+
+### Anforderungen
+
+#### 1. Verständliche Erklärungen pro Einstellung
+Jede Datenschutz-Einstellung soll eine **laienverständliche** Erklärung enthalten:
+- Was macht diese Einstellung genau? (In einem Satz, ohne Fachbegriffe)
+- Was passiert, wenn ich sie aktiviere/deaktiviere?
+- Welche konkreten Auswirkungen hat das auf mein System?
+
+**Beispiel Standort:**
+> "Wenn du den Standort deaktivierst, können Apps nicht mehr erkennen, wo du dich befindest. Das bedeutet: Keine ortsbasierten Empfehlungen, keine Navigation, keine lokalen Wetterdaten."
+
+**Beispiel Telemetrie:**
+> "Windows sendet regelmäßig Nutzungsdaten an Microsoft — z.B. welche Apps du öffnest, wie lange du sie nutzt, und welche Fehler auftreten. Diese Einstellung reduziert das auf das technisch notwendige Minimum."
+
+#### 2. App-bewusste Datenschutz-Analyse (Kern-Feature)
+Beim Scan sollen die **installierten Apps** (aus dem Software-Audit) mit den Datenschutz-Einstellungen korreliert werden:
+
+- **Standort-Einstellung:** Erkennen, welche installierten Apps Standortzugriff benötigen/nutzen
+  - Beispiele: Google Maps, Tinder, Lovoo, Facebook, Instagram, Wetter-Apps, Uber, Lieferando
+  - Anzeige: "⚠️ Folgende Apps können nach Deaktivierung nicht mehr auf deinen Standort zugreifen: **Google Maps**, **Tinder**, **Facebook**"
+
+- **Kamera/Mikrofon-Einstellungen:** Erkennen, welche Apps Kamera/Mikrofon nutzen
+  - Beispiele: Zoom, Teams, Discord, Skype, OBS, Webcam-Software
+  - Anzeige: "⚠️ Folgende Apps benötigen Kamerazugriff: **Zoom**, **Microsoft Teams**, **Discord**"
+
+- **Werbe-ID:** Erkennen, welche Apps personalisierte Werbung nutzen
+  - Beispiele: Free-to-Play Games, Social Media Apps, Browser
+  - Anzeige: "Diese Apps zeigen möglicherweise weniger relevante Werbung: **Spotify Free**, **Facebook**"
+
+- **Diagnose-/Telemetriedaten:** Erkennen, welche Apps eigene Telemetrie senden
+  - Beispiele: Office 365, Visual Studio, Chrome, Firefox
+  - Anzeige: "Diese Einstellung betrifft nur Windows. Folgende Apps haben eigene Telemetrie: **Google Chrome**, **Microsoft Office**"
+
+#### 3. Kausalitäten und Systemauswirkungen
+Für jede Einstellung soll klar dargestellt werden, welche **Kettenreaktionen** sie auslösen kann:
+
+- "Standort deaktivieren" → "Cortana kann keine ortsbasierten Erinnerungen mehr erstellen" → "Zeitzone wird nicht mehr automatisch erkannt" → "Find my Device funktioniert nicht mehr"
+- "Telemetrie auf Minimum" → "Windows kann weniger gezielte Updates liefern" → "Einige Kompatibilitätsprüfungen entfallen"
+- "Aktivitätsverlauf deaktivieren" → "Timeline in Alt+Tab wird leer" → "Geräteübergreifende Aufgaben funktionieren nicht mehr"
+
+#### 4. Empfehlungs-System
+Basierend auf den installierten Apps und der Systemkonfiguration soll eine **personalisierte Empfehlung** pro Einstellung angezeigt werden:
+
+- 🟢 **"Empfohlen zu deaktivieren"** — Keine deiner Apps benötigt diese Funktion
+- 🟡 **"Mit Vorsicht"** — 2 Apps (Tinder, Google Maps) nutzen diese Funktion, Deaktivierung hat Konsequenzen
+- 🔴 **"Nicht empfohlen"** — 5+ Apps benötigen diese Funktion aktiv
+
+#### 5. Einfache Sprache
+Alle Texte müssen so geschrieben sein, dass jemand ohne IT-Kenntnisse sie versteht:
+- Keine Registry-Pfade in der Hauptansicht (nur auf Klick/Aufklappen)
+- Keine Fachbegriffe ohne Erklärung
+- Kurze Sätze, aktive Sprache
+- Konkrete Beispiele statt abstrakter Beschreibungen
+
+### Technische Umsetzung (Vorschlag)
+
+1. **App-Datenbank:** Eine Zuordnungsliste (App-Name → benötigte Berechtigungen) als JSON
+2. **Korrelation mit Software-Audit:** `main/software-audit.js` liefert bereits installierte Programme → mit der App-Datenbank abgleichen
+3. **Erweiterte Privacy-Settings:** Jede Einstellung in `main/privacy.js` bekommt zusätzliche Felder:
+   - `explanation` (laienverständlich)
+   - `impacts` (Array von Auswirkungen)
+   - `relatedApps` (wird dynamisch aus installierten Apps befüllt)
+4. **UI-Erweiterung:** `renderer/js/privacy.js` zeigt pro Einstellung die Erklärung + betroffene Apps an
+
+### Akzeptanzkriterien
+- [ ] Jede Einstellung hat eine verständliche Erklärung (max. 2 Sätze)
+- [ ] Installierte Apps werden erkannt und den Einstellungen zugeordnet
+- [ ] Betroffene Apps werden bei jeder Einstellung sichtbar angezeigt
+- [ ] Kausalitäten/Kettenreaktionen werden dargestellt
+- [ ] Empfehlungs-Ampel (grün/gelb/rot) pro Einstellung
+- [ ] Alle Texte sind für Laien verständlich (keine Fachbegriffe)
+- [ ] Simon bestätigt, dass das Feature wie gewünscht funktioniert
