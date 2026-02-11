@@ -100,6 +100,7 @@ function buildTrayMenu(mainWindow) {
         {
             label: 'Beenden',
             click: () => {
+                if (app._isElevating) return; // Nicht beenden während Admin-Elevation
                 tray.destroy();
                 tray = null;
                 app.quit();

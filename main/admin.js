@@ -1,6 +1,6 @@
 'use strict';
 
-const { exec } = require('child_process');
+const { exec, execFile } = require('child_process');
 const { promisify } = require('util');
 const fs = require('fs');
 const path = require('path');
@@ -8,6 +8,7 @@ const zlib = require('zlib');
 const { app } = require('electron');
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 const SESSION_DIR = path.join(process.env.APPDATA || process.env.HOME || '.', 'speicher-analyse');
 const SESSION_FILE = path.join(SESSION_DIR, 'elevation-session.json.gz');
@@ -138,8 +139,8 @@ async function loadAndClearPendingAction() {
         // Löschen nach dem Lesen (einmalig)
         await fs.promises.unlink(PENDING_ACTIONS_FILE).catch(() => {});
 
-        // Nur Aktionen der letzten 60 Sekunden akzeptieren (Schutz vor verwaisten Dateien)
-        if (Date.now() - data.timestamp > 60000) return null;
+        // Nur Aktionen der letzten 2 Minuten akzeptieren (UAC kann bis 120s dauern)
+        if (Date.now() - data.timestamp > 120000) return null;
 
         return data.action || null;
     } catch {
@@ -151,6 +152,13 @@ async function loadAndClearPendingAction() {
 /**
  * Save session data and restart the app with admin privileges.
  * Optional: pendingAction wird nach dem Neustart automatisch ausgeführt.
+ *
+ * Fixes applied (v7.2.3):
+ * 1. releaseSingleInstanceLock() BEFORE spawning new process — prevents lock race condition
+ *    (new instance would get gotLock=false in main.js:17 and quit immediately)
+ * 2. execFileAsync instead of execAsync — bypasses cmd.exe double-quote nesting issues
+ * 3. 120s timeout instead of 10s — UAC dialog can take longer
+ * 4. app.exit(0) instead of app.quit() — immediate exit (session already saved)
  */
 async function restartAsAdmin(scans, pendingAction) {
     // Save current scan data
@@ -165,19 +173,32 @@ async function restartAsAdmin(scans, pendingAction) {
     const electronExe = process.execPath;
     const appDir = path.join(__dirname, '..');
 
-    // Use PowerShell to relaunch with elevated privileges
+    // Set elevation flag — prevents window-close, window-all-closed, and tray
+    // from calling app.quit() which would trigger before-quit cleanup during elevation
+    app._isElevating = true;
+
+    // CRITICAL: Release single-instance lock BEFORE spawning elevated process.
+    // Without this, the new instance calls requestSingleInstanceLock() in main.js:15,
+    // gets false (old instance still holds it), and quits at main.js:20.
+    app.releaseSingleInstanceLock();
+
+    // Use PowerShell Start-Process -Verb RunAs for UAC elevation.
+    // execFileAsync bypasses cmd.exe (no double-quote nesting issues).
     const psCommand = `Start-Process -FilePath '${electronExe.replace(/'/g, "''")}' -ArgumentList '${appDir.replace(/'/g, "''")}' -Verb RunAs`;
 
     try {
-        await execAsync(`powershell -NoProfile -Command "${psCommand}"`, {
-            timeout: 10000,
+        await execFileAsync('powershell.exe', ['-NoProfile', '-Command', psCommand], {
+            timeout: 120000, // 2 Minuten für UAC-Dialog
             windowsHide: true,
         });
-        // Quit the current (non-admin) instance
-        app.quit();
+        // Sofortiger Exit — Session-Daten bereits gespeichert, kein Cleanup nötig
+        app.exit(0);
     } catch (err) {
-        // User cancelled UAC dialog or error
-        // Clean up session + pending action files since we're not restarting
+        // User hat UAC abgebrochen oder Timeout
+        app._isElevating = false;
+        // Single-Instance Lock wieder erwerben (App läuft ja weiter)
+        app.requestSingleInstanceLock();
+        // Session + Pending-Action Dateien aufräumen
         await fs.promises.unlink(SESSION_FILE).catch(() => {});
         await fs.promises.unlink(PENDING_ACTIONS_FILE).catch(() => {});
         throw new Error('Admin-Neustart abgebrochen: ' + (err.message || ''));

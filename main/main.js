@@ -66,6 +66,13 @@ if (!gotLock) {
         mainWindow.on('close', (e) => {
             if (isQuitting) return; // App will beenden → durchlassen
 
+            // Während Admin-Elevation: Fenster verstecken statt schließen
+            if (app._isElevating) {
+                e.preventDefault();
+                mainWindow.hide();
+                return;
+            }
+
             // Preferences erst nach IPC-Register verfügbar - hier lazy laden
             let minimizeToTray = false; // Default: X = App beenden
             try {
@@ -240,6 +247,7 @@ if (!gotLock) {
     });
 
     app.on('window-all-closed', () => {
+        if (app._isElevating) return; // Nicht beenden während Admin-Elevation
         app.quit();
     });
 
