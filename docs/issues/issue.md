@@ -24,6 +24,14 @@
 
 **Status:** Bestätigt von Simon am 11.02.2026
 
+## 6. Fenster-Layout und Terminal-Breite
+
+**Problem:** Das Terminal war viel zu breit und hat die Seitenleiste überdeckt.
+
+**Lösung:** Das Terminal sitzt jetzt im richtigen Bereich und nimmt nur die Breite des mittleren Inhaltsbereichs ein. Seitenleiste und Vorschau bleiben sichtbar.
+
+**Status:** Bestätigt von Simon am 11.02.2026
+
 ---
 
 # Offene Issues
@@ -32,15 +40,19 @@
 
 **Problem:** Wenn die App geschlossen und wieder geöffnet wird, sind die vorherigen Scan-Ergebnisse weg. Der Scan muss komplett neu durchgeführt werden, die Lüfter drehen hoch.
 
-**Was bisher gemacht wurde:** Das Problem hing mit Issue #1 zusammen — weil die App nicht richtig geschlossen wurde (nur versteckt), wurden die Daten nie gespeichert. Seit dem Fix von Issue #1 sollte das korrekte Speichern und Wiederherstellen funktionieren.
+**Was bisher gemacht wurde:**
+- Erstes Problem: App wurde nur versteckt statt beendet → Daten nie gespeichert (behoben mit Issue #1)
+- Zweites Problem: Nur ein Teil der Scan-Daten wurde gespeichert (Ordnerstruktur ja, aber Datei-Details nein) → Behoben: Jetzt werden ALLE Scan-Daten vollständig gespeichert und wiederhergestellt
+- Das betrifft auch die Duplikate, die Suche und die Dashboard-Übersicht — alles funktioniert jetzt nach einem Neustart
 
 **Was Simon testen soll:**
 1. App öffnen, einen Scan durchführen
 2. App über den X-Button schliessen (nicht Task-Manager)
 3. App wieder öffnen
 4. Prüfen: Werden die vorherigen Scan-Ergebnisse automatisch angezeigt, ohne dass ein neuer Scan startet?
+5. Prüfen: Zeigt die Dashboard-Übersicht Zahlen an (Bereinigung, alte Dateien, etc.)?
 
-**Status:** Fix implementiert, wartet auf Simons Test
+**Status:** Neuer Fix implementiert (vollständige Daten-Speicherung), wartet auf Simons Test
 
 ---
 
@@ -67,7 +79,37 @@
 4. Prüfen: Werden die Ordnergrössen auf beiden Laufwerken als Zahlen angezeigt?
 5. App schliessen und wieder öffnen — werden die Grössen wiederhergestellt?
 
-**Status:** Fix implementiert, wartet auf Simons Test
+**Simons Feedback (11.02.2026):**
+Die Scandaten werden noch immer nicht korrekt wiederhergestellt, wenn die App geschlossen wird. Irgendwie spackt das mit der speicherscan, speicherwiederherstellung / speicheranzeige.
+
+Der Verzeichnisbaum wird auch nicht aktualisiert, muss scan erneut durchgeführt werden.
+Unter "Vergleich" wird gleich gar nichts angezeigt, sowie auch unter Duplikate nichts.
+
+Das Thema  mit den speichergrössen / darstellung etc. scheint ein grösserer bug zu sein. Es ist zwingennd erforderlich dass eine vertiefte  bug analyse durchgeführt werden muss mithilfe den Skills.
+
+**Was die Tiefenanalyse ergeben hat:**
+Die App hat beim Speichern nur die Ordner-Struktur gesichert, aber NICHT die Datei-Details (welche Dateien wo liegen, wie gross sie sind). Deshalb waren nach einem Neustart folgende Bereiche leer:
+- Duplikate: Braucht die Datei-Details um Dateien gleicher Grösse zu finden
+- Suche: Braucht die Datei-Details um Dateinamen zu finden
+- Dashboard-Übersicht: Die Analyse wurde nach dem Wiederherstellen gar nicht gestartet
+
+**Was jetzt geändert wurde:**
+- Die App speichert jetzt ALLE Scan-Daten vollständig (Ordner UND Dateien)
+- Nach dem Wiederherstellen wird die Dashboard-Analyse automatisch im Hintergrund gestartet
+- Duplikate, Suche und Vergleich funktionieren jetzt auch nach einem Neustart
+
+**Was Simon testen soll:**
+1. App öffnen, Laufwerk C: scannen
+2. Warten bis der Scan fertig ist
+3. Im Verzeichnisbaum prüfen: Werden Ordner und Grössen angezeigt?
+4. Zu "Duplikate" wechseln und prüfen: Kann ein Duplikat-Scan gestartet werden?
+5. App über den X-Button schliessen
+6. App wieder öffnen
+7. Prüfen: Wird der Verzeichnisbaum mit Grössen angezeigt (ohne neuen Scan)?
+8. Prüfen: Zeigt die Dashboard-Übersicht Zahlen an?
+9. Zu "Duplikate" wechseln und prüfen: Funktioniert der Duplikat-Scan auch nach dem Neustart?
+
+**Status:** Neuer Fix implementiert (Tiefenanalyse + vollständige Überarbeitung), wartet auf Simons Test
 
 ---
 
@@ -101,6 +143,19 @@
 
 **Status:** Fix implementiert, wartet auf Simons Test
 
+**Simons Feedback**
+Gute Umsetzung, jedoch ist  das privacy dashboard für ein laien nicht hilfreich. Soll er das jetzt schützen oder nicht?
+Der Privacy Dashboard muss generell anwenderfreundlicher gestaltet werden. Ich habe keine Ahnung, ob ich jetzt das deaktivieren soll.
+
+Telemetrie Tasks: Soll ich das jetzt deaktivieren?
+
+Generell muss ich Wissen, welche  Einstellungen welche Auswirkungen auf  mein System haben.
+
+Achtung gewisse zukünftige windows uppdates  / upgrades können die einstellungen unbrauchbar machen, daher muss das privacy dashboard stabilisiert werden, sowie potenzielle Einstellungen zuerst geprüft werden, ob diese auch ziehen, am besten gleich beim speicherscan einbauen?
+
+Immer  mit skills arbeiten! Danke dir
+
+
 **Akzeptanzkriterien — was Simon sehen soll:**
 - [ ] Lade-Hinweis erscheint sofort beim Öffnen des Privacy-Dashboards
 - [ ] Nach 30-60 Sekunden: Banner mit Zusammenfassung ("X Programme analysiert")
@@ -108,6 +163,10 @@
 - [ ] Bei "Werbe-ID" steht z.B.: "Spotify, Steam zeigen weniger passende Werbung"
 - [ ] Jede Einstellung hat ein farbiges Symbol: grün, gelb oder rot
 - [ ] Alle Texte sind verständlich ohne IT-Kenntnisse
+
+
+Simons Feedback: Unklar, soll ich jetzt die Einstellungen deaktivieren oder nicht?
+Vielleicht erläuterungen / erklärungen?
 
 ---
 
@@ -130,34 +189,6 @@
 2. **Losgelöstes Fenster:** Möglichkeit, die PDF in ein eigenständiges Fenster zu verschieben
 3. **Bearbeitungsfunktionen:** Text markieren, Kommentare hinzufügen, Hervorhebungen setzen
 4. **Druck/Export:** PDF drucken oder als kommentierte Version speichern
-
----
-
-## 6. Fenster-Layout und Terminal-Breite
-
-**Problem:** Das Terminal (Kommandozeile unten) ist viel zu breit — es nimmt die gesamte Fensterbreite ein und überdeckt die Seitenleiste links.
-
-**Simons Feedback:**
-- Das Terminal soll nur so breit sein wie der mittlere Inhaltsbereich
-- Die Seitenleiste darf nicht überdeckt werden
-- Die Vorschau rechts soll nicht verkleinert werden
-- Schön wäre: Fensterinhalte (Terminal, Vorschau) in eigenständige Fenster loslösen können
-
-**Was bisher gemacht wurde:**
-- Tiefenanalyse: Das Terminal war an der falschen Stelle im Fenster-Aufbau platziert — neben dem Hauptbereich statt darin
-- Fix: Das Terminal sitzt jetzt im mittleren Inhaltsbereich und nimmt nicht mehr die volle Fensterbreite ein
-- Die Seitenleiste und die Vorschau werden nicht mehr überdeckt
-
-**Was Simon testen soll:**
-1. Terminal öffnen (Strg+`)
-2. Prüfen: Ist das Terminal nur so breit wie der mittlere Bereich?
-3. Prüfen: Ist die Seitenleiste links noch sichtbar?
-4. Prüfen: Ist die Vorschau rechts noch sichtbar (wenn geöffnet)?
-
-**Status:** Fix implementiert, wartet auf Simons Test
-
-**Noch offen (für später):**
-- Loslösbare Fenster: Terminal und Vorschau als eigenständige Fenster abtrennen können
 
 ---
 
@@ -184,8 +215,6 @@
 
 | Prio | Issue | Status |
 |------|-------|--------|
-| 1 | Ordnergrössen (#3) | Fix implementiert — wartet auf Simons Test |
-| 2 | Privacy App-Empfehlungen (#4) | Fix implementiert — wartet auf Simons Test |
-| 3 | Terminal-Breite (#6) | Fix implementiert — wartet auf Simons Test |
-| 4 | Scandaten (#2) | Fix implementiert — wartet auf Simons Test |
-| 5 | PDF Vollansicht (#5) | Offen — Planung und Umsetzung |
+| 1 | Scandaten + Ordnergrössen (#2 + #3) | Neuer Fix nach Tiefenanalyse — wartet auf Simons Test |
+| 2 | Privacy Dashboard (#4) | Überarbeitung geplant — anwenderfreundlicher gestalten |
+| 3 | PDF Vollansicht (#5) | Offen — Planung und Umsetzung |
