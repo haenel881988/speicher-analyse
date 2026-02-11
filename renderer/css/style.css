@@ -4014,19 +4014,19 @@ body {
 .privacy-cat-title { font-size: 13px; margin: 12px 0 6px; color: var(--accent-text); text-transform: uppercase; }
 .privacy-category { margin-bottom: 8px; }
 .privacy-setting {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 8px 12px;
+    padding: 10px 14px;
     background: var(--bg-secondary);
     border-radius: 6px;
-    margin-bottom: 4px;
+    margin-bottom: 6px;
 }
-.privacy-setting-info { flex: 1; }
-.privacy-setting-info strong { font-size: 13px; display: block; }
+.privacy-setting-info { }
+.privacy-setting-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.privacy-setting-header strong { font-size: 13px; flex: 1; }
 .privacy-setting-desc { font-size: 11px; color: var(--text-secondary); display: block; margin-top: 2px; }
-.privacy-setting-path { font-size: 10px; color: var(--text-muted); font-family: var(--font-mono); display: block; margin-top: 2px; }
-.privacy-setting-actions { display: flex; gap: 8px; align-items: center; }
 .privacy-btn-small {
     padding: 3px 10px;
     background: var(--bg-tertiary);
@@ -4142,65 +4142,53 @@ body {
     line-height: 1.4;
 }
 
-/* Privacy: Laienverständliche Erklärung + Auswirkungen */
-.privacy-setting-explanation {
+/* Privacy: Aufklappbare Details */
+.privacy-details {
+    margin-top: 6px;
+}
+.privacy-details summary {
     font-size: 11px;
-    color: var(--text-secondary);
-    margin-top: 4px;
-    line-height: 1.5;
-    padding: 4px 8px;
+    color: var(--text-muted);
+    cursor: pointer;
+    user-select: none;
+}
+.privacy-details summary:hover { color: var(--text-secondary); }
+.privacy-details-content {
+    margin-top: 6px;
+    padding: 8px 10px;
     background: var(--bg-tertiary);
     border-radius: 4px;
     border-left: 2px solid var(--accent);
 }
-.privacy-setting-impacts {
+.privacy-detail-text {
     font-size: 11px;
     color: var(--text-secondary);
-    margin-top: 4px;
+    line-height: 1.5;
+    margin: 0 0 6px;
+}
+.privacy-detail-impacts {
+    font-size: 11px;
+    color: var(--text-secondary);
     line-height: 1.4;
 }
-.privacy-setting-impacts strong { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
-.privacy-setting-impacts ul { margin: 2px 0 0 16px; padding: 0; }
-.privacy-setting-impacts li { margin: 1px 0; }
+.privacy-detail-impacts strong { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+.privacy-detail-impacts ul { margin: 2px 0 0 16px; padding: 0; }
+.privacy-detail-impacts li { margin: 1px 0; }
 
-/* Privacy: Smarte Empfehlungen */
+/* Privacy: Smarte Empfehlungen (kompakt) */
 .privacy-recommendation {
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    flex-wrap: wrap;
     gap: 6px;
     margin-top: 6px;
-    padding: 4px 8px;
+    padding: 3px 8px;
     border-radius: 4px;
     font-size: 11px;
 }
-.privacy-rec-safe { background: rgba(46, 213, 115, 0.08); }
-.privacy-rec-caution { background: rgba(255, 165, 0, 0.08); }
-.privacy-rec-risky { background: rgba(255, 71, 87, 0.08); }
-.privacy-rec-reason { color: var(--text-secondary); }
-.privacy-rec-guidance {
-    width: 100%;
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--text-primary);
-    margin-top: 2px;
-}
-.privacy-status-hint {
-    display: block;
-    font-size: 10px;
-    color: var(--text-secondary);
-    margin-top: 2px;
-    text-align: right;
-}
-.privacy-rec-apps { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
-.privacy-rec-app {
-    font-size: 10px;
-    padding: 1px 6px;
-    background: var(--bg-tertiary);
-    border: 1px solid var(--border);
-    border-radius: 3px;
-    color: var(--text-primary);
-}
+.privacy-rec-safe { background: rgba(46, 213, 115, 0.1); }
+.privacy-rec-caution { background: rgba(255, 165, 0, 0.1); }
+.privacy-rec-risky { background: rgba(255, 71, 87, 0.1); }
+.privacy-rec-apps-inline { color: var(--text-secondary); font-size: 10px; }
 .privacy-rec-banner {
     display: flex;
     align-items: center;

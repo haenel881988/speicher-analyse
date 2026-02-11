@@ -249,12 +249,9 @@ export class PrivacyView {
     _renderSetting(s, isAdvanced = false) {
         const statusClass = s.isPrivate ? 'safe' : 'high';
         const statusText = s.isPrivate ? 'Geschützt' : 'Offen';
-        const statusHint = s.isPrivate
-            ? 'Deine Daten werden bei dieser Einstellung nicht an Microsoft gesendet.'
-            : 'Diese Einstellung teilt Daten mit Microsoft oder Werbepartnern.';
         const warningHtml = s.warning ? `<div class="privacy-setting-warning">${this._esc(s.warning)}</div>` : '';
 
-        // Smarte Empfehlung für diese Einstellung
+        // Smarte Empfehlung (kompakt)
         const rec = this.recommendations.get(s.id);
         let recHtml = '';
         if (rec) {
@@ -267,33 +264,37 @@ export class PrivacyView {
 
             recHtml = `<div class="privacy-recommendation privacy-rec-${rec.recommendation}">
                 <span class="risk-badge ${badgeClass}">${badgeIcon} ${badgeLabel}</span>
-                <span class="privacy-rec-reason">${this._esc(rec.reason)}</span>
-                ${rec.guidance ? `<div class="privacy-rec-guidance">${this._esc(rec.guidance)}</div>` : ''}
-                ${rec.affectedApps.length > 0 ? `<div class="privacy-rec-apps">${rec.affectedApps.slice(0, 5).map(a =>
-                    `<span class="privacy-rec-app" title="${this._esc(a.label)}">${this._esc(a.name)}</span>`
-                ).join('')}${rec.affectedApps.length > 5 ? `<span class="privacy-rec-app">+${rec.affectedApps.length - 5}</span>` : ''}</div>` : ''}
+                ${rec.affectedApps.length > 0 ? `<span class="privacy-rec-apps-inline">${rec.affectedApps.slice(0, 3).map(a =>
+                    this._esc(a.name)).join(', ')}${rec.affectedApps.length > 3 ? ` +${rec.affectedApps.length - 3}` : ''}</span>` : ''}
             </div>`;
         }
 
-        // Laienverständliche Erklärung (aus Backend)
-        const explanationHtml = s.explanation ? `<div class="privacy-setting-explanation">${this._esc(s.explanation)}</div>` : '';
-
-        // Auswirkungen beim Deaktivieren
-        const impactsHtml = s.impacts?.length > 0 ? `<div class="privacy-setting-impacts"><strong>Was passiert beim Deaktivieren:</strong><ul>${s.impacts.map(i => `<li>${this._esc(i)}</li>`).join('')}</ul></div>` : '';
+        // Details (aufklappbar): Erklärung + Auswirkungen
+        const hasDetails = s.explanation || (s.impacts?.length > 0) || s.warning;
+        let detailsHtml = '';
+        if (hasDetails) {
+            const explanationPart = s.explanation ? `<p class="privacy-detail-text">${this._esc(s.explanation)}</p>` : '';
+            const impactsPart = s.impacts?.length > 0 ? `<div class="privacy-detail-impacts"><strong>Beim Deaktivieren:</strong><ul>${s.impacts.map(i => `<li>${this._esc(i)}</li>`).join('')}</ul></div>` : '';
+            detailsHtml = `<details class="privacy-details">
+                <summary>Details</summary>
+                <div class="privacy-details-content">
+                    ${explanationPart}
+                    ${impactsPart}
+                    ${warningHtml}
+                </div>
+            </details>`;
+        }
 
         return `<div class="privacy-setting ${isAdvanced ? 'privacy-setting-advanced' : ''}" data-id="${s.id}">
             <div class="privacy-setting-info">
-                <strong>${this._esc(s.name)}</strong>
+                <div class="privacy-setting-header">
+                    <strong>${this._esc(s.name)}</strong>
+                    <span class="risk-badge risk-${statusClass}">${statusText}</span>
+                    ${!s.isPrivate ? `<button class="privacy-btn-small ${isAdvanced ? 'privacy-btn-advanced' : ''}" data-setting="${s.id}" ${isAdvanced ? 'data-advanced="true"' : ''}>${isAdvanced ? 'Ändern...' : 'Schützen'}</button>` : ''}
+                </div>
                 <span class="privacy-setting-desc">${this._esc(s.description)}</span>
-                ${explanationHtml}
-                ${impactsHtml}
-                ${warningHtml}
                 ${recHtml}
-            </div>
-            <div class="privacy-setting-actions">
-                <span class="risk-badge risk-${statusClass}" title="${statusHint}">${statusText}</span>
-                <span class="privacy-status-hint">${statusHint}</span>
-                ${!s.isPrivate ? `<button class="privacy-btn-small ${isAdvanced ? 'privacy-btn-advanced' : ''}" data-setting="${s.id}" ${isAdvanced ? 'data-advanced="true"' : ''}>${isAdvanced ? 'Ändern...' : 'Schützen'}</button>` : ''}
+                ${detailsHtml}
             </div>
         </div>`;
     }
