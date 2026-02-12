@@ -217,26 +217,36 @@ async function scanNetworkActive(onProgress) {
     log.info(`Aktiver Scan startet: ${subnetInfo.subnet}.0/${subnetInfo.prefixLength}`);
     if (onProgress) onProgress({ phase: 'ping', current: 0, total: 254, message: `Scanne ${subnetInfo.subnet}.0/24...` });
 
-    // Phase 2: Ping Sweep (parallelisiert in PowerShell)
+    // Phase 2: Ping Sweep (.NET async — kompatibel mit PowerShell 5.1 UND 7)
     const pingSweepScript = `
         $subnet = '${subnetInfo.subnet}'
-        $results = [System.Collections.Concurrent.ConcurrentBag[PSCustomObject]]::new()
-        $ips = 1..254
-        $ips | ForEach-Object -ThrottleLimit 50 -Parallel {
-            $ip = "$($using:subnet).$_"
-            $ping = Test-Connection -ComputerName $ip -Count 1 -TimeoutSeconds 1 -ErrorAction SilentlyContinue
-            if ($ping -and $ping.Status -eq 'Success') {
-                $ttl = $ping.Reply.Options.Ttl
-                $rtt = $ping.Reply.RoundtripTime
+        $timeout = 1000
+        $tasks = @{}
+        1..254 | ForEach-Object {
+            $ip = "$subnet.$_"
+            $ping = New-Object System.Net.NetworkInformation.Ping
+            $tasks[$ip] = $ping.SendPingAsync($ip, $timeout)
+        }
+        try { [System.Threading.Tasks.Task]::WaitAll($tasks.Values) } catch {}
+        $online = @()
+        foreach ($kv in $tasks.GetEnumerator()) {
+            $t = $kv.Value
+            if ($t.Status -eq 'RanToCompletion' -and $t.Result.Status -eq 'Success') {
+                $r = $t.Result
                 $hostname = ''
                 try {
-                    $dns = [System.Net.Dns]::GetHostEntry($ip)
-                    if ($dns.HostName -and $dns.HostName -ne $ip) { $hostname = $dns.HostName }
+                    $dns = [System.Net.Dns]::GetHostEntry($kv.Key)
+                    if ($dns.HostName -and $dns.HostName -ne $kv.Key) { $hostname = $dns.HostName }
                 } catch {}
-                ($using:results).Add([PSCustomObject]@{ ip=$ip; ttl=$ttl; rtt=$rtt; hostname=$hostname })
+                $online += [PSCustomObject]@{
+                    ip = $kv.Key
+                    ttl = $r.Options.Ttl
+                    rtt = $r.RoundtripTime
+                    hostname = $hostname
+                }
             }
         }
-        @($results) | Sort-Object { [version]$_.ip } | ConvertTo-Json -Compress
+        @($online) | Sort-Object { [version]$_.ip } | ConvertTo-Json -Compress
     `.trim();
 
     let onlineDevices = [];

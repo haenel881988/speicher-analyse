@@ -11,7 +11,7 @@ export class NetworkView {
         this.bandwidth = [];
         this.summary = null;
         this.pollInterval = null;
-        this.activeSubTab = 'connections';
+        this.activeSubTab = 'overview';
         this.filter = '';
         this.snapshotMode = true;
         this._expandedGroups = new Set();
@@ -134,40 +134,35 @@ export class NetworkView {
     render() {
         const s = this.summary || {};
         const timeStr = this._lastRefreshTime ? this._lastRefreshTime.toLocaleTimeString('de-DE') : '';
-        const totalCompanies = new Set(this.groupedData.flatMap(g => g.resolvedCompanies || [])).size;
-        const highRiskCount = this.groupedData.filter(g => g.hasHighRisk).length;
+        const devCount = this._activeScanResult?.devices?.length || this.localDevices.length;
+
+        // Toolbar nur für Verbindungen und Übersicht anzeigen
+        const showToolbar = this.activeSubTab === 'connections' || this.activeSubTab === 'overview';
 
         this.container.innerHTML = `
             <div class="network-page">
                 <div class="network-header">
                     <h2>Netzwerk-Monitor</h2>
-                    <div class="network-stats">
-                        <span class="network-stat"><strong>${s.totalConnections || 0}</strong> Verbindungen</span>
-                        <span class="network-stat"><strong>${s.establishedCount || 0}</strong> Aktiv</span>
-                        <span class="network-stat"><strong>${s.listeningCount || 0}</strong> Lauschend</span>
-                        <span class="network-stat"><strong>${s.uniqueRemoteIPs || 0}</strong> Remote-IPs</span>
-                        <span class="network-stat"><strong>${totalCompanies}</strong> Firmen</span>
-                        ${highRiskCount > 0 ? `<span class="network-stat network-stat-danger"><strong>${highRiskCount}</strong> Hochrisiko</span>` : ''}
+                    <div class="network-header-controls">
+                        <label class="network-toggle-label">
+                            <input type="checkbox" id="network-realtime-toggle" ${!this.snapshotMode ? 'checked' : ''}>
+                            <span class="network-toggle-slider"></span>
+                            <span>Echtzeit</span>
+                        </label>
+                        <button class="network-btn" id="network-refresh">${this.snapshotMode ? 'Snapshot' : 'Aktualisieren'}</button>
+                        ${timeStr ? `<span class="network-timestamp">Stand: ${timeStr}</span>` : ''}
+                        ${!this.snapshotMode && this.pollInterval ? `<span class="network-recording-indicator">&#9679; Aufnahme</span>` : ''}
                     </div>
                 </div>
                 <div class="network-tabs">
-                    <button class="network-tab ${this.activeSubTab === 'connections' ? 'active' : ''}" data-subtab="connections">Verbindungen</button>
-                    <button class="network-tab ${this.activeSubTab === 'devices' ? 'active' : ''}" data-subtab="devices">Lokale Geräte${this.localDevices.length > 0 ? ` (${this.localDevices.length})` : ''}</button>
-                    <button class="network-tab ${this.activeSubTab === 'bandwidth' ? 'active' : ''}" data-subtab="bandwidth">Bandbreite</button>
-                    <button class="network-tab ${this.activeSubTab === 'top' ? 'active' : ''}" data-subtab="top">Top-Prozesse</button>
-                    <button class="network-tab ${this.activeSubTab === 'history' ? 'active' : ''}" data-subtab="history">Verlauf${this._historyData.length > 0 ? ` (${this._historyData.length})` : ''}</button>
+                    <button class="network-tab ${this.activeSubTab === 'overview' ? 'active' : ''}" data-subtab="overview">Übersicht</button>
+                    <button class="network-tab ${this.activeSubTab === 'connections' ? 'active' : ''}" data-subtab="connections">Verbindungen <span class="network-tab-count">${s.totalConnections || 0}</span></button>
+                    <button class="network-tab ${this.activeSubTab === 'devices' ? 'active' : ''}" data-subtab="devices">Lokale Geräte${devCount > 0 ? ` <span class="network-tab-count">${devCount}</span>` : ''}</button>
+                    <button class="network-tab ${this.activeSubTab === 'history' ? 'active' : ''}" data-subtab="history">Verlauf${this._historyData.length > 0 ? ` <span class="network-tab-count">${this._historyData.length}</span>` : ''}</button>
                 </div>
-                <div class="network-toolbar">
+                ${showToolbar ? `<div class="network-toolbar">
                     <input type="text" class="network-search" placeholder="Filtern nach Prozess oder IP..." value="${this._esc(this.filter)}">
-                    <button class="network-btn" id="network-refresh">${this.snapshotMode ? 'Snapshot aufnehmen' : 'Aktualisieren'}</button>
-                    <label class="network-toggle-label">
-                        <input type="checkbox" id="network-realtime-toggle" ${!this.snapshotMode ? 'checked' : ''}>
-                        <span class="network-toggle-slider"></span>
-                        <span>Echtzeit</span>
-                    </label>
-                    ${timeStr ? `<span class="network-timestamp">Stand: ${timeStr}</span>` : ''}
-                    ${!this.snapshotMode && this.pollInterval ? `<span class="network-recording-indicator">&#9679; Aufnahme (${this.groupedData.length} Apps, ${s.totalConnections || 0} Verbindungen)</span>` : ''}
-                </div>
+                </div>` : ''}
                 <div class="network-content">
                     ${this._renderSubTab()}
                 </div>
@@ -178,13 +173,63 @@ export class NetworkView {
 
     _renderSubTab() {
         switch (this.activeSubTab) {
+            case 'overview': return this._renderOverview();
             case 'connections': return this._renderGroupedConnections();
             case 'devices': return this._renderLocalDevices();
-            case 'bandwidth': return this._renderBandwidth();
-            case 'top': return this._renderTopProcesses();
             case 'history': return this._renderHistory();
             default: return '';
         }
+    }
+
+    _renderOverview() {
+        const s = this.summary || {};
+        const totalCompanies = new Set(this.groupedData.flatMap(g => g.resolvedCompanies || [])).size;
+        const highRiskCount = this.groupedData.filter(g => g.hasHighRisk).length;
+        const trackerCount = this.groupedData.filter(g => g.hasTrackers).length;
+
+        return `<div class="network-overview">
+            <div class="network-overview-cards">
+                <div class="network-card">
+                    <div class="network-card-value">${s.totalConnections || 0}</div>
+                    <div class="network-card-label">Verbindungen</div>
+                </div>
+                <div class="network-card">
+                    <div class="network-card-value">${s.establishedCount || 0}</div>
+                    <div class="network-card-label">Aktiv</div>
+                </div>
+                <div class="network-card">
+                    <div class="network-card-value">${s.listeningCount || 0}</div>
+                    <div class="network-card-label">Lauschend</div>
+                </div>
+                <div class="network-card">
+                    <div class="network-card-value">${s.uniqueRemoteIPs || 0}</div>
+                    <div class="network-card-label">Remote-IPs</div>
+                </div>
+                <div class="network-card">
+                    <div class="network-card-value">${totalCompanies}</div>
+                    <div class="network-card-label">Firmen</div>
+                </div>
+                ${trackerCount > 0 ? `<div class="network-card network-card-warn">
+                    <div class="network-card-value">${trackerCount}</div>
+                    <div class="network-card-label">Tracker</div>
+                </div>` : ''}
+                ${highRiskCount > 0 ? `<div class="network-card network-card-danger">
+                    <div class="network-card-value">${highRiskCount}</div>
+                    <div class="network-card-label">Hochrisiko</div>
+                </div>` : ''}
+            </div>
+
+            <div class="network-overview-sections">
+                <div class="network-overview-section">
+                    <h3 class="network-section-title">Top-Prozesse</h3>
+                    ${this._renderTopProcesses()}
+                </div>
+                <div class="network-overview-section">
+                    <h3 class="network-section-title">Netzwerkadapter</h3>
+                    ${this._renderBandwidth()}
+                </div>
+            </div>
+        </div>`;
     }
 
     _renderGroupedConnections() {

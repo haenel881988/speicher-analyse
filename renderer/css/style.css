@@ -4635,6 +4635,40 @@ body {
 .network-device-detail { padding: 12px 16px; background: var(--bg-tertiary); border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
 .network-device-actions { display: flex; gap: 8px; margin-top: 4px; }
 
+/* Network Monitor: Header Controls */
+.network-header-controls { display: flex; align-items: center; gap: 12px; }
+
+/* Network Monitor: Tab Count Badge */
+.network-tab-count {
+    display: inline-block; font-size: 10px; padding: 0 5px; min-width: 18px; text-align: center;
+    border-radius: 9px; background: var(--bg-tertiary); color: var(--text-secondary); margin-left: 4px;
+}
+.network-tab.active .network-tab-count { background: var(--accent-light); color: var(--accent-text); }
+
+/* Network Monitor: Übersicht (Overview Dashboard) */
+.network-overview { display: flex; flex-direction: column; gap: 20px; }
+.network-overview-cards {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px;
+}
+.network-card {
+    background: var(--bg-secondary); border-radius: var(--radius-sm); padding: 14px 12px;
+    text-align: center; border: 1px solid var(--border);
+}
+.network-card-value { font-size: 22px; font-weight: 700; color: var(--text-primary); line-height: 1.2; }
+.network-card-label { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+.network-card-warn { border-color: var(--warning); }
+.network-card-warn .network-card-value { color: var(--warning); }
+.network-card-danger { border-color: var(--danger); }
+.network-card-danger .network-card-value { color: var(--danger); }
+
+.network-overview-sections { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+@media (max-width: 900px) { .network-overview-sections { grid-template-columns: 1fr; } }
+.network-overview-section {
+    background: var(--bg-secondary); border-radius: var(--radius); padding: 16px;
+    border: 1px solid var(--border);
+}
+.network-section-title { margin: 0 0 12px 0; font-size: 14px; font-weight: 600; color: var(--text-primary); }
+
 /* ===== v7.0: System Score ===== */
 .score-page { padding: 20px; max-width: 700px; }
 .score-header {
