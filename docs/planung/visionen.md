@@ -157,7 +157,7 @@ Statt alles fest in die main.js und renderer.js zu hämmern → Architektur modu
 
 ### 5.4 MCP-Server — KI-Direktzugriff auf die App — Geplant
 
-Simons Idee: Ein MCP-Server in der App, damit KI-Assistenten (Claude, etc.) direkt auf Scan-Ergebnisse, Netzwerkdaten und System-Informationen zugreifen können. Sicherheit: Nur lokal, kein Internet, abschaltbar.
+Simons Idee: Ein MCP-Server in der App, damit KI-Assistenten (Claude, etc.) direkt auf Scan-Ergebnisse, Netzwerkdaten und System-Informationen zugreifen können. Sicherheit: Nur lokal, kein Internet, abschaltbar. Damit könnte eine KI direkt sagen: "Du hast 15 GB Duplikate — soll ich aufräumen?"
 
 **→ Issue-Datei:** Issue #19 in [`docs/issues/issue.md`](../issues/issue.md)
 

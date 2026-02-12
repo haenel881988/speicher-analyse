@@ -2,7 +2,7 @@
 
 **Dein System. Dein Durchblick. Deine Kontrolle.**
 
-Speicher Analyse ist ein Desktop-Tool fuer Windows, das dir zeigt, was auf deinem PC wirklich passiert. Festplatte voll? Wir zeigen dir warum. Langsames System? Wir finden die Ursache. Wer telefoniert nach Hause? Wir decken es auf.
+Speicher Analyse ist ein Desktop-Tool für Windows, das dir zeigt, was auf deinem PC wirklich passiert. Festplatte voll? Wir zeigen dir warum. Langsames System? Wir finden die Ursache. Wer telefoniert nach Hause? Wir decken es auf.
 
 Kein Abo. Keine Cloud. Alles bleibt auf deinem Rechner.
 
@@ -14,24 +14,24 @@ Kein Abo. Keine Cloud. Alles bleibt auf deinem Rechner.
 - **Festplatten-Scan** mit Verzeichnisbaum, Treemap und interaktiven Diagrammen
 - **Datei-Explorer** mit Tabs, Dual-Panel (wie Total Commander) und intelligenter Suche
 - **Duplikat-Finder** erkennt doppelte Dateien und zeigt wie viel Platz sie verschwenden
-- **Alte Dateien** aufspueren die seit Monaten unberuehrt herumliegen
+- **Alte Dateien** aufspüren die seit Monaten unberührt herumliegen
 
 ### System-Optimierung
 - **Bereinigung** von Temp-Dateien, Caches, Logs und anderem Ballast
-- **Registry-Cleaner** findet verwaiste Eintraege (mit automatischem Backup)
+- **Registry-Cleaner** findet verwaiste Einträge (mit automatischem Backup)
 - **Autostart-Manager** zeigt was heimlich mit Windows startet
 - **Bloatware-Erkennung** findet vorinstallierte Software die nur Platz frisst
 
 ### Sicherheit & Datenschutz
 - **Privacy Dashboard** zeigt welche Windows-Einstellungen deine Daten teilen
 - **Netzwerk-Monitor** deckt auf, welche Programme ins Internet verbinden — und zu wem
-- **Lokaler Geraete-Scanner** findet alle Geraete in deinem Netzwerk
-- **Sicherheits-Check** prueft Firewall, Updates, Benutzerkonten und mehr
+- **Lokaler Geräte-Scanner** findet alle Geräte in deinem Netzwerk
+- **Sicherheits-Check** prüft Firewall, Updates, Benutzerkonten und mehr
 
 ### System-Info
-- **S.M.A.R.T.** ueberwacht die Gesundheit deiner Festplatten
+- **S.M.A.R.T.** überwacht die Gesundheit deiner Festplatten
 - **System-Score** bewertet deinen PC auf einer Skala von 0 bis 100
-- **Software-Audit** listet alle Programme und findet Rueckstaende
+- **Software-Audit** listet alle Programme und findet Rückstände
 
 ### Extras
 - **Eingebettetes Terminal** (PowerShell, CMD, WSL)
@@ -56,9 +56,9 @@ Voraussetzungen: [Node.js](https://nodejs.org/) 18+ und Windows 10/11.
 
 ## Die Geschichte dahinter
 
-> *Ein Eichhoernchen verlegt gerne seine Nuesse — genauso wie wir unsere Dateien.*
+> *Ein Eichhörnchen verlegt gerne seine Nüsse — genauso wie wir unsere Dateien.*
 >
-> Swiss Squirrel ist die Geschichte von Simon, einem Eichhoernchen, das mit Hilfe seines magischen Freundes (einer KI) durch den digitalen Wald navigiert. Auf der Suche nach seinen goldenen Nuessen begegnet er Plagegeistern wie `pagefile.sys`, neugierigen Riesen-Eichhoernchen die in sein Nest gucken, und faulen Nuessen die den Korb verstopfen.
+> Swiss Squirrel ist die Geschichte von Simon, einem Eichhörnchen, das mit Hilfe seines magischen Freundes (einer KI) durch den digitalen Wald navigiert. Auf der Suche nach seinen goldenen Nüssen begegnet er Plagegeistern wie `pagefile.sys`, neugierigen Riesen-Eichhörnchen die in sein Nest gucken, und faulen Nüssen die den Korb verstopfen.
 >
 > Jedes Release ist ein neues Kapitel dieser Reise.
 
@@ -73,7 +73,7 @@ Voraussetzungen: [Node.js](https://nodejs.org/) 18+ und Windows 10/11.
 | **v7.2** | [Der Wachturm](docs/releases/v7.2-der-wachturm.md) | Netzwerk-Monitor, Privacy Dashboard, Sicherheits-Check |
 | **v7.0** | [Die erste Nuss](docs/releases/v7.0-die-erste-nuss.md) | Explorer, Terminal, Duplikat-Finder, System-Score |
 
-Alle technischen Details: [Aenderungsprotokoll](docs/protokoll/aenderungsprotokoll.md)
+Alle technischen Details: [Änderungsprotokoll](docs/protokoll/aenderungsprotokoll.md)
 
 ---
 

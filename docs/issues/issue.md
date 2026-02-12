@@ -398,23 +398,23 @@ Eine Art "Waage für die Festplatte":
 
 ## 19. MCP-Server — KI kann direkt auf die App zugreifen
 
-**Simons Idee:** Die App soll einen sogenannten "MCP-Server" anbieten. Das ist eine Schnittstelle, ueber die eine KI (wie Claude, ChatGPT oder ein lokales Modell) direkt auf die App zugreifen kann — ohne dass der Nutzer Daten kopieren oder Screenshots machen muss.
+**Simons Idee:** Die App soll einen sogenannten "MCP-Server" anbieten. Das ist eine Schnittstelle, über die eine KI (wie Claude, ChatGPT oder ein lokales Modell) direkt auf die App zugreifen kann — ohne dass der Nutzer Daten kopieren oder Screenshots machen muss.
 
-**Was das bringen wuerde:**
-- Du koenntest deiner KI sagen: "Analysiere meinen PC und sag mir was ich aufraeumen soll" — und die KI hat sofort Zugriff auf alle Scan-Ergebnisse, Netzwerkdaten, Datenschutz-Einstellungen und den System-Score
+**Was das bringen würde:**
+- Du könntest deiner KI sagen: "Analysiere meinen PC und sag mir was ich aufräumen soll" — und die KI hat sofort Zugriff auf alle Scan-Ergebnisse, Netzwerkdaten, Datenschutz-Einstellungen und den System-Score
 - Die KI sieht genau das, was du in der App siehst — nur automatisch
-- Funktioniert mit jedem KI-Assistenten der das MCP-Protokoll unterstuetzt (Claude Desktop, Claude Code, und weitere)
+- Funktioniert mit jedem KI-Assistenten der das MCP-Protokoll unterstützt (Claude Desktop, Claude Code, und weitere)
 
-**Konkret wuerde die KI folgendes koennen:**
+**Konkret würde die KI folgendes können:**
 - Festplatten-Scan starten und Ergebnisse analysieren
-- Netzwerk-Verbindungen pruefen ("Wer telefoniert nach Hause?")
+- Netzwerk-Verbindungen prüfen ("Wer telefoniert nach Hause?")
 - Datenschutz-Einstellungen lesen und Empfehlungen geben
-- System-Score abfragen und erklaeren was gut/schlecht ist
+- System-Score abfragen und erklären was gut/schlecht ist
 - Grosse Dateien und Duplikate finden
 - Installierte Programme auflisten
 
 **Sicherheit:**
-- Der Server laeuft nur lokal auf deinem PC (kein Internet noetig)
+- Der Server läuft nur lokal auf deinem PC (kein Internet nötig)
 - Kann in den Einstellungen ein- und ausgeschaltet werden
 - Keine Daten verlassen den Rechner
 
