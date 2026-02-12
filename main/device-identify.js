@@ -5,9 +5,9 @@ const https = require('https');
 const dgram = require('dgram');
 const log = require('./logger').createLogger('device-identify');
 
-// Timeouts (aggressiv — eingebettete Geräte antworten schnell oder gar nicht)
-const HTTP_TIMEOUT = 3000;
-const SSDP_TIMEOUT = 4000;
+// Timeouts — genug Zeit für langsame Embedded-Geräte (Sonos, Hue, etc.)
+const HTTP_TIMEOUT = 4000;
+const SSDP_TIMEOUT = 8000;  // MX=3 + Netzwerk-Latenz → 4s war zu knapp für Sonos
 const IPP_TIMEOUT = 5000;
 const MAX_BODY = 32 * 1024; // 32KB max pro HTTP-Response
 
@@ -46,7 +46,7 @@ async function identifyDevices(devices, onProgress) {
     const httpTargets = devices.filter(d => {
         if (results.has(d.ip) && results.get(d.ip).modelName) return false;
         const ports = (d.openPorts || []).map(p => typeof p === 'number' ? p : p.port);
-        return ports.some(p => [80, 443, 8080, 8443].includes(p));
+        return ports.some(p => [80, 443, 1400, 8080, 8443].includes(p));
     });
 
     const ippTargets = devices.filter(d => {
@@ -114,7 +114,8 @@ async function identifyDevices(devices, onProgress) {
 
 async function _probeHTTP(ip, ports) {
     // Versuche Ports in sinnvoller Reihenfolge (HTTP vor HTTPS wegen Zertifikatsproblemen)
-    const tryOrder = [80, 8080, 443, 8443].filter(p => ports.includes(p));
+    // 1400 = Sonos Webserver (liefert Device-Info XML)
+    const tryOrder = [80, 1400, 8080, 443, 8443].filter(p => ports.includes(p));
     for (const port of tryOrder) {
         try {
             const result = await _fetchBanner(ip, port);
@@ -128,7 +129,9 @@ function _fetchBanner(ip, port) {
     return new Promise((resolve, reject) => {
         const isHTTPS = port === 443 || port === 8443;
         const client = isHTTPS ? https : http;
-        const url = `${isHTTPS ? 'https' : 'http'}://${ip}:${port}/`;
+        // Sonos Port 1400: Device-Description XML liefert Modellname direkt
+        const path = port === 1400 ? '/xml/device_description.xml' : '/';
+        const url = `${isHTTPS ? 'https' : 'http'}://${ip}:${port}${path}`;
 
         const req = client.get(url, {
             timeout: HTTP_TIMEOUT,
@@ -159,6 +162,14 @@ function _fetchBanner(ip, port) {
                 else res.destroy();
             });
             res.on('end', () => {
+                // Wenn die Antwort UPnP-XML ist (z.B. Sonos Port 1400), direkt als XML parsen
+                if (body.includes('<device>') && body.includes('<modelName>')) {
+                    const xmlResult = _parseDeviceXML(body);
+                    if (xmlResult && xmlResult.modelName) {
+                        resolve({ modelName: xmlResult.modelName, serialNumber: xmlResult.serialNumber || '', firmwareVersion: xmlResult.firmwareVersion || '', source: 'http+xml' });
+                        return;
+                    }
+                }
                 const result = _extractModelFromBanner(body, serverHeader);
                 resolve(result);
             });
@@ -180,9 +191,15 @@ function _extractModelFromBanner(html, serverHeader) {
         // HTML-Entities decodieren
         title = title.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#(\d+);/g, (_, n) => String.fromCharCode(n));
 
-        // Generische Titel filtern
-        const generic = /^(home|index|welcome|login|startseite|webinterface|status|configuration|settings|setup|sign\s*in|error|not\s*found|untitled|loading|please\s*wait)/i;
-        if (!generic.test(title) && title.length > 2 && title.length < 100) {
+        // Sonderzeichen am Anfang/Ende entfernen (z.B. "::Welcome::" → "Welcome")
+        title = title.replace(/^[:\-–_.*|~#>]+\s*/, '').replace(/\s*[:\-–_.*|~#>]+$/, '').trim();
+
+        // Generische Titel filtern — Wörter die KEIN Modellname sind
+        const genericWords = /\b(welcome|home|index|login|sign\s*in|configurator|configuration|settings|setup|management|manager|interface|web.?based|web.?interface|web.?ui|dashboard|portal|admin|panel|status|startseite|loading|please\s*wait|error|not\s*found|untitled|access\s*point|firmware\s*upgrade|document)\b/i;
+        const genericStart = /^(home|index|welcome|login|startseite|webinterface|status|configuration|settings|setup|sign\s*in|error|not\s*found|untitled|loading|please\s*wait)/i;
+        if (genericStart.test(title) || genericWords.test(title)) {
+            // NICHT als Modellname verwenden
+        } else if (title.length > 2 && title.length < 80) {
             // Wrappers entfernen: "Startseite - FRITZ!Box 7590" → "FRITZ!Box 7590"
             title = title.replace(/^(startseite|home|web\s*interface|status)\s*[-–|:]\s*/i, '');
             title = title.replace(/\s*[-–|:]\s*(startseite|home|web\s*interface|status)$/i, '');
@@ -253,19 +270,30 @@ async function _probeUPnP(targetIPs) {
         });
 
         socket.bind(() => {
-            const msearch = Buffer.from(
+            const msearchAll = Buffer.from(
                 'M-SEARCH * HTTP/1.1\r\n' +
                 'HOST: 239.255.255.250:1900\r\n' +
                 'MAN: "ssdp:discover"\r\n' +
-                'MX: 3\r\n' +
+                'MX: 5\r\n' +
                 'ST: ssdp:all\r\n' +
                 '\r\n'
             );
-            // 2x senden für Zuverlässigkeit
-            socket.send(msearch, 0, msearch.length, 1900, '239.255.255.250', () => {
+            const msearchBasic = Buffer.from(
+                'M-SEARCH * HTTP/1.1\r\n' +
+                'HOST: 239.255.255.250:1900\r\n' +
+                'MAN: "ssdp:discover"\r\n' +
+                'MX: 5\r\n' +
+                'ST: urn:schemas-upnp-org:device:Basic:1\r\n' +
+                '\r\n'
+            );
+            // 3x senden mit verschiedenen STs für maximale Erkennung (Sonos, Hue, etc.)
+            socket.send(msearchAll, 0, msearchAll.length, 1900, '239.255.255.250', () => {
                 setTimeout(() => {
-                    socket.send(msearch, 0, msearch.length, 1900, '239.255.255.250', () => {});
-                }, 500);
+                    socket.send(msearchBasic, 0, msearchBasic.length, 1900, '239.255.255.250', () => {});
+                }, 800);
+                setTimeout(() => {
+                    socket.send(msearchAll, 0, msearchAll.length, 1900, '239.255.255.250', () => {});
+                }, 2000);
             });
         });
     });
@@ -319,16 +347,31 @@ function _parseDeviceXML(xml) {
         return m ? m[1].trim() : '';
     };
 
-    const modelName = tag('modelName') || tag('friendlyName') || '';
+    const rawModelName = tag('modelName');
     const modelNumber = tag('modelNumber');
-    const serialNumber = tag('serialNumber') || tag('UDN')?.replace(/^uuid:/i, '') || '';
+    const friendlyName = tag('friendlyName');
     const manufacturer = tag('manufacturer');
-    const firmwareVersion = tag('firmwareVersion') || tag('softwareVersion') || tag('modelDescription') || '';
+    const serialNumber = tag('serialNumber') || tag('UDN')?.replace(/^uuid:/i, '') || '';
+    const firmwareVersion = tag('firmwareVersion') || tag('softwareVersion') || '';
 
-    // Modellname zusammenbauen
-    let fullModel = modelName;
-    if (modelNumber && !modelName.includes(modelNumber)) {
-        fullModel = fullModel ? `${fullModel} (${modelNumber})` : modelNumber;
+    // Modellname zusammenbauen — Priorität: modelName > modelNumber > friendlyName
+    // Aber: Wenn modelName generisch ist (z.B. "hue personal wireless lighting"),
+    // und modelNumber spezifisch (z.B. "BSB002"), dann modelNumber bevorzugen
+    let fullModel = '';
+    if (rawModelName && modelNumber && !rawModelName.includes(modelNumber)) {
+        // Beide vorhanden → Kombination (z.B. "Sonos One (S18)")
+        fullModel = `${rawModelName} (${modelNumber})`;
+    } else if (rawModelName) {
+        fullModel = rawModelName;
+    } else if (modelNumber) {
+        fullModel = modelNumber;
+    } else if (friendlyName) {
+        fullModel = friendlyName;
+    }
+
+    // Hersteller dem Modellnamen voranstellen, wenn er nicht schon enthalten ist
+    if (fullModel && manufacturer && !fullModel.toLowerCase().includes(manufacturer.toLowerCase().split(' ')[0])) {
+        fullModel = `${manufacturer} ${fullModel}`;
     }
 
     if (!fullModel && !serialNumber) return null;

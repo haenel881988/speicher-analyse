@@ -1041,13 +1041,22 @@ function register(mainWindow) {
         return scanLocalNetwork();
     });
 
+    // Cache für das letzte aktive Scan-Ergebnis (überlebt Page-Reloads)
+    let _lastNetworkScanResult = null;
+
     ipcMain.handle('scan-network-active', async () => {
         const { scanNetworkActive } = require('./network-scanner');
-        return scanNetworkActive((progress) => {
+        const result = await scanNetworkActive((progress) => {
             if (mainWindow && !mainWindow.isDestroyed()) {
                 mainWindow.webContents.send('network-scan-progress', progress);
             }
         });
+        _lastNetworkScanResult = result;
+        return result;
+    });
+
+    ipcMain.handle('get-last-network-scan', async () => {
+        return _lastNetworkScanResult;
     });
 
     ipcMain.handle('scan-device-ports', async (_event, ip) => {

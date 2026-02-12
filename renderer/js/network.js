@@ -50,6 +50,18 @@ export class NetworkView {
         this._errorCount = 0;
         this.snapshotMode = true;
         this.stopPolling();
+
+        // Letztes Scan-Ergebnis aus dem Backend wiederherstellen (überlebt Page-Reloads)
+        if (!this._activeScanResult && window.api.getLastNetworkScan) {
+            try {
+                const lastScan = await window.api.getLastNetworkScan();
+                if (lastScan && lastScan.devices && lastScan.devices.length > 0) {
+                    this._activeScanResult = lastScan;
+                    this.activeSubTab = 'devices';
+                }
+            } catch { /* ignorieren */ }
+        }
+
         await this.refresh();
     }
 

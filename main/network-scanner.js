@@ -153,9 +153,9 @@ function _detectOS(ttl) {
 const PORT_LABELS = {
     21: 'FTP', 22: 'SSH', 23: 'Telnet', 25: 'SMTP', 53: 'DNS', 80: 'HTTP',
     110: 'POP3', 135: 'RPC', 139: 'NetBIOS', 143: 'IMAP', 443: 'HTTPS',
-    445: 'SMB', 515: 'LPD', 554: 'RTSP', 631: 'IPP',
+    445: 'SMB', 515: 'LPD', 554: 'RTSP', 631: 'IPP', 1400: 'Sonos',
     993: 'IMAPS', 995: 'POP3S', 3306: 'MySQL', 3389: 'RDP',
-    5000: 'Synology', 5001: 'Synology-SSL', 5432: 'PostgreSQL',
+    5000: 'HTTP', 5001: 'HTTPS', 5432: 'PostgreSQL',
     5900: 'VNC', 8080: 'HTTP-Alt', 8443: 'HTTPS-Alt', 9100: 'Drucker',
 };
 
@@ -294,7 +294,7 @@ async function scanNetworkActive(onProgress) {
     const ipList = onlineDevices.map(d => `'${d.ip}'`).join(',');
     const portScanScript = `
         $ips = @(${ipList})
-        $ports = @(22, 80, 135, 443, 445, 515, 554, 631, 3389, 5000, 5001, 8080, 9100)
+        $ports = @(22, 80, 135, 443, 445, 515, 554, 631, 1400, 3389, 5000, 5001, 8080, 9100)
         $results = foreach ($ip in $ips) {
             $openPorts = @()
             foreach ($port in $ports) {

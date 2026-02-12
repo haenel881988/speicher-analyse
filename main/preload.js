@@ -249,6 +249,7 @@ contextBridge.exposeInMainWorld('api', {
     exportNetworkHistory: (format) => ipcRenderer.invoke('export-network-history', format),
     scanLocalNetwork: () => ipcRenderer.invoke('scan-local-network'),
     scanNetworkActive: () => ipcRenderer.invoke('scan-network-active'),
+    getLastNetworkScan: () => ipcRenderer.invoke('get-last-network-scan'),
     scanDevicePorts: (ip) => ipcRenderer.invoke('scan-device-ports', ip),
     getSMBShares: (ip) => ipcRenderer.invoke('get-smb-shares', ip),
     onNetworkScanProgress: (callback) => {
