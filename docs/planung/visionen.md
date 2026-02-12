@@ -1,8 +1,11 @@
 # Visionen
 
 > Dieses Dokument ist für den User da um seine Visionen festzuhalten.
-> Visionen werden durch die KI geprüft, validiert und in die Projektplanung ([projektplan.md](projektplan.md)) übertragen.
+> Visionen werden durch die KI geprüft, validiert und in die Projektplanung übertragen.
 > Simon bittet die KI, diese Datei zu sortieren und aktuell zu halten (was umgesetzt wurde, was nicht).
+>
+> **Zuletzt aktualisiert:** 12.02.2026
+> **Offene Scopes sind konsolidiert in:** [`docs/issues/issue.md`](../issues/issue.md)
 
 ---
 
@@ -12,7 +15,7 @@
 |--------|-----------|
 | Umgesetzt | In einer Version implementiert |
 | Teilweise | Grundlage vorhanden, Erweiterung nötig |
-| Geplant | Im Projektplan eingeplant |
+| Geplant | Im Projektplan eingeplant → Issue-Datei |
 | Offen | Noch nicht eingeplant, Evaluation nötig |
 | Ignoriert | Vom User bewusst zurückgestellt |
 
@@ -26,14 +29,14 @@ WCAG / Kontrastverhältnis stimmt noch immer nicht überein. Das muss vertieft w
 
 **Status:** 6 Kontrastverletzungen in v7.2 behoben. Governance-Datei mit WCAG 2.2 AA Pflicht erstellt. User meldet: Kontrast muss weiter vertieft werden.
 
-**→ Projektplan:** v7.3 — Umfassender WCAG-Audit aller Views
+**→ Issue-Datei:** Issue #12 in [`docs/issues/issue.md`](../issues/issue.md)
 
 ### 1.2 Resizable Panels / Fenster-Individualisierung — Offen
 
 Aktuell werden die Fenster statisch angezeigt. Eine Umplatzierung der Fenster, also z.B.: Powershell / Terminal, das Vergrössern, Verkleinern der jeweiligen Sub-Fenster ist aktuell nicht möglich.
 Für eine Individualisierung soll hier eine Möglichkeit evaluiert werden um das Ganze zu individualisieren.
 
-**→ Projektplan:** v8.0+ — Resizable Panels (Drag-Resize für Terminal, Dual-Panel, Explorer-Bereiche)
+**→ Issue-Datei:** Issue #13 in [`docs/issues/issue.md`](../issues/issue.md)
 
 ### 1.3 Sidebar einklappbar — Umgesetzt (v7.1)
 
@@ -51,62 +54,37 @@ Powershell also das Terminal ist noch sehr rudimentär, es soll hierfür eine na
 
 **Status:** Multi-Shell Support (PowerShell/CMD/WSL) in v7.2 implementiert. Shell-Selector, dynamische Prompts, Rechtsklick "Im Terminal öffnen" funktioniert. Aber: Terminal ist noch textbasiert (Zeile-für-Zeile), keine echte Terminal-Emulation.
 
-**→ Projektplan:** v8.0+ — xterm.js + node-pty für echte Terminal-Emulation (Farben, Cursor, Interaktivität)
+**→ Issue-Datei:** Issue #14 in [`docs/issues/issue.md`](../issues/issue.md)
 
 ### 2.2 Claude CLI im Terminal — Offen
 
 Wenn ich eintippe: Claude soll dann auch Claude gestartet werden, da ich im Windows Powershell bereits Claude über CLI / Powershell installiert habe. Dies wäre ein weiterer hoher nützlicher Mehrwert.
 
-**→ Projektplan:** Hängt von 2.1 ab (xterm.js). Mit echtem Terminal-Emulator wird Claude CLI automatisch funktionieren, da der eingebettete Terminal dann eine echte Shell-Sitzung ist.
+**→ Issue-Datei:** Wird mit Issue #14 (echte Terminal-Emulation) automatisch gelöst
 
 ---
 
 ## 3. Programme & System
 
-### 3.0a Intelligenter Bloatware-Scanner — Geplant (v9.0)
+### 3.0a Intelligenter Bloatware-Scanner — Geplant
 
 Der Scanner braucht echte Intelligenz. Nicht-zertifizierte Software (wie Advanced IP Scanner) ist NICHT automatisch Bloatware. Aber zertifizierte Software (wie Avast, Reimage) KANN trotzdem Scam sein. "System ist sauber" ist unrealistisch. Ähnlich wie Malwarebytes, nur seriös und transparent.
 
-**Umfang:**
-- 5-Stufen-Bewertung: Vertrauenswürdig / Nicht zertifiziert / Fragwürdig / Bloatware / Risiko
-- Verständliche Beschreibung pro App ("Was macht dieses Programm?")
-- Ressourcen-Verbrauch pro App (Speicher, Autostart, Hintergrund)
-- Hintergrund-Aktivität aufdecken ("App sendet Daten ohne geöffnet zu sein")
-- Microsoft-Store Apps einbeziehen
-- Ehrliche Ergebnisse statt "alles sauber"
-
 **→ Issue-Datei:** Issue #8 in [`docs/issues/issue.md`](../issues/issue.md)
 
-### 3.0b Apps-Kontrollzentrum — Geplant (v9.0)
+### 3.0b Apps-Kontrollzentrum — Geplant
 
 Der "Updates"-Tab soll zu einem "Apps"-Tab umgebaut werden. Alle installierten Apps auf einen Blick, direkt deinstallieren, Update-Verfügbarkeit, vergessene Apps finden, Cache aufräumen. Treiber-Bereich wird ersetzt durch Hersteller-Links und Seriennummer-Erkennung.
 
-**Umfang:**
-- Alle Programme + Store-Apps auflisten mit Gruppierung
-- Direkte Deinstallation ohne Windows-Einstellungen
-- Update-Check pro App
-- Vergessene Apps finden ("seit 6 Monaten nicht benutzt")
-- App-Cache leeren ohne Deinstallation
-- Neuinstallations-Helfer (Export für neuen PC)
-- Hersteller-Links statt Treiber-Check (Intel Assistent, Nvidia App, etc.)
-- Seriennummer automatisch auslesen
-
 **→ Issue-Datei:** Issue #9 in [`docs/issues/issue.md`](../issues/issue.md)
 
-### 3.0c System-Profil — Geplant (v9.0)
+### 3.0c System-Profil — Geplant
 
 Alle Informationen über den PC an einem Ort: Hardware, Seriennummer, Hersteller, Garantie. Praktisch für Support-Anfragen oder Treiber-Suche.
 
-**Umfang:**
-- Hardware-Übersicht (Hersteller, Modell, CPU, GPU, RAM, Festplatten)
-- Seriennummer automatisch auslesen
-- Hersteller-Links (Support, Treiber, Treiber-Tool)
-- Dashboard-Karte "Dein System auf einen Blick"
-- Export als Text/PDF
-
 **→ Issue-Datei:** Issue #10 in [`docs/issues/issue.md`](../issues/issue.md)
 
-### 3.0d Intelligente Scandaten — Geplant (v8.5)
+### 3.0d Intelligente Scandaten — Geplant
 
 Scandaten nicht nur speichern, sondern intelligent verwalten: Delta-Scan (nur Änderungen), Verlauf über Zeit, automatischer Hintergrund-Scan, übergreifende Nutzung der Daten.
 
@@ -128,18 +106,13 @@ Viele Anwender fragen sich, kann ich den Ergebnissen vom Speicher Analysierer tr
 
 **Status:** Phase 1 umgesetzt (Begründung + Risiko-Ampel für Registry-Cleaner und Software-Audit). Vorschau/Dry-Run für Lösch-Aktionen. Fehlt noch: vollständiges Undo-Log mit Wiederherstellung.
 
-**→ Projektplan:** v8.0 — Undo-Log (Phase 3 des Trust-Systems)
+**→ Issue-Datei:** Issue #15 in [`docs/issues/issue.md`](../issues/issue.md)
 
-### 3.3 Backup / Sicherung — Geplant (v8.0)
+### 3.3 Backup / Sicherung — Geplant
 
 Wäre es möglich direkt in der App eine Sicherung einzurichten? Wo ich auswählen kann, z.B.: mit Google Drive, dem eigenen NAS (Netzlaufwerk / Pfad angeben)?
 
-**Bewertung:** Machbar! Kein Cloud-Backend nötig.
-- Zielordner wählbar (lokaler Pfad, Netzlaufwerk, OneDrive/Google Drive Sync-Ordner)
-- Inkrementelles Backup (nur geänderte Dateien)
-- Zeitplanung optional (Windows Task Scheduler)
-
-**→ Projektplan:** v8.0 — Backup-Modul
+**→ Issue-Datei:** Issue #16 in [`docs/issues/issue.md`](../issues/issue.md)
 
 ---
 
@@ -159,9 +132,9 @@ Statt alles fest in die main.js und renderer.js zu hämmern → Architektur modu
 - **Cleaner-Modul** (v5.2 — vorhanden)
 - **Explorer-Modul** (v6.0 — vorhanden)
 - **Dev-Modul** (Monaco Editor — v7.1 Basis vorhanden)
-- **Backup-Modul** (v8.0 geplant)
+- **Backup-Modul** (Issue #16 geplant)
 
-**→ Projektplan:** v1.5.0 — Plugin-System (modulare Architektur)
+**Status:** Langfristige Vision — kein Issue, sondern Architektur-Richtung
 
 ---
 
@@ -169,41 +142,17 @@ Statt alles fest in die main.js und renderer.js zu hämmern → Architektur modu
 
 ### 5.1 "Bring Your Own Brain" (BYOB) — Offen
 
-Statt eine eigene KI einzubauen, nur die Schnittstellen bauen:
-
-**A. Cloud-Option (Für Bequeme):**
-- User meldet sich via CLI/Powershell an (Claude, Gemini, etc.)
-- 0 Euro Serverkosten, User zahlt eigene API-Nutzung
-- API-Key lokal in Electron `safeStorage` verschlüsselt
-- Direkte Verbindung PC → API (kein Proxy)
-
-**B. Local-Option (Für Profis):**
-- Integration mit Ollama (localhost:11434)
-- App prüft beim Start ob Ollama läuft
-- Falls ja: Dropdown mit installierten Modellen (Llama 3, Mistral, etc.)
-- Falls nein: Button "Lokale KI einrichten" → Terminal-Modul
-- 100% offline fähige KI
-
-**→ Projektplan:** v9.0+ — KI-Integration (BYOB)
+**→ Issue-Datei:** Issue #17 in [`docs/issues/issue.md`](../issues/issue.md)
 
 ### 5.2 "Notion-Modul" mit KI-Power — Offen
 
-"Active Knowledge Board" — Neben jedem Textblock ein KI-Assistent:
-- "Fasse diesen PDF-Anhang zusammen" (via PDF-Modul + Llama 3)
-- "Erkläre diesen Registry-Key" (via Registry-Analyse)
-- "Schreibe diese Notiz professioneller"
+"Active Knowledge Board" — Abhängig von KI-Integration (Issue #17)
 
-**→ Projektplan:** v9.0+ — Abhängig von 5.1 (BYOB)
+**→ Issue-Datei:** Zusammengefasst in Issue #17 in [`docs/issues/issue.md`](../issues/issue.md)
 
 ### 5.3 Offline-Lizenzierung — Offen
 
-Asymmetrische Kryptographie (Ed25519):
-- Server hat Private Key → generiert Lizenz-Datei
-- App hat Public Key → prüft Signatur offline
-- App muss niemals "nach Hause telefonieren"
-- Lifetime-Lizenz funktioniert auch wenn Server offline
-
-**→ Projektplan:** v1.0.0 — Lizenzierung (Teil des stabilen Releases)
+**→ Issue-Datei:** Issue #18 in [`docs/issues/issue.md`](../issues/issue.md)
 
 
 ### 5.4 Release-Nodes
@@ -232,7 +181,6 @@ Echt doof wenn Simon bedenkt, das Avast ein Virenschutz-Bloatware-Hersteller ist
 Jetzt gibt es noch asshampoo, malware antibytes usw. ganz viele lästige Tools - und mal abgesehen davon, braucht man um diese Tools zu verwenden eine Internet-Verbindung mit dem Vorwand, um Updates einzuspielen, der Sicherheit, aber während dann sämtliche Daten gesammelt werden.
 
 Nun lass dich mal überraschen, was alles so avast nach hause sendet, dafür hat Simon mit seinem Freund (Claude), eine Lösung entwickelt, so dass auch unbeholfene Squirrels prüfen kann, wer alles in ihr Nest guckt.
-
 
 
 
