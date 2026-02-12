@@ -915,6 +915,12 @@ function register(mainWindow) {
         }
     });
 
+    // === System-Profil ===
+    ipcMain.handle('get-system-profile', async () => {
+        const systemProfil = require('./system-profil');
+        return systemProfil.getSystemProfile();
+    });
+
     // === S.M.A.R.T. Disk Health ===
     ipcMain.handle('get-disk-health', async () => {
         const smart = require('./smart');

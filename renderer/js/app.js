@@ -27,6 +27,7 @@ import { SmartView } from './smart.js';
 import { SoftwareAuditView } from './software-audit.js';
 import { NetworkView } from './network.js';
 import { SecurityAuditView } from './security-audit.js';
+import { SystemProfilView } from './system-profil.js';
 import { TerminalPanel } from './terminal-panel.js';
 
 // ===== State =====
@@ -53,6 +54,7 @@ const tabLoaded = {
     smart: false,
     'software-audit': false,
     network: false,
+    'system-profil': false,
 };
 
 // ===== DOM =====
@@ -116,6 +118,7 @@ const smartView = new SmartView(document.getElementById('view-smart'));
 const softwareAuditView = new SoftwareAuditView(document.getElementById('view-software-audit'));
 const networkView = new NetworkView(document.getElementById('view-network'));
 const securityAuditView = new SecurityAuditView(document.getElementById('view-security-audit'));
+const systemProfilView = new SystemProfilView(document.getElementById('view-system-profil'));
 // Global Terminal Panel (VS Code style, accessible from any tab via Ctrl+`)
 const globalTerminal = new TerminalPanel(document.getElementById('terminal-global'));
 
@@ -702,6 +705,12 @@ async function autoLoadTab(tabName) {
             setStatus('Netzwerk wird analysiert...', true);
             await networkView.init();
             tabLoaded.network = true;
+            setStatus('Bereit');
+            break;
+        case 'system-profil':
+            tabLoaded['system-profil'] = true;
+            setStatus('System-Profil wird geladen...', true);
+            await systemProfilView.init();
             setStatus('Bereit');
             break;
     }
