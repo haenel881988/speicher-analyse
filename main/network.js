@@ -1,5 +1,6 @@
 'use strict';
 
+const path = require('path');
 const http = require('http');
 const { runPS, runSafe, isSafeShellArg } = require('./cmd-utils');
 const log = require('./logger').createLogger('network');
@@ -38,6 +39,7 @@ async function getConnections() {
 
     try {
         const { stdout } = await runPS(psScript, PS_OPTS);
+        if (!stdout || !stdout.trim()) return [];
         const raw = JSON.parse(stdout.trim());
         const arr = Array.isArray(raw) ? raw : [raw];
         return arr.map(c => ({
@@ -162,9 +164,11 @@ async function blockProcess(processName, processPath) {
     if (!isSafeShellArg(processName)) {
         return { success: false, error: 'Ungültiger Prozessname.' };
     }
+    if (!path.isAbsolute(processPath) || /[;&|`$(){}[\]<>!\n\r]/.test(processPath)) {
+        return { success: false, error: 'Ungültiger Programm-Pfad.' };
+    }
 
     const ruleName = `SpeicherAnalyse_Block_${processName}`;
-    // Pfad in einfache Anführungszeichen einbetten und innere ' escapen
     const safePath = processPath.replace(/'/g, "''");
 
     const psScript = `
@@ -193,6 +197,9 @@ async function unblockProcess(ruleName) {
     }
     if (!isSafeShellArg(ruleName)) {
         return { success: false, error: 'Ungültiger Regelname.' };
+    }
+    if (!ruleName.startsWith('SpeicherAnalyse_Block_')) {
+        return { success: false, error: 'Nur eigene Regeln können entfernt werden.' };
     }
 
     const safeName = ruleName.replace(/'/g, "''");
@@ -247,6 +254,7 @@ async function getNetworkSummary() {
 
     try {
         const { stdout } = await runPS(psScript, PS_OPTS);
+        if (!stdout || !stdout.trim()) return { totalConnections: 0, establishedCount: 0, listeningCount: 0, uniqueRemoteIPs: 0, topProcesses: [] };
         const data = JSON.parse(stdout.trim());
         const topProcesses = Array.isArray(data.topProcesses)
             ? data.topProcesses.map(p => ({
@@ -368,7 +376,8 @@ async function checkProcessesRunning(processNames) {
             Get-Process -ErrorAction SilentlyContinue | Select-Object -ExpandProperty ProcessName -Unique | ConvertTo-Json -Compress
         `.trim();
 
-        const { stdout } = await runPS(psScript, { timeout: 15000 });
+        const { stdout } = await runPS(psScript, { timeout: PS_TIMEOUT });
+        if (!stdout || !stdout.trim()) return result;
         const runningNames = JSON.parse(stdout.trim());
         const runningSet = new Set(Array.isArray(runningNames) ? runningNames : [runningNames]);
 
@@ -386,6 +395,15 @@ async function checkProcessesRunning(processNames) {
 // 8) IP-Auflösung – WHOIS/IP-Ownership via ip-api.com Batch-API
 // ---------------------------------------------------------------------------
 const _ipCache = new Map();
+const MAX_IP_CACHE = 2000;
+
+function _cacheIP(ip, data) {
+    if (_ipCache.size >= MAX_IP_CACHE) {
+        const oldest = _ipCache.keys().next().value;
+        _ipCache.delete(oldest);
+    }
+    _cacheIP(ip, data);
+}
 
 /**
  * Prüft ob eine IP-Adresse privat/lokal ist (nicht an API senden).
@@ -564,7 +582,7 @@ async function lookupIPs(ipAddresses) {
                 isTracker: override.isTracker || false,
                 isHighRisk: HIGH_RISK_COUNTRIES.has(countryCode),
             };
-            _ipCache.set(ip, resolved);
+            _cacheIP(ip, resolved);
             results[ip] = resolved;
         }
 
@@ -572,7 +590,7 @@ async function lookupIPs(ipAddresses) {
         for (const ip of batch) {
             if (!results[ip]) {
                 const fallback = { org: 'Unbekannt', isp: '', country: '', countryCode: '', as: '', isTracker: false, isHighRisk: false };
-                _ipCache.set(ip, fallback);
+                _cacheIP(ip, fallback);
                 results[ip] = fallback;
             }
         }
@@ -619,14 +637,14 @@ async function _fallbackDNSResolve(ipList, results) {
                 isTracker: company.isTracker,
                 isHighRisk: false,
             };
-            _ipCache.set(entry.ip, resolved);
+            _cacheIP(entry.ip, resolved);
             results[entry.ip] = resolved;
         }
     } catch {
         for (const ip of batch) {
             if (!results[ip]) {
                 const fallback = { org: 'Unbekannt', isp: '', country: '', countryCode: '', as: '', isTracker: false, isHighRisk: false };
-                _ipCache.set(ip, fallback);
+                _cacheIP(ip, fallback);
                 results[ip] = fallback;
             }
         }

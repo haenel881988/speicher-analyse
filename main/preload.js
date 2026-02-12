@@ -248,7 +248,10 @@ contextBridge.exposeInMainWorld('api', {
     scanNetworkActive: () => ipcRenderer.invoke('scan-network-active'),
     scanDevicePorts: (ip) => ipcRenderer.invoke('scan-device-ports', ip),
     getSMBShares: (ip) => ipcRenderer.invoke('get-smb-shares', ip),
-    onNetworkScanProgress: (callback) => ipcRenderer.on('network-scan-progress', (_event, data) => callback(data)),
+    onNetworkScanProgress: (callback) => {
+        ipcRenderer.removeAllListeners('network-scan-progress');
+        ipcRenderer.on('network-scan-progress', (_event, data) => callback(data));
+    },
 
     // === System Info ===
     getSystemInfo: () => ipcRenderer.invoke('get-system-info'),

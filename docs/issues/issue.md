@@ -15,6 +15,14 @@
 
 ---
 
+## Simons Ideen Salat
+
+ - Erweiterung vom Sicherheitscheck - oder unterregister mit einem GPO Scan. Dabei soll der Scan die GPOs scannen ob es potenziell problematische Einstellungen gibt, die zu Fehlern, bluescreens etc. führen, gerade kombiniert mit der Registry können so sehr subtile Probleme sichtbar gemacht werden, damit dann schritt für schritt das Problem behoben werden kann / evtl. auch welche übergeordnete GPO die Problematik verursacht.
+
+ 
+
+
+
 ## Erledigte Issues
 
 → Archiviert in [`archiv/erledigte-issues_v7.0-v8.0.md`](archiv/erledigte-issues_v7.0-v8.0.md)

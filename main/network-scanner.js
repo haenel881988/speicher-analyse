@@ -5,6 +5,15 @@ const log = require('./logger').createLogger('network-scanner');
 
 const PS_TIMEOUT = 30000;
 
+/**
+ * Validiert eine IPv4-Adresse (Schutz vor Command Injection in PS-Scripts).
+ */
+function _isValidIPv4(ip) {
+    if (typeof ip !== 'string') return false;
+    return /^(\d{1,3}\.){3}\d{1,3}$/.test(ip) &&
+        ip.split('.').every(p => { const n = Number(p); return n >= 0 && n <= 255; });
+}
+
 // ---------------------------------------------------------------------------
 // Häufigste MAC-OUI-Prefixe für Vendor-Erkennung (kein npm-Paket nötig)
 // ---------------------------------------------------------------------------
@@ -172,23 +181,27 @@ const PORT_LABELS = {
 // ---------------------------------------------------------------------------
 
 /**
- * Erkennt das lokale Subnetz.
+ * Erkennt das lokale Subnetz über die Default Route (= echtes LAN-Interface).
+ * Filtert zuverlässig VPN-, Hyper-V- und virtuelle Interfaces aus.
  * @returns {Promise<{subnet: string, prefixLength: number, localIP: string}>}
  */
 async function _detectSubnet() {
     const psScript = `
-        $ip = Get-NetIPAddress -AddressFamily IPv4 |
-            Where-Object { $_.PrefixOrigin -ne 'WellKnown' -and $_.IPAddress -ne '127.0.0.1' -and $_.InterfaceAlias -notmatch 'Loopback' } |
-            Sort-Object -Property InterfaceMetric |
+        $route = Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue |
+            Sort-Object -Property RouteMetric |
             Select-Object -First 1
-        if ($ip) {
-            [PSCustomObject]@{
-                ip = $ip.IPAddress
-                prefix = $ip.PrefixLength
-            } | ConvertTo-Json -Compress
-        } else {
-            Write-Output 'null'
-        }
+        if ($route) {
+            $ip = Get-NetIPAddress -InterfaceIndex $route.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+                Select-Object -First 1
+            if ($ip) {
+                [PSCustomObject]@{
+                    ip = $ip.IPAddress
+                    prefix = $ip.PrefixLength
+                    iface = $ip.InterfaceAlias
+                    gateway = $route.NextHop
+                } | ConvertTo-Json -Compress
+            } else { Write-Output 'null' }
+        } else { Write-Output 'null' }
     `.trim();
 
     const { stdout } = await runPS(psScript, { timeout: PS_TIMEOUT });
@@ -197,6 +210,7 @@ async function _detectSubnet() {
     const data = JSON.parse(stdout.trim());
     const parts = data.ip.split('.');
     const subnet = parts.slice(0, 3).join('.');
+    log.info(`Subnetz erkannt: ${subnet}.0/${data.prefix} (${data.iface}, Gateway: ${data.gateway})`);
     return { subnet, prefixLength: data.prefix, localIP: data.ip };
 }
 
@@ -392,6 +406,7 @@ async function scanNetworkActive(onProgress) {
  * @param {string} ip - IP-Adresse
  */
 async function scanDevicePorts(ip) {
+    if (!_isValidIPv4(ip)) throw new Error('Ungültige IP-Adresse');
     const psScript = `
         $ip = '${ip}'
         $ports = @(21, 22, 23, 25, 53, 80, 110, 135, 139, 143, 443, 445, 993, 995, 3306, 3389, 5432, 5900, 8080, 8443, 9090)
@@ -426,6 +441,7 @@ async function scanDevicePorts(ip) {
  * @param {string} ip - IP-Adresse
  */
 async function getSMBShares(ip) {
+    if (!_isValidIPv4(ip)) throw new Error('Ungültige IP-Adresse');
     const psScript = `
         $shares = @()
         try {
@@ -440,7 +456,7 @@ async function getSMBShares(ip) {
     `.trim();
 
     try {
-        const { stdout } = await runPS(psScript, { timeout: 15000 });
+        const { stdout } = await runPS(psScript, { timeout: PS_TIMEOUT });
         if (!stdout || stdout.trim() === 'null' || !stdout.trim()) return [];
         const raw = JSON.parse(stdout.trim());
         return Array.isArray(raw) ? raw : [raw];
