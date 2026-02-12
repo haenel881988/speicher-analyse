@@ -4683,6 +4683,13 @@ body {
 .netinv-device-ip { font-size: 11px; color: var(--text-muted); font-family: monospace; }
 .netinv-col-type { white-space: nowrap; color: var(--text-secondary); }
 .netinv-col-vendor { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.netinv-col-model { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.netinv-model-name { color: var(--text-primary); font-size: 12px; }
+.netinv-serial {
+    display: inline-block; font-size: 9px; font-weight: 700; letter-spacing: 0.5px;
+    background: var(--accent-light, rgba(108, 92, 231, 0.12)); color: var(--accent-text, #c4b5fd);
+    padding: 1px 5px; border-radius: 3px; margin-left: 6px; cursor: help; vertical-align: middle;
+}
 .netinv-col-mac { white-space: nowrap; }
 .netinv-col-ports { max-width: 220px; }
 .netinv-col-rtt { text-align: right; white-space: nowrap; font-weight: 500; }

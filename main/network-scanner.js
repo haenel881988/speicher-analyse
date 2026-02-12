@@ -3,6 +3,7 @@
 const { runPS } = require('./cmd-utils');
 const log = require('./logger').createLogger('network-scanner');
 const { lookupVendorsBatch, classifyDevice } = require('./oui-database');
+const { identifyDevices } = require('./device-identify');
 
 const PS_TIMEOUT = 30000;
 
@@ -381,7 +382,24 @@ async function scanNetworkActive(onProgress) {
         if (onProgress) onProgress({ phase: 'vendor', current, total, message: `Hersteller ${current}/${total} identifiziert...` });
     }) : new Map();
 
-    // Ergebnis zusammenbauen (mit Gerätetyp-Klassifizierung)
+    // Phase 5.5: Gerätemodell-Erkennung (HTTP Banner + UPnP/SSDP + IPP)
+    if (onProgress) onProgress({ phase: 'identify', current: 0, total: 0, message: 'Gerätemodelle werden erkannt...' });
+
+    const preliminaryDevices = onlineDevices.map(d => ({
+        ip: d.ip,
+        openPorts: (portMap.get(d.ip) || []).map(p => ({ port: p })),
+    }));
+
+    let identityMap = new Map();
+    try {
+        identityMap = await identifyDevices(preliminaryDevices, (current, total) => {
+            if (onProgress) onProgress({ phase: 'identify', current, total, message: `Gerätemodelle ${current}/${total} geprüft...` });
+        });
+    } catch (err) {
+        log.warn('Geräte-Identifikation fehlgeschlagen:', err.message);
+    }
+
+    // Ergebnis zusammenbauen (mit Gerätetyp-Klassifizierung + Modell-Identifikation)
     const devices = onlineDevices.map(d => {
         const macDash = macMap.get(d.ip) || '';
         const mac = macDash.replace(/-/g, ':');
@@ -392,6 +410,7 @@ async function scanNetworkActive(onProgress) {
         const isGateway = d.ip === subnetInfo.gateway;
         const vendor = vendorMap.get(macDash) || '';
         const os = _detectOS(d.ttl);
+        const identity = identityMap.get(d.ip) || {};
 
         // Gerätetyp-Erkennung (kombiniert Hersteller + Ports + OS + Hostname + TTL)
         const deviceType = classifyDevice({
@@ -414,6 +433,9 @@ async function scanNetworkActive(onProgress) {
             deviceType: deviceType.type,
             deviceLabel: deviceType.label,
             deviceIcon: deviceType.icon,
+            modelName: identity.modelName || '',
+            serialNumber: identity.serialNumber || '',
+            firmwareVersion: identity.firmwareVersion || '',
         };
     });
 

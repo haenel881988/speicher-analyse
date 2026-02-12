@@ -359,7 +359,7 @@ export class NetworkView {
         const p = this._activeScanProgress;
         const spinner = '<span class="network-scan-spinner"></span>';
         if (!p) return `${spinner}<span>Scan wird vorbereitet...</span><div class="network-progress-bar network-progress-indeterminate"><div class="network-progress-fill"></div></div>`;
-        const phaseLabels = { init: 'Vorbereitung', ping: 'Ping Sweep', arp: 'MAC-Adressen', ports: 'Port-Scan', shares: 'SMB-Freigaben', vendor: 'Hersteller-Erkennung (IEEE)', done: 'Abgeschlossen' };
+        const phaseLabels = { init: 'Vorbereitung', ping: 'Ping Sweep', arp: 'MAC-Adressen', ports: 'Port-Scan', shares: 'SMB-Freigaben', vendor: 'Hersteller-Erkennung (IEEE)', identify: 'Gerätemodell-Erkennung', done: 'Abgeschlossen' };
         const label = phaseLabels[p.phase] || p.phase;
         if (p.total > 0) {
             const pct = Math.round((p.current / p.total) * 100);
@@ -404,7 +404,8 @@ export class NetworkView {
             filtered = filtered.filter(d =>
                 (d.ip || '').includes(q) || (d.mac || '').toLowerCase().includes(q) ||
                 (d.hostname || '').toLowerCase().includes(q) || (d.vendor || '').toLowerCase().includes(q) ||
-                (d.os || '').toLowerCase().includes(q) || (d.deviceLabel || '').toLowerCase().includes(q)
+                (d.os || '').toLowerCase().includes(q) || (d.deviceLabel || '').toLowerCase().includes(q) ||
+                (d.modelName || '').toLowerCase().includes(q)
             );
         }
 
@@ -437,11 +438,16 @@ export class NetworkView {
                 const typeIcon = this._deviceIcon(d.deviceIcon || 'help-circle');
                 const name = d.hostname || d.ip;
 
+                const modelHtml = d.modelName
+                    ? `<span class="netinv-model-name">${this._esc(d.modelName)}</span>${d.serialNumber ? `<span class="netinv-serial" title="S/N: ${this._esc(d.serialNumber)}${d.firmwareVersion ? ' | FW: ' + this._esc(d.firmwareVersion) : ''}">S/N</span>` : ''}`
+                    : '<span style="color:var(--text-muted)">—</span>';
+
                 return `<tr class="network-device-row">
                     <td class="netinv-col-icon"><span class="netinv-type-dot netinv-type-${this._esc(d.deviceType || 'unknown')}">${typeIcon}</span></td>
                     <td class="netinv-col-name"><span class="netinv-device-name">${this._esc(name)}${localBadge}</span>${d.hostname ? `<span class="netinv-device-ip">${this._esc(d.ip)}</span>` : ''}</td>
                     <td class="netinv-col-type">${this._esc(typeLabel)}</td>
                     <td class="netinv-col-vendor">${this._esc(d.vendor) || '<span style="color:var(--text-muted)">—</span>'}</td>
+                    <td class="netinv-col-model">${modelHtml}</td>
                     <td class="netinv-col-mac" style="font-family:monospace;font-size:11px">${this._esc(d.mac) || '—'}</td>
                     <td class="netinv-col-ports">${portBadges}${morePortsHint}</td>
                     <td class="netinv-col-rtt"><span class="${rttClass}">${d.rtt || 0} ms</span></td>
@@ -458,6 +464,7 @@ export class NetworkView {
                         <th>Name</th>
                         <th>Typ</th>
                         <th>Hersteller</th>
+                        <th>Modell</th>
                         <th>MAC-Adresse</th>
                         <th>Ports</th>
                         <th style="width:60px">Ping</th>
@@ -816,10 +823,10 @@ export class NetworkView {
         if (exportDevicesBtn && this._activeScanResult) {
             exportDevicesBtn.onclick = () => {
                 const devices = this._activeScanResult.devices || [];
-                const header = 'IP;Hostname;MAC;Hersteller;Gerätetyp;Betriebssystem;Ports;Ping (ms);Freigaben';
+                const header = 'IP;Hostname;MAC;Hersteller;Modell;Seriennummer;Firmware;Gerätetyp;Betriebssystem;Ports;Ping (ms);Freigaben';
                 const rows = devices.map(d => [
-                    d.ip, d.hostname, d.mac, d.vendor, d.deviceLabel || '',
-                    d.os, (d.openPorts || []).map(p => `${p.port}/${p.label}`).join(' '),
+                    d.ip, d.hostname, d.mac, d.vendor, d.modelName || '', d.serialNumber || '', d.firmwareVersion || '',
+                    d.deviceLabel || '', d.os, (d.openPorts || []).map(p => `${p.port}/${p.label}`).join(' '),
                     d.rtt, (d.shares || []).join(' '),
                 ].join(';'));
                 const csv = header + '\n' + rows.join('\n');
