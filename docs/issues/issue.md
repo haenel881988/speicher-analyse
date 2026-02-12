@@ -55,6 +55,7 @@
 | 13 | #16 | Backup-Modul (lokale/Netzwerk-Sicherung) | Geplant |
 | 14 | #17 | KI-Integration (Cloud + Lokal) | Idee |
 | 15 | #18 | Offline-Lizenzierung | Idee |
+| 16 | #19 | MCP-Server — KI kann direkt auf die App zugreifen | Idee |
 
 ---
 
@@ -395,6 +396,34 @@ Eine Art "Waage für die Festplatte":
 
 ---
 
+## 19. MCP-Server — KI kann direkt auf die App zugreifen
+
+**Simons Idee:** Die App soll einen sogenannten "MCP-Server" anbieten. Das ist eine Schnittstelle, ueber die eine KI (wie Claude, ChatGPT oder ein lokales Modell) direkt auf die App zugreifen kann — ohne dass der Nutzer Daten kopieren oder Screenshots machen muss.
+
+**Was das bringen wuerde:**
+- Du koenntest deiner KI sagen: "Analysiere meinen PC und sag mir was ich aufraeumen soll" — und die KI hat sofort Zugriff auf alle Scan-Ergebnisse, Netzwerkdaten, Datenschutz-Einstellungen und den System-Score
+- Die KI sieht genau das, was du in der App siehst — nur automatisch
+- Funktioniert mit jedem KI-Assistenten der das MCP-Protokoll unterstuetzt (Claude Desktop, Claude Code, und weitere)
+
+**Konkret wuerde die KI folgendes koennen:**
+- Festplatten-Scan starten und Ergebnisse analysieren
+- Netzwerk-Verbindungen pruefen ("Wer telefoniert nach Hause?")
+- Datenschutz-Einstellungen lesen und Empfehlungen geben
+- System-Score abfragen und erklaeren was gut/schlecht ist
+- Grosse Dateien und Duplikate finden
+- Installierte Programme auflisten
+
+**Sicherheit:**
+- Der Server laeuft nur lokal auf deinem PC (kein Internet noetig)
+- Kann in den Einstellungen ein- und ausgeschaltet werden
+- Keine Daten verlassen den Rechner
+
+**Status:** Idee — passt gut zur KI-Integration (Issue #17)
+
+→ *Simons Idee vom 12.02.2026*
+
+---
+
 # Prozess-Verbesserungen
 
 ## Kommunikation KI ↔ Simon
@@ -407,4 +436,4 @@ Eine Art "Waage für die Festplatte":
 
 **Simons Wunsch:** Das Änderungsprotokoll soll zu einer detaillierten Release-Note-Datei aufgewertet werden. Alle Ursachen und Lösungen müssen festgehalten werden.
 
-**Status:** Offen — wird bei der nächsten grösseren Überarbeitung umgesetzt
+**Status:** Umgesetzt — Release-Stories im "Swiss Squirrel"-Stil unter [`docs/releases/`](../releases/). Technisches Änderungsprotokoll bleibt zusätzlich bestehen.

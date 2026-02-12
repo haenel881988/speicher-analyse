@@ -155,17 +155,27 @@ Statt alles fest in die main.js und renderer.js zu hämmern → Architektur modu
 **→ Issue-Datei:** Issue #18 in [`docs/issues/issue.md`](../issues/issue.md)
 
 
-### 5.4 Release-Nodes
+### 5.4 MCP-Server — KI-Direktzugriff auf die App — Geplant
+
+Simons Idee: Ein MCP-Server in der App, damit KI-Assistenten (Claude, etc.) direkt auf Scan-Ergebnisse, Netzwerkdaten und System-Informationen zugreifen können. Sicherheit: Nur lokal, kein Internet, abschaltbar.
+
+**→ Issue-Datei:** Issue #19 in [`docs/issues/issue.md`](../issues/issue.md)
+
+### 5.5 Release-Notes — Die Swiss Squirrel Geschichte — Umgesetzt
 
 Bitte original-Text so stehen lassen. Das sind Simons Gedanken.
 Diese können jedoch für weitere Versionen und Funktionen weiter aufgegriffen und erweitert werden.
 
+**Status:** Umgesetzt! Release-Stories liegen unter [`docs/releases/`](../releases/).
+
  #### 5.5.1 Simon - Die Squirell Geschichte - eine Art Vorlage / inspiration für die Release-Nodes.
 
 Die meisten Apps wie VS Code etc. haben sehr langweilige Release-Nodes.
-Aus diesem Grund habe ich mir einen Markennamen überlegt, nämlich: swiss-squirrel.ch
+Jedoch möchte ich meine Website: simon-haenel.com -> seo dienstleistung die ohnehin nichts abwirft, umpositionieren.
 
-Denn ein Einhörnchen verlegt gerne sehr schnell und überall seine Nüsse, wie die User, sehr schnell ihre Dateien, Verzeichnisse verlegen und nicht mehr finden.
+
+
+Ein Einhörnchen verlegt gerne sehr schnell und überall seine Nüsse, wie die User, sehr schnell ihre Dateien, Verzeichnisse verlegen und nicht mehr finden.
 Somit ist Swiss Squirell ein Super Eichhörnchen, ich, Simon der das ganze mithilfe der KI, nämlich sein Freund und Helfer wie der magische Geist an seiner Seite - stehts hilft, das Projekt zu entwickeln, so das Simon seine Nüsse wiederfinden kann.
 
 Auf dem Weg zu seinen Goldenen Nüssen begnet Simon der Squirell ganz vielen Plagegeistern. z.B.: pagefile.sys - was die Unordnung in Simons goldenen Nüssenkorb nur vergrössert.
