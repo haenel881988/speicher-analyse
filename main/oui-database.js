@@ -446,14 +446,19 @@ const PORT_TYPE_HINTS = {
 
 /**
  * Erkennt den Gerätetyp basierend auf kombinierten Daten.
- * @param {Object} device - { vendor, openPorts: [{port}], os, hostname, ttl, isLocal }
+ * @param {Object} device - { vendor, openPorts: [{port}], os, hostname, ttl, isLocal, isGateway }
  * @returns {{ type: string, label: string, icon: string }}
  */
 function classifyDevice(device) {
-    const { vendor = '', openPorts = [], os = '', hostname = '', ttl = 0, isLocal = false } = device;
+    const { vendor = '', openPorts = [], os = '', hostname = '', ttl = 0, isLocal = false, isGateway = false } = device;
 
     if (isLocal) {
         return { type: 'local', label: 'Eigener PC', icon: 'monitor' };
+    }
+
+    // 0. Gateway/Default-Route = immer Router
+    if (isGateway) {
+        return { type: 'router', label: 'Router / Gateway', icon: 'wifi' };
     }
 
     const ports = new Set(openPorts.map(p => typeof p === 'object' ? p.port : p));
@@ -469,7 +474,7 @@ function classifyDevice(device) {
         }
     }
 
-    // 2. Port-basierte Erkennung
+    // 2. Port-basierte Erkennung (spezifische Geräte-Ports)
     for (const [portStr, type] of Object.entries(PORT_TYPE_HINTS)) {
         if (ports.has(Number(portStr))) {
             if (type === 'printer' && (ports.has(9100) || ports.has(631) || ports.has(515))) {
@@ -484,7 +489,38 @@ function classifyDevice(device) {
         }
     }
 
-    // 3. OS + Port Kombinationen
+    // 3. Hostname-basierte Heuristik (VOR OS-Fallback — sonst erkennt "Linux/macOS" alles als PC!)
+    const hn = hostname.toLowerCase();
+    // Drucker: HP-Drucker haben Hostnamen wie "HPF94506", "HP507E38", "HPXXXXXX"
+    if (/^hp[0-9a-f]{6}/i.test(hostname) || hn.includes('printer') || hn.includes('drucker') || hn.includes('brn') || hn.includes('canon') || hn.includes('epson') || hn.includes('laserjet') || hn.includes('officejet') || hn.includes('deskjet')) {
+        return _typeToResult('printer', vendor);
+    }
+    if (hn.includes('nas') || hn.includes('diskstation') || hn.includes('qnap') || hn.includes('synology')) {
+        return _typeToResult('nas', vendor);
+    }
+    if (hn.includes('cam') || hn.includes('ipcam') || hn.includes('nvr') || hn.includes('dvr') || hn.includes('hikvision') || hn.includes('dahua')) {
+        return _typeToResult('camera', vendor);
+    }
+    if (hn.includes('tv') || hn.includes('smarttv') || hn.includes('lgwebos') || hn.includes('bravia') || hn.includes('chromecast')) {
+        return _typeToResult('tv', vendor);
+    }
+    if (hn.includes('sonos') || hn.includes('denon') || hn.includes('heos') || hn.includes('airplay')) {
+        return _typeToResult('media', vendor);
+    }
+    if (hn.includes('fritz') || hn.includes('speedport') || hn.includes('easybox') || hn.includes('gateway')) {
+        return { type: 'router', label: 'Router / Gateway', icon: 'wifi' };
+    }
+    if (hn.includes('iphone') || hn.includes('ipad') || hn.includes('android') || hn.includes('galaxy') || hn.includes('pixel') || hn.includes('oneplus') || hn.includes('redmi') || hn.includes('huawei-')) {
+        return { type: 'mobile', label: 'Mobilgerät', icon: 'smartphone' };
+    }
+    if (hn.includes('switch') || hn.includes('playstation') || hn.includes('xbox')) {
+        return { type: 'console', label: 'Spielkonsole', icon: 'gamepad' };
+    }
+    if (hn.includes('shelly') || hn.includes('tasmota') || hn.includes('esp-') || hn.includes('wled')) {
+        return _typeToResult('smarthome', vendor);
+    }
+
+    // 4. OS + Port Kombinationen (Fallback wenn weder Vendor noch Hostname matchen)
     if (os === 'Windows' || ports.has(135) || ports.has(3389) || ports.has(445)) {
         if (ports.has(80) && ports.has(443) && ports.size > 4) {
             return { type: 'server', label: 'Windows Server', icon: 'server' };
@@ -496,36 +532,19 @@ function classifyDevice(device) {
         if (ports.has(22) && ports.has(80)) {
             return { type: 'server', label: 'Linux Server', icon: 'server' };
         }
-        if (vendor && vendor.includes('Apple')) {
+        if (vendor && vendor.toLowerCase().includes('apple')) {
             return { type: 'pc', label: 'Apple Gerät', icon: 'monitor' };
+        }
+        // Nicht sofort als "Linux/macOS" einstufen — erst noch Web-Interface prüfen
+        if (ports.has(80) || ports.has(443)) {
+            return { type: 'webdevice', label: 'Gerät mit Web-Interface', icon: 'globe' };
         }
         return { type: 'pc', label: 'Linux/macOS Gerät', icon: 'monitor' };
     }
 
-    // 4. Netzwerkgerät (hoher TTL)
+    // 5. Netzwerkgerät (hoher TTL)
     if (ttl > 128 || os === 'Netzwerkgerät') {
         return { type: 'router', label: 'Netzwerkgerät', icon: 'wifi' };
-    }
-
-    // 5. Hostname-basierte Heuristik
-    const hn = hostname.toLowerCase();
-    if (hn.includes('printer') || hn.includes('drucker') || hn.includes('brn') || hn.includes('canon') || hn.includes('epson')) {
-        return _typeToResult('printer', vendor);
-    }
-    if (hn.includes('nas') || hn.includes('diskstation') || hn.includes('qnap')) {
-        return _typeToResult('nas', vendor);
-    }
-    if (hn.includes('cam') || hn.includes('ipcam') || hn.includes('nvr') || hn.includes('dvr')) {
-        return _typeToResult('camera', vendor);
-    }
-    if (hn.includes('tv') || hn.includes('smarttv') || hn.includes('lgwebos') || hn.includes('bravia')) {
-        return _typeToResult('tv', vendor);
-    }
-    if (hn.includes('iphone') || hn.includes('ipad') || hn.includes('android') || hn.includes('galaxy') || hn.includes('pixel') || hn.includes('oneplus')) {
-        return { type: 'mobile', label: 'Mobilgerät', icon: 'smartphone' };
-    }
-    if (hn.includes('switch') || hn.includes('playstation') || hn.includes('xbox')) {
-        return { type: 'console', label: 'Spielkonsole', icon: 'gamepad' };
     }
 
     // 6. Fallback

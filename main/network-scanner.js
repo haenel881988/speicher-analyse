@@ -194,7 +194,7 @@ async function _detectSubnet() {
     const parts = data.ip.split('.');
     const subnet = parts.slice(0, 3).join('.');
     log.info(`Subnetz erkannt: ${subnet}.0/${data.prefix} (${data.iface}, Gateway: ${data.gateway})`);
-    return { subnet, prefixLength: data.prefix, localIP: data.ip };
+    return { subnet, prefixLength: data.prefix, localIP: data.ip, gateway: data.gateway || '' };
 }
 
 /**
@@ -259,16 +259,41 @@ async function scanNetworkActive(onProgress) {
     }
 
     log.info(`Ping Sweep: ${onlineDevices.length} Geräte online`);
+
+    // Phase 2.5: ARP-Tabelle SEPARAT lesen (schnell, 15s)
+    // MUSS getrennt vom Port-Scan laufen — wenn Port-Scan timeouted, gehen sonst alle MACs verloren!
+    if (onProgress) onProgress({ phase: 'arp', current: 0, total: 0, message: 'MAC-Adressen werden aufgelöst...' });
+
+    const macMap = new Map(); // IP → MAC (Dash-Format, z.B. "AA-BB-CC-DD-EE-FF")
+    try {
+        const arpScript = `
+            $arp = Get-NetNeighbor -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+                Where-Object { $_.LinkLayerAddress -and $_.LinkLayerAddress -ne '00-00-00-00-00-00' -and $_.LinkLayerAddress -ne 'FF-FF-FF-FF-FF-FF' }
+            $results = foreach ($a in $arp) {
+                [PSCustomObject]@{ ip=$a.IPAddress; mac=$a.LinkLayerAddress }
+            }
+            @($results) | ConvertTo-Json -Compress
+        `.trim();
+        const { stdout } = await runPS(arpScript, { timeout: 15000 });
+        if (stdout && stdout.trim() && stdout.trim() !== 'null') {
+            const raw = JSON.parse(stdout.trim());
+            const arr = Array.isArray(raw) ? raw : [raw];
+            for (const r of arr) {
+                if (r.ip && r.mac) macMap.set(r.ip, r.mac);
+            }
+        }
+        log.info(`ARP-Tabelle: ${macMap.size} MAC-Adressen aufgelöst`);
+    } catch (err) {
+        log.warn('ARP-Tabelle konnte nicht gelesen werden:', err.message);
+    }
+
+    // Phase 3: Port Scan (NUR Ports, keine ARP-Daten mehr — die haben wir bereits)
     if (onProgress) onProgress({ phase: 'ports', current: 0, total: onlineDevices.length, message: `${onlineDevices.length} Geräte gefunden, scanne Ports...` });
 
-    // Phase 3: Port Scan + MAC-Auflösung (für alle online-Geräte)
     const ipList = onlineDevices.map(d => `'${d.ip}'`).join(',');
     const portScanScript = `
         $ips = @(${ipList})
         $ports = @(22, 80, 135, 443, 445, 515, 554, 631, 3389, 5000, 5001, 8080, 9100)
-        $arp = Get-NetNeighbor -AddressFamily IPv4 -ErrorAction SilentlyContinue
-        $arpMap = @{}
-        foreach ($a in $arp) { $arpMap[$a.IPAddress] = $a.LinkLayerAddress }
         $results = foreach ($ip in $ips) {
             $openPorts = @()
             foreach ($port in $ports) {
@@ -280,38 +305,35 @@ async function scanNetworkActive(onProgress) {
                     $tcp.Close()
                 } catch {}
             }
-            $mac = if ($arpMap.ContainsKey($ip)) { $arpMap[$ip] } else { '' }
-            [PSCustomObject]@{ ip=$ip; ports=($openPorts -join ','); mac=$mac }
+            [PSCustomObject]@{ ip=$ip; ports=($openPorts -join ',') }
         }
         @($results) | ConvertTo-Json -Compress
     `.trim();
 
-    let portResults = [];
+    const portMap = new Map(); // IP → number[] (offene Ports)
     try {
-        const timeout = Math.max(60000, onlineDevices.length * 5000);
-        const { stdout } = await runPS(portScanScript, { timeout: Math.min(timeout, 180000), maxBuffer: 5 * 1024 * 1024 });
+        // Timeout: 13 Ports × 500ms × Anzahl Geräte + 20s Puffer
+        const portsCount = 13;
+        const timeout = Math.min(Math.max(90000, onlineDevices.length * portsCount * 600 + 20000), 300000);
+        log.info(`Port Scan: ${onlineDevices.length} Geräte × ${portsCount} Ports, Timeout: ${Math.round(timeout / 1000)}s`);
+        const { stdout } = await runPS(portScanScript, { timeout, maxBuffer: 5 * 1024 * 1024 });
         if (stdout && stdout.trim() && stdout.trim() !== 'null') {
             const raw = JSON.parse(stdout.trim());
-            portResults = Array.isArray(raw) ? raw : [raw];
+            const portResults = Array.isArray(raw) ? raw : [raw];
+            for (const r of portResults) {
+                portMap.set(r.ip, r.ports ? r.ports.split(',').map(Number).filter(Boolean) : []);
+            }
         }
     } catch (err) {
         log.warn('Port Scan fehlgeschlagen (Ergebnisse ohne Ports):', err.message);
-    }
-
-    const portMap = new Map();
-    for (const r of portResults) {
-        portMap.set(r.ip, {
-            ports: r.ports ? r.ports.split(',').map(Number).filter(Boolean) : [],
-            mac: r.mac || '',
-        });
     }
 
     if (onProgress) onProgress({ phase: 'shares', current: 0, total: 0, message: 'SMB-Freigaben werden geprüft...' });
 
     // Phase 4: SMB-Shares für Geräte mit Port 445
     const smbDevices = onlineDevices.filter(d => {
-        const info = portMap.get(d.ip);
-        return info && info.ports.includes(445);
+        const ports = portMap.get(d.ip);
+        return ports && ports.includes(445);
     });
 
     let sharesMap = new Map();
@@ -350,7 +372,7 @@ async function scanNetworkActive(onProgress) {
 
     // Live OUI-Lookup für alle gefundenen MAC-Adressen (IEEE-Datenbank via API)
     const allMacs = onlineDevices
-        .map(d => (portMap.get(d.ip) || { mac: '' }).mac)
+        .map(d => macMap.get(d.ip) || '')
         .filter(Boolean);
 
     if (onProgress) onProgress({ phase: 'vendor', current: 0, total: 0, message: 'Hersteller werden identifiziert (IEEE-Datenbank)...' });
@@ -361,17 +383,19 @@ async function scanNetworkActive(onProgress) {
 
     // Ergebnis zusammenbauen (mit Gerätetyp-Klassifizierung)
     const devices = onlineDevices.map(d => {
-        const portInfo = portMap.get(d.ip) || { ports: [], mac: '' };
-        const mac = portInfo.mac.replace(/-/g, ':');
-        const openPorts = portInfo.ports.map(p => ({ port: p, label: PORT_LABELS[p] || `${p}` }));
+        const macDash = macMap.get(d.ip) || '';
+        const mac = macDash.replace(/-/g, ':');
+        const ports = portMap.get(d.ip) || [];
+        const openPorts = ports.map(p => ({ port: p, label: PORT_LABELS[p] || `${p}` }));
         const shares = sharesMap.get(d.ip) || [];
         const isLocal = d.ip === subnetInfo.localIP;
-        const vendor = vendorMap.get(portInfo.mac) || '';
+        const isGateway = d.ip === subnetInfo.gateway;
+        const vendor = vendorMap.get(macDash) || '';
         const os = _detectOS(d.ttl);
 
         // Gerätetyp-Erkennung (kombiniert Hersteller + Ports + OS + Hostname + TTL)
         const deviceType = classifyDevice({
-            vendor, openPorts, os, hostname: d.hostname || '', ttl: d.ttl || 0, isLocal,
+            vendor, openPorts, os, hostname: d.hostname || '', ttl: d.ttl || 0, isLocal, isGateway,
         });
 
         return {

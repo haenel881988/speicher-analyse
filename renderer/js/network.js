@@ -357,7 +357,7 @@ export class NetworkView {
     _renderScanProgress() {
         const p = this._activeScanProgress;
         if (!p) return '<span>Scan wird vorbereitet...</span>';
-        const phaseLabels = { init: 'Vorbereitung', ping: 'Ping Sweep', ports: 'Port-Scan', shares: 'SMB-Freigaben', vendor: 'Hersteller-Erkennung (IEEE)', done: 'Abgeschlossen' };
+        const phaseLabels = { init: 'Vorbereitung', ping: 'Ping Sweep', arp: 'MAC-Adressen', ports: 'Port-Scan', shares: 'SMB-Freigaben', vendor: 'Hersteller-Erkennung (IEEE)', done: 'Abgeschlossen' };
         const label = phaseLabels[p.phase] || p.phase;
         const pct = p.total > 0 ? Math.round((p.current / p.total) * 100) : 0;
         return `<span>${label}${p.total > 0 ? ` (${p.current}/${p.total})` : ''}</span>
