@@ -402,7 +402,7 @@ function _cacheIP(ip, data) {
         const oldest = _ipCache.keys().next().value;
         _ipCache.delete(oldest);
     }
-    _cacheIP(ip, data);
+    _ipCache.set(ip, data);
 }
 
 /**
