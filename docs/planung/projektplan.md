@@ -19,10 +19,15 @@
 | v7.3 | Fertig | Terminal: node-pty + xterm.js (echtes PTY), CWD-Sync |
 | v7.4 | Fertig | Session-Persistenz, PreferencesStore, Energieverwaltung, Einstellungen-Rewrite |
 | v7.5 | Fertig | Explorer-Ordnergrößen aus Scan-Daten, Proportionsbalken, Session-UI-State-Fix |
-| v8.0 | Geplant | Automatisierung, Browser-Bereinigung, Backup, Undo-Log |
-| v9.0 | Vision | KI-Integration (BYOB: Cloud + Ollama), Notion-Modul |
+| v8.0 | Fertig | Swiss Security Suite: Hochrisiko-Alarm, Geräte-Erkennung, Sicherheits-Check, PDF-Report |
+| v8.5 | Geplant | Scandaten-Fix + Intelligente Scandaten (Delta-Scan, Verlauf, Hintergrund-Scan) |
+| v9.0 | Geplant | Apps-Kontrollzentrum + Intelligenter Bloatware-Scanner + System-Profil |
+| v9.5 | Geplant | Automatisierung, Browser-Bereinigung, Backup, Undo-Log |
+| v10.0 | Vision | KI-Integration (BYOB: Cloud + Ollama), Notion-Modul |
 | v1.0.0 | Vision | Erster stabiler Release (Semver), Installer, Auto-Update, Lizenzierung |
 | v1.5.0 | Vision | Plugin-System (externe Module laden) |
+
+> **Neue Roadmap-Abschnitte ab v8.5:** Basierend auf Simons Feedback vom 12.02.2026 — Issues #7-#10
 
 Historische Pläne: siehe [`archiv/projektplan_v3-v5.md`](archiv/projektplan_v3-v5.md)
 
@@ -209,7 +214,73 @@ User meldet: Kontrast stimmt noch immer nicht überall. Umfassender Audit nötig
 
 ---
 
-## v8.0 - Automatisierung & Erweiterte Features (Geplant)
+## v8.5 - Scandaten-Fix + Intelligente Scandaten (Geplant)
+
+> Entspricht Issue #2, #3, #7 — Fundament für alle weiteren Features
+
+### Phase 1: Scandaten überall korrekt speichern + wiederherstellen (Issue #2 + #3)
+
+| Feature | Beschreibung | Aufwand |
+|---------|-------------|---------|
+| **Vollständige Datenspeicherung** | ALLE Scan-Daten (Ordner + Dateien) werden beim Schliessen gespeichert | Mittel |
+| **Automatische Wiederherstellung** | Nach dem Öffnen sind alle Daten sofort verfügbar (kein neuer Scan) | Mittel |
+| **Bereichsübergreifend** | Duplikate, Vergleich, Suche, Dashboard — alles funktioniert nach Neustart | Mittel |
+| **Multi-Laufwerk** | Scan-Daten für alle Laufwerke getrennt gespeichert und wiederherstellbar | Klein |
+
+### Phase 2: Intelligente Scandaten (Issue #7)
+
+| Feature | Beschreibung | Aufwand |
+|---------|-------------|---------|
+| **Delta-Scan** | Nur Änderungen seit dem letzten Scan nachscannen (schneller, leiser) | Groß |
+| **Scan-Verlauf** | Speicherplatz-Trend über Zeit ("Waage für die Festplatte") | Mittel |
+| **Hintergrund-Scan** | Beim App-Start leise prüfen ob sich etwas geändert hat | Mittel |
+| **Übergreifende Nutzung** | Scan-Daten werden von Bloatware, Audit, Bereinigung mitverwendet | Mittel |
+| **Smart-Trigger** | "3 neue Programme erkannt — Nachscan empfohlen" | Klein |
+
+---
+
+## v9.0 - Apps-Kontrollzentrum + Intelligenter Bloatware-Scanner + System-Profil (Geplant)
+
+> Entspricht Issue #8, #9, #10 — die drei grossen neuen Features
+
+### Apps-Kontrollzentrum (ersetzt "Updates"-Tab) — Issue #9
+
+| Feature | Beschreibung | Aufwand |
+|---------|-------------|---------|
+| **Alle Apps** | Komplette Liste aller Programme + Microsoft-Store Apps | Mittel |
+| **Direkte Deinstallation** | Programme direkt deinstallieren (kein Umweg über Windows) | Mittel |
+| **Update-Check** | Pro App anzeigen ob ein Update verfügbar ist | Mittel |
+| **Vergessene Apps** | "12 Programme seit 6 Monaten unbenutzt — 8 GB belegt" | Klein |
+| **App-Cache aufräumen** | Cache/Temp pro App leeren ohne Deinstallation | Mittel |
+| **App-Gruppen** | Automatische Sortierung (Produktivität, Spiele, System, etc.) | Klein |
+| **Neuinstallations-Export** | App-Liste exportieren als Checkliste für neuen PC | Klein |
+| **Treiber → Hersteller-Links** | Intel Assistent, Nvidia App, Asus-Seite statt eigenem Treiber-Check | Mittel |
+
+### Intelligenter Bloatware-Scanner — Issue #8
+
+| Feature | Beschreibung | Aufwand |
+|---------|-------------|---------|
+| **5-Stufen-Bewertung** | Vertrauenswürdig / Nicht zertifiziert / Fragwürdig / Bloatware / Risiko | Groß |
+| **App-Beschreibungen** | "Was macht dieses Programm?" in einfacher Sprache | Mittel |
+| **Ressourcen-Verbrauch** | Festplatte, Autostart, Hintergrund-Aktivität pro App | Mittel |
+| **Hintergrund-Aktivität** | Welche Apps senden Daten ohne geöffnet zu sein? | Mittel |
+| **Microsoft-Store Apps** | Auch Store-Apps in den Scan einbeziehen | Klein |
+| **Ehrliche Ergebnisse** | Nie "sauber" sagen wenn es das nicht ist | Klein |
+
+### System-Profil — Issue #10
+
+| Feature | Beschreibung | Aufwand |
+|---------|-------------|---------|
+| **Hardware-Übersicht** | Hersteller, Modell, CPU, GPU, RAM, Festplatten | Klein |
+| **Seriennummer** | Automatisch auslesen — kein Laptop umdrehen | Klein |
+| **Hersteller-Links** | Support-Seite, Treiber-Download, Treiber-Tool | Klein |
+| **Garantie-Check** | Link zur Garantieprüfung beim Hersteller | Klein |
+| **Dashboard-Karte** | "Dein System auf einen Blick" | Klein |
+| **Export** | Als Text/PDF für Support-Anfragen | Klein |
+
+---
+
+## v9.5 - Automatisierung & Erweiterte Features (Geplant)
 
 | Feature | Beschreibung | Aufwand |
 |---------|-------------|---------|
@@ -235,7 +306,7 @@ User meldet: Kontrast stimmt noch immer nicht überall. Umfassender Audit nötig
 
 ---
 
-## v9.0 - KI-Integration (Vision)
+## v10.0 - KI-Integration (Vision)
 
 Basierend auf User-Vision "Bring Your Own Brain" (BYOB):
 
@@ -407,3 +478,15 @@ main/
 
 > "Terminal noch sehr rudimentär, nahtlose Integration gewünscht"
 > → Geplant in v7.3 (xterm.js + node-pty)
+
+> "Scandaten werden nicht gespeichert — Duplikate, Vergleich, Bloatware alles weg nach Neustart"
+> → Geplant in v8.5 (vollständige Datenspeicherung + übergreifende Nutzung)
+
+> "Bloatware-Scanner braucht Intelligenz — nicht zertifiziert ≠ Bloatware, zertifiziert ≠ sicher"
+> → Geplant in v9.0 (5-Stufen-Bewertung, App-Beschreibungen, ehrliche Ergebnisse)
+
+> "Updates-Tab umbenennen zu Apps — alle Programme sehen, direkt deinstallieren, Hersteller-Links statt Treiber"
+> → Geplant in v9.0 (Apps-Kontrollzentrum ersetzt Updates-Tab)
+
+> "Seriennummer auslesen, Hersteller-Links, System-Profil — alles auf einen Blick"
+> → Geplant in v9.0 (System-Profil mit Hardware, Garantie, Hersteller-Links)

@@ -63,6 +63,55 @@ Wenn ich eintippe: Claude soll dann auch Claude gestartet werden, da ich im Wind
 
 ## 3. Programme & System
 
+### 3.0a Intelligenter Bloatware-Scanner — Geplant (v9.0)
+
+Der Scanner braucht echte Intelligenz. Nicht-zertifizierte Software (wie Advanced IP Scanner) ist NICHT automatisch Bloatware. Aber zertifizierte Software (wie Avast, Reimage) KANN trotzdem Scam sein. "System ist sauber" ist unrealistisch. Ähnlich wie Malwarebytes, nur seriös und transparent.
+
+**Umfang:**
+- 5-Stufen-Bewertung: Vertrauenswürdig / Nicht zertifiziert / Fragwürdig / Bloatware / Risiko
+- Verständliche Beschreibung pro App ("Was macht dieses Programm?")
+- Ressourcen-Verbrauch pro App (Speicher, Autostart, Hintergrund)
+- Hintergrund-Aktivität aufdecken ("App sendet Daten ohne geöffnet zu sein")
+- Microsoft-Store Apps einbeziehen
+- Ehrliche Ergebnisse statt "alles sauber"
+
+**→ Projektplan:** v9.0 — Intelligenter Bloatware-Scanner (Issue #8)
+
+### 3.0b Apps-Kontrollzentrum — Geplant (v9.0)
+
+Der "Updates"-Tab soll zu einem "Apps"-Tab umgebaut werden. Alle installierten Apps auf einen Blick, direkt deinstallieren, Update-Verfügbarkeit, vergessene Apps finden, Cache aufräumen. Treiber-Bereich wird ersetzt durch Hersteller-Links und Seriennummer-Erkennung.
+
+**Umfang:**
+- Alle Programme + Store-Apps auflisten mit Gruppierung
+- Direkte Deinstallation ohne Windows-Einstellungen
+- Update-Check pro App
+- Vergessene Apps finden ("seit 6 Monaten nicht benutzt")
+- App-Cache leeren ohne Deinstallation
+- Neuinstallations-Helfer (Export für neuen PC)
+- Hersteller-Links statt Treiber-Check (Intel Assistent, Nvidia App, etc.)
+- Seriennummer automatisch auslesen
+
+**→ Projektplan:** v9.0 — Apps-Kontrollzentrum (Issue #9)
+
+### 3.0c System-Profil — Geplant (v9.0)
+
+Alle Informationen über den PC an einem Ort: Hardware, Seriennummer, Hersteller, Garantie. Praktisch für Support-Anfragen oder Treiber-Suche.
+
+**Umfang:**
+- Hardware-Übersicht (Hersteller, Modell, CPU, GPU, RAM, Festplatten)
+- Seriennummer automatisch auslesen
+- Hersteller-Links (Support, Treiber, Treiber-Tool)
+- Dashboard-Karte "Dein System auf einen Blick"
+- Export als Text/PDF
+
+**→ Projektplan:** v9.0 — System-Profil (Issue #10)
+
+### 3.0d Intelligente Scandaten — Geplant (v8.5)
+
+Scandaten nicht nur speichern, sondern intelligent verwalten: Delta-Scan (nur Änderungen), Verlauf über Zeit, automatischer Hintergrund-Scan, übergreifende Nutzung der Daten.
+
+**→ Projektplan:** v8.5 — Intelligente Scandaten (Issue #7)
+
 ### 3.1 Software-Audit — Umgesetzt (v7.0)
 
 > ~~Eine Funktion soll alle Programme auflisten. Dabei soll anhand der installierten Programme auf dem System die Registry, Autostart etc. geprüft werden. Wenn z.B. in der Registry Rückstände auftauchen von nicht installierten Programmen, soll dies angezeigt werden.~~

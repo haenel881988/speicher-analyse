@@ -14,6 +14,20 @@
 
 ---
 
+# Prioritäten-Reihenfolge
+
+| Prio | Issue | Thema | Status |
+|------|-------|-------|--------|
+| 1 | #2 + #3 | Scandaten überall speichern + wiederherstellen | Neuer Fix nach Tiefenanalyse — wartet auf Simons Test |
+| 2 | #7 | Intelligente Scandaten (Delta-Scan, Verlauf, Hintergrund) | Neu — Planung |
+| 3 | #8 | Intelligenter Bloatware-Scanner (5-Stufen-Bewertung) | Neu — Planung |
+| 4 | #9 | "Apps"-Kontrollzentrum (ersetzt "Updates"-Tab) | Neu — Planung |
+| 5 | #10 | System-Profil (Hardware, Seriennummer, Hersteller-Links) | Neu — Planung |
+| 6 | #4 | Privacy Dashboard anwenderfreundlicher | Überarbeitung implementiert — wartet auf Test |
+| 7 | #5 | PDF Vollansicht + Bearbeitung | Offen |
+
+---
+
 # Erledigte Issues
 
 ## 1. Schliess-Funktion (X-Button)
@@ -67,25 +81,12 @@
 - Daten aus der vorherigen Sitzung müssen auch die Grössen mitbringen
 
 **Was bisher gemacht wurde:**
-- Tiefenanalyse abgeschlossen: Wenn du mehrere Laufwerke gescannt hattest, hat der Explorer bisher immer nur das zuletzt gescannte Laufwerk benutzt — selbst wenn die Daten für das andere Laufwerk noch da waren
-- Fix: Der Explorer sucht jetzt automatisch die passenden Scan-Daten für das Laufwerk, das du gerade anschaust
+- Der Explorer sucht jetzt automatisch die passenden Scan-Daten für das Laufwerk, das du gerade anschaust
 - Farbmarkierungen (rot/gelb/grün) sind standardmässig ausgeschaltet — nur die Zahlen werden angezeigt
 - Wichtig: Ordner die Windows-geschützt sind (z.B. "System Volume Information") können nicht gescannt werden — dort werden keine Grössen angezeigt, das ist normal
 
-**Was Simon testen soll:**
-1. Laufwerk C: scannen
-2. Laufwerk D: scannen (falls vorhanden)
-3. Im Explorer zwischen C: und D: hin und her navigieren
-4. Prüfen: Werden die Ordnergrössen auf beiden Laufwerken als Zahlen angezeigt?
-5. App schliessen und wieder öffnen — werden die Grössen wiederhergestellt?
-
 **Simons Feedback (11.02.2026):**
-Die Scandaten werden noch immer nicht korrekt wiederhergestellt, wenn die App geschlossen wird. Irgendwie spackt das mit der speicherscan, speicherwiederherstellung / speicheranzeige.
-
-Der Verzeichnisbaum wird auch nicht aktualisiert, muss scan erneut durchgeführt werden.
-Unter "Vergleich" wird gleich gar nichts angezeigt, sowie auch unter Duplikate nichts.
-
-Das Thema  mit den speichergrössen / darstellung etc. scheint ein grösserer bug zu sein. Es ist zwingennd erforderlich dass eine vertiefte  bug analyse durchgeführt werden muss mithilfe den Skills.
+Die Scandaten werden noch immer nicht korrekt wiederhergestellt, wenn die App geschlossen wird. Der Verzeichnisbaum wird auch nicht aktualisiert. Unter "Vergleich" und "Duplikate" wird nichts angezeigt. Das Thema scheint ein grösserer Bug zu sein.
 
 **Was die Tiefenanalyse ergeben hat:**
 Die App hat beim Speichern nur die Ordner-Struktur gesichert, aber NICHT die Datei-Details (welche Dateien wo liegen, wie gross sie sind). Deshalb waren nach einem Neustart folgende Bereiche leer:
@@ -126,24 +127,6 @@ Die App hat beim Speichern nur die Ordner-Struktur gesichert, aber NICHT die Dat
 - Das Zusammenfassungs-Banner oben fehlt (z.B. "35 Apps analysiert — 5 sicher, 3 Vorsicht, 2 Risiko")
 - Die Empfehlungs-Ampel (grün/gelb/rot) pro Einstellung fehlt
 
-**Was bisher gemacht wurde:**
-- Tiefenanalyse abgeschlossen: Die App-Erkennung und das Zusammenfassungs-Banner funktionieren — aber die Analyse aller installierten Programme braucht ca. 30-60 Sekunden
-- Bisher wurde in dieser Zeit nichts angezeigt, man dachte die Funktion sei kaputt
-- Fix: Jetzt erscheint sofort ein Lade-Hinweis "App-Analyse läuft..." mit einem Lade-Symbol, sobald das Privacy-Dashboard geöffnet wird
-- Wenn die Analyse fertig ist, erscheint automatisch das Banner und die App-Tags
-- Bei einem Fehler wird eine "Erneut versuchen"-Taste angezeigt
-
-**Was Simon testen soll:**
-1. Privacy-Dashboard öffnen
-2. Prüfen: Erscheint sofort ein Lade-Hinweis "App-Analyse läuft..."?
-3. 30-60 Sekunden warten
-4. Prüfen: Erscheint dann ein Banner "X installierte Programme analysiert"?
-5. Prüfen: Zeigt jede Einstellung betroffene Apps (z.B. "Google Maps", "Spotify")?
-6. Prüfen: Hat jede Einstellung ein farbiges Symbol (grün/gelb/rot)?
-
-**Simons Feedback (11.02.2026):**
-Gute Umsetzung, jedoch ist das Privacy-Dashboard für einen Laien nicht hilfreich. Soll er das jetzt schützen oder nicht? Generell muss ich wissen, welche Einstellungen welche Auswirkungen auf mein System haben. Achtung: Windows-Updates können die Einstellungen unbrauchbar machen.
-
 **Was jetzt geändert wurde (Überarbeitung):**
 - Jede Einstellung zeigt jetzt eine verständliche **Erklärung** an (was diese Einstellung macht)
 - Neue Rubrik **"Was passiert beim Deaktivieren"** mit konkreten Auswirkungen
@@ -153,15 +136,6 @@ Gute Umsetzung, jedoch ist das Privacy-Dashboard für einen Laien nicht hilfreic
   - Rot: "Nicht deaktivieren" — zu viele deiner Apps brauchen das
 - Bei "Offen" steht jetzt: "Diese Einstellung teilt Daten mit Microsoft oder Werbepartnern"
 - Bei "Geschützt" steht: "Deine Daten werden nicht gesendet"
-- Technische Details (Registry-Pfade) wurden aus der Anzeige entfernt
-
-**Was Simon testen soll:**
-1. Privacy-Dashboard öffnen
-2. 30-60 Sekunden warten bis die App-Analyse fertig ist
-3. Prüfen: Zeigt jede Einstellung eine verständliche Erklärung?
-4. Prüfen: Gibt es bei jeder Einstellung eine klare Empfehlung (grün/gelb/rot)?
-5. Prüfen: Steht bei "Offen"-Einstellungen was das konkret bedeutet?
-6. Prüfen: Ist jetzt klar, welche Einstellungen deaktiviert werden sollten und welche nicht?
 
 **Offene Punkte für später:**
 - Windows-Update-Warnung: Hinweis dass Updates Einstellungen zurücksetzen können
@@ -178,11 +152,6 @@ Gute Umsetzung, jedoch ist das Privacy-Dashboard für einen Laien nicht hilfreic
 - Keine Bearbeitungsfunktionen (markieren, kommentieren)
 - Kein eigenes Fenster — man sollte die PDF in ein separates Fenster verschieben können
 
-**Bisherige Geschichte:**
-- Iteration 1-4: PDF liess sich gar nicht öffnen (Fehler)
-- Iteration 5: PDF öffnet sich jetzt in der Vorschau
-- Iteration 6 (aktuell): Funktioniert nur als kleine Vorschau, nicht als Vollansicht
-
 **Status:** Offen
 
 **Planung:**
@@ -190,6 +159,164 @@ Gute Umsetzung, jedoch ist das Privacy-Dashboard für einen Laien nicht hilfreic
 2. **Losgelöstes Fenster:** Möglichkeit, die PDF in ein eigenständiges Fenster zu verschieben
 3. **Bearbeitungsfunktionen:** Text markieren, Kommentare hinzufügen, Hervorhebungen setzen
 4. **Druck/Export:** PDF drucken oder als kommentierte Version speichern
+
+---
+
+## 7. Intelligente Scandaten — Delta-Scan, Verlauf, Hintergrund-Scan
+
+> Baut auf Issue #2/#3 auf — die Grundlage (Daten korrekt speichern) muss zuerst stehen.
+
+**Simons Idee:** Der Scan soll neu initialisiert werden, wenn z.B. mehr als 3 Programme installiert wurden oder grössere Änderungen am System gemacht wurden. Die Scandaten sollen auch von anderen Bereichen mitverwendet werden können.
+
+**Was wir daraus machen:**
+
+### 7a. Delta-Scan (nur Änderungen scannen)
+Statt jedes Mal alles komplett neu zu scannen (Lüfter, Wartezeit), erkennt die App was sich seit dem letzten Scan verändert hat und scannt nur das nach.
+- Die App merkt sich: "Seit dem letzten Scan wurden 2 Programme installiert und 15 GB neue Dateien angelegt"
+- Bietet einen gezielten Nachscan an statt eines Komplett-Scans
+- Spart Zeit und schont die Hardware
+
+### 7b. Scan-Verlauf über Zeit
+Eine Art "Waage für die Festplatte":
+- "Letzte Woche 45 GB frei, heute nur noch 38 GB — was ist passiert?"
+- Welche Ordner wachsen am schnellsten?
+- Welche Apps sammeln am meisten Daten an?
+- Trend-Anzeige: Geht der Speicherplatz langsam oder schnell zur Neige?
+
+### 7c. Automatischer Hintergrund-Scan
+- Beim Starten der App kurz im Hintergrund prüfen ob sich etwas Wesentliches geändert hat
+- Lautlos, ohne Lüfter, ohne Wartezeit
+- Wenn Änderungen erkannt werden: dezenter Hinweis "3 neue Programme erkannt — Nachscan empfohlen"
+
+### 7d. Scandaten übergreifend nutzen
+- Die Speichergrössen-Daten sollen auch vom Bloatware-Scanner, Software-Audit und der Bereinigung verwendet werden
+- Kein Bereich muss separat scannen was ein anderer Bereich schon weiss
+
+**Status:** Neu — Planung (Umsetzung nach Issue #2/#3)
+
+---
+
+## 8. Intelligenter Bloatware-Scanner
+
+**Simons Idee:** Der Scanner braucht Intelligenz. Nicht-zertifizierte Software (wie Advanced IP Scanner) ist NICHT automatisch Bloatware. Aber zertifizierte Software (wie Avast, Reimage) KANN trotzdem Scam sein. "System ist sauber" ist unrealistisch — der Scan soll ehrlich sein. Ähnliche Funktion wie Malwarebytes, nur seriös.
+
+**Was wir daraus machen:**
+
+### 8a. 5-Stufen-Bewertung (statt Ja/Nein)
+Jede App bekommt eine klare Einstufung:
+
+| Stufe | Farbe | Bedeutung | Beispiel |
+|-------|-------|-----------|----------|
+| **Vertrauenswürdig** | Grün | Bekannter Hersteller, sauber | Firefox, 7-Zip, VLC |
+| **Nicht zertifiziert** | Blau | Unbekannt, aber nicht gefährlich | Advanced IP Scanner |
+| **Fragwürdig** | Gelb | Zertifiziert aber aggressive Werbung/Datensammlung | Avast, McAfee |
+| **Bloatware** | Orange | Vorinstallierter Müll, frisst nur Platz | Hersteller-Trialware |
+| **Risiko** | Rot | Bekannte Sicherheitsprobleme oder Scam-Verhalten | Reimage Repair, Driver Updater |
+
+### 8b. "Was macht dieses Programm eigentlich?"
+- Bei jeder App eine kurze, verständliche Beschreibung
+- "Dieses Programm macht X. Du brauchst es für Y."
+- Oder: "Dieses Programm wurde von deinem PC-Hersteller vorinstalliert. Du hast es noch nie benutzt."
+
+### 8c. Ressourcen-Verbrauch pro App
+- Welche Apps fressen am meisten Festplattenplatz (nicht nur Installation, auch Cache und Daten)?
+- Welche Apps starten heimlich mit Windows und verlangsamen den Start?
+- Welche Apps laufen im Hintergrund ohne dass man es merkt?
+- Eine Art "Stromrechnung" für jede App
+
+### 8d. Hintergrund-Aktivität aufdecken
+- "Diese App hat heute 47 Mal ins Internet gesendet, obwohl du sie gar nicht geöffnet hast"
+- Ergänzung zum Netzwerk-Monitor: Welche App steckt hinter welcher Verbindung?
+- Ist diese Verbindung nötig oder sammelt die App nur Daten?
+
+### 8e. Microsoft-Store Apps einbeziehen
+- Nicht nur klassisch installierte Programme, sondern auch alle Apps aus dem Microsoft Store scannen
+- Vollständige Übersicht über ALLES was auf dem System installiert ist
+
+### 8f. Ehrliche Ergebnisse
+- Nie "System ist sauber" anzeigen wenn es das nicht ist
+- Stattdessen ehrliche Zusammenfassung: "23 Programme geprüft — 18 vertrauenswürdig, 3 nicht zertifiziert, 2 fragwürdig"
+- Transparenz: WARUM wurde eine App so eingestuft?
+
+**Status:** Neu — Planung
+
+---
+
+## 9. Apps-Kontrollzentrum (ersetzt den "Updates"-Tab)
+
+**Simons Idee:** Der "Updates"-Tab soll zu einem "Apps"-Tab umgebaut werden. Alle installierten Apps auf einen Blick, direkt deinstallieren können, Update-Verfügbarkeit anzeigen. Treiber-Bereich entfernen — stattdessen: Hersteller erkennen, Seriennummer auslesen, direkt zum richtigen Treiber-Tool verlinken.
+
+**Was wir daraus machen:**
+
+### 9a. Alle Apps auf einen Blick
+- Komplette Liste aller installierten Programme und Microsoft-Store Apps
+- Sortierung nach Name, Grösse, Installationsdatum, letzte Nutzung
+- Automatische Gruppierung: Produktivität, Unterhaltung, System-Tools, Spiele, Sicherheit
+
+### 9b. Direkte Deinstallation
+- Programme direkt aus der App heraus deinstallieren — kein Umweg über die Windows-Einstellungen
+- Vorher anzeigen was entfernt wird (Grösse, zugehörige Daten)
+- Nach der Deinstallation prüfen ob Reste übrig geblieben sind
+
+### 9c. Update-Verfügbarkeit pro App
+- Bei jeder App anzeigen ob ein Update vorhanden ist
+- "Firefox 124.0 installiert — Version 126.0 verfügbar"
+- Ein-Klick-Update direkt aus der App
+
+### 9d. Vergessene Apps finden
+- "Diese 12 Programme hast du seit über 6 Monaten nicht mehr benutzt — zusammen belegen sie 8 GB"
+- Du entscheidest: behalten, deinstallieren, oder ignorieren
+
+### 9e. Aufräumen ohne Deinstallation
+- Manche Apps sammeln riesige Cache-Ordner an (Browser, Spotify, Teams, Discord)
+- "Spotify belegt 2.1 GB — davon sind 1.8 GB Cache. Soll ich den Cache leeren?"
+- Platz zurückgewinnen ohne die App zu verlieren
+
+### 9f. Neuinstallations-Helfer
+- Liste aller installierten Programme exportieren
+- Bei einem neuen PC oder nach einer Windows-Neuinstallation: Checkliste was du wieder brauchst
+
+### 9g. Treiber → Hersteller-Links
+Statt einem eigenen Treiber-Bereich (der nie zuverlässig war):
+- **Hersteller erkennen:** "Du hast ein Asus VivoBook mit Intel Core i7 und Nvidia RTX 4060"
+- **Direkte Links:** Zum Intel Treiber- und Support-Assistenten, zur Nvidia App, zur Asus-Support-Seite
+- **Empfehlung:** "Für Intel-Treiber verwende den Intel Assistenten — der Hersteller (Asus) kommt oft später mit Updates"
+- **Seriennummer auslesen:** Wird automatisch angezeigt — kein Laptop umdrehen mehr nötig
+- **Aufklärung:** Warum Hersteller-Updates besser sind als Dritt-Tools
+
+**Status:** Neu — Planung
+
+---
+
+## 10. System-Profil — Dein Gerät auf einen Blick
+
+**Idee:** Alle Informationen über deinen PC an einem Ort — praktisch wenn du den Support anrufen musst oder Treiber suchst.
+
+**Was drin ist:**
+
+### 10a. Hardware-Übersicht
+- Hersteller und Modell (z.B. "Asus VivoBook Pro 16")
+- Prozessor (z.B. "Intel Core i7-13700H")
+- Grafikkarte (z.B. "Nvidia RTX 4060 Laptop")
+- Arbeitsspeicher (z.B. "32 GB DDR5")
+- Festplatten (z.B. "1 TB NVMe SSD — Samsung 980 Pro")
+
+### 10b. Seriennummer und Garantie
+- Seriennummer automatisch auslesen — kein Laptop umdrehen
+- Wenn möglich: Direkter Link zur Garantieprüfung beim Hersteller
+- Windows-Produktschlüssel (falls mal nötig)
+
+### 10c. Hersteller-Links
+- Direkter Link zur Support-Seite deines Herstellers
+- Link zum Treiber-Download für dein Modell
+- Link zum passenden Treiber-Tool (Intel Assistent, Nvidia App, AMD Software)
+
+### 10d. System-Zusammenfassung
+- "Dein System auf einen Blick" als Karte im Dashboard
+- Alles was der Support am Telefon fragt, ist schon da
+- Exportierbar als Text oder PDF (für Support-Anfragen)
+
+**Status:** Neu — Planung
 
 ---
 
@@ -209,13 +336,3 @@ Gute Umsetzung, jedoch ist das Privacy-Dashboard für einen Laien nicht hilfreic
 **Simons Wunsch:** Das Änderungsprotokoll soll zu einer detaillierten Release-Note-Datei aufgewertet werden. Alle Ursachen und Lösungen müssen festgehalten werden, damit nachvollziehbar ist warum Probleme auch nach mehreren Versuchen bestehen bleiben.
 
 **Status:** Offen — wird bei der nächsten grösseren Überarbeitung umgesetzt
-
----
-
-# Prioritäten-Reihenfolge
-
-| Prio | Issue | Status |
-|------|-------|--------|
-| 1 | Scandaten + Ordnergrössen (#2 + #3) | Neuer Fix nach Tiefenanalyse — wartet auf Simons Test |
-| 2 | Privacy Dashboard (#4) | Überarbeitung geplant — anwenderfreundlicher gestalten |
-| 3 | PDF Vollansicht (#5) | Offen — Planung und Umsetzung |
