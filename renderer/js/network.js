@@ -27,6 +27,7 @@ export class NetworkView {
         this._activeScanProgress = null;
         this._activeScanRunning = false;
         this._expandedDevices = new Set();
+        this._deviceFilter = '';
         this._setupScanProgressListener();
     }
 
@@ -356,13 +357,19 @@ export class NetworkView {
 
     _renderScanProgress() {
         const p = this._activeScanProgress;
-        if (!p) return '<span>Scan wird vorbereitet...</span>';
+        const spinner = '<span class="network-scan-spinner"></span>';
+        if (!p) return `${spinner}<span>Scan wird vorbereitet...</span><div class="network-progress-bar network-progress-indeterminate"><div class="network-progress-fill"></div></div>`;
         const phaseLabels = { init: 'Vorbereitung', ping: 'Ping Sweep', arp: 'MAC-Adressen', ports: 'Port-Scan', shares: 'SMB-Freigaben', vendor: 'Hersteller-Erkennung (IEEE)', done: 'Abgeschlossen' };
         const label = phaseLabels[p.phase] || p.phase;
-        const pct = p.total > 0 ? Math.round((p.current / p.total) * 100) : 0;
-        return `<span>${label}${p.total > 0 ? ` (${p.current}/${p.total})` : ''}</span>
-            ${p.total > 0 ? `<div class="network-progress-bar"><div class="network-progress-fill" style="width:${pct}%"></div></div>` : ''}
-            <span style="font-size:11px;color:var(--text-muted)">${this._esc(p.message || '')}</span>`;
+        if (p.total > 0) {
+            const pct = Math.round((p.current / p.total) * 100);
+            return `${spinner}<span>${label} (${p.current}/${p.total})</span>
+                <div class="network-progress-bar"><div class="network-progress-fill" style="width:${pct}%"></div></div>
+                <span class="network-progress-msg">${this._esc(p.message || '')}</span>`;
+        }
+        return `${spinner}<span>${label}</span>
+            <div class="network-progress-bar network-progress-indeterminate"><div class="network-progress-fill"></div></div>
+            <span class="network-progress-msg">${this._esc(p.message || '')}</span>`;
     }
 
     _renderLocalDevices() {
@@ -373,8 +380,8 @@ export class NetworkView {
         const toolbar = `<div class="network-devices-toolbar">
             <button class="network-btn" id="network-scan-active" ${this._activeScanRunning ? 'disabled' : ''}>${this._activeScanRunning ? 'Scan läuft...' : 'Netzwerk scannen'}</button>
             <button class="network-btn network-btn-secondary" id="network-scan-passive" ${this._activeScanRunning ? 'disabled' : ''} title="Schneller passiver Scan (nur ARP-Tabelle)">Schnellscan</button>
+            ${devices.length > 0 ? `<input type="text" class="network-search" id="network-device-filter" placeholder="Filtern..." value="${this._esc(this._deviceFilter || '')}" style="max-width:180px">` : ''}
             ${hasActiveScan ? `<span class="network-timestamp">Subnetz: ${this._esc(this._activeScanResult.subnet)} | Eigene IP: ${this._esc(this._activeScanResult.localIP)}</span>` : ''}
-            ${devices.length > 0 ? `<span class="network-timestamp">${devices.length} Gerät${devices.length !== 1 ? 'e' : ''}</span>` : ''}
             ${hasActiveScan ? `<button class="network-btn network-btn-secondary" id="network-export-devices">Export CSV</button>` : ''}
         </div>`;
 
@@ -391,8 +398,9 @@ export class NetworkView {
         }
 
         let filtered = devices;
-        if (this.filter) {
-            const q = this.filter.toLowerCase();
+        const filterQuery = this._deviceFilter || '';
+        if (filterQuery) {
+            const q = filterQuery.toLowerCase();
             filtered = filtered.filter(d =>
                 (d.ip || '').includes(q) || (d.mac || '').toLowerCase().includes(q) ||
                 (d.hostname || '').toLowerCase().includes(q) || (d.vendor || '').toLowerCase().includes(q) ||
@@ -417,48 +425,45 @@ export class NetworkView {
                 <div class="netinv-summary-types">${summaryBadges}</div>
             </div>`;
 
-            // Geräte-Karten
-            const cards = filtered.map(d => {
-                const portBadges = (d.openPorts || []).slice(0, 6).map(p =>
+            // Kompakte Tabelle (statt Kacheln)
+            const rows = filtered.map(d => {
+                const portBadges = (d.openPorts || []).slice(0, 4).map(p =>
                     `<span class="network-port-badge">${p.port} <small>${this._esc(p.label)}</small></span>`
                 ).join(' ');
-                const morePortsHint = (d.openPorts || []).length > 6 ? `<span class="network-port-badge">+${d.openPorts.length - 6}</span>` : '';
-                const localBadge = d.isLocal ? '<span class="network-local-badge">Eigener PC</span>' : '';
+                const morePortsHint = (d.openPorts || []).length > 4 ? `<span class="network-port-badge">+${d.openPorts.length - 4}</span>` : '';
+                const localBadge = d.isLocal ? ' <span class="network-local-badge">Du</span>' : '';
                 const rttClass = d.rtt < 5 ? 'network-rtt-fast' : d.rtt < 50 ? 'network-rtt-medium' : 'network-rtt-slow';
-                const typeLabel = d.deviceLabel || 'Unbekanntes Gerät';
+                const typeLabel = d.deviceLabel || 'Unbekannt';
                 const typeIcon = this._deviceIcon(d.deviceIcon || 'help-circle');
-                const shares = (d.shares || []).length > 0
-                    ? `<div class="netinv-card-row"><span class="netinv-label">Freigaben</span><span>${d.shares.map(s => this._esc(s)).join(', ')}</span></div>`
-                    : '';
+                const name = d.hostname || d.ip;
 
-                return `<div class="netinv-card" data-device-toggle="${this._esc(d.ip)}">
-                    <div class="netinv-card-header">
-                        <div class="netinv-card-icon netinv-type-${this._esc(d.deviceType || 'unknown')}">${typeIcon}</div>
-                        <div class="netinv-card-title">
-                            <div class="netinv-card-name">${this._esc(d.hostname) || this._esc(d.ip)} ${localBadge}</div>
-                            <div class="netinv-card-type">${this._esc(typeLabel)}${d.vendor ? ` — ${this._esc(d.vendor)}` : ''}</div>
-                        </div>
-                        <div class="netinv-card-rtt"><span class="${rttClass}">${d.rtt || 0} ms</span></div>
-                    </div>
-                    <div class="netinv-card-body">
-                        <div class="netinv-card-row"><span class="netinv-label">IP</span><span class="network-ip">${this._esc(d.ip)}</span></div>
-                        <div class="netinv-card-row"><span class="netinv-label">MAC</span><span style="font-family:monospace;font-size:11px">${this._esc(d.mac) || '—'}</span></div>
-                        ${d.os ? `<div class="netinv-card-row"><span class="netinv-label">OS</span><span>${this._esc(d.os)}</span></div>` : ''}
-                        ${d.openPorts?.length > 0 ? `<div class="netinv-card-row"><span class="netinv-label">Ports</span><div>${portBadges}${morePortsHint}</div></div>` : ''}
-                        ${shares}
-                    </div>
-                    <div class="netinv-card-footer">
-                        <button class="network-btn-small" data-detail-ports="${this._esc(d.ip)}">Alle Ports scannen</button>
-                        ${d.openPorts?.some(p => p.port === 445) ? `<button class="network-btn-small" data-detail-shares="${this._esc(d.ip)}">SMB-Freigaben</button>` : ''}
-                    </div>
-                </div>`;
+                return `<tr class="network-device-row">
+                    <td class="netinv-col-icon"><span class="netinv-type-dot netinv-type-${this._esc(d.deviceType || 'unknown')}">${typeIcon}</span></td>
+                    <td class="netinv-col-name"><span class="netinv-device-name">${this._esc(name)}${localBadge}</span>${d.hostname ? `<span class="netinv-device-ip">${this._esc(d.ip)}</span>` : ''}</td>
+                    <td class="netinv-col-type">${this._esc(typeLabel)}</td>
+                    <td class="netinv-col-vendor">${this._esc(d.vendor) || '<span style="color:var(--text-muted)">—</span>'}</td>
+                    <td class="netinv-col-mac" style="font-family:monospace;font-size:11px">${this._esc(d.mac) || '—'}</td>
+                    <td class="netinv-col-ports">${portBadges}${morePortsHint}</td>
+                    <td class="netinv-col-rtt"><span class="${rttClass}">${d.rtt || 0} ms</span></td>
+                </tr>`;
             }).join('');
 
             return `<div class="network-devices-section">
                 ${toolbar}
                 ${progressBar}
                 ${summary}
-                <div class="netinv-grid">${cards}</div>
+                <table class="network-table netinv-table">
+                    <thead><tr>
+                        <th style="width:32px"></th>
+                        <th>Name</th>
+                        <th>Typ</th>
+                        <th>Hersteller</th>
+                        <th>MAC-Adresse</th>
+                        <th>Ports</th>
+                        <th style="width:60px">Ping</th>
+                    </tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
             </div>`;
         }
 
@@ -702,6 +707,17 @@ export class NetworkView {
                 this.render();
             };
         });
+
+        // Device filter
+        const deviceFilterInput = this.container.querySelector('#network-device-filter');
+        if (deviceFilterInput) {
+            deviceFilterInput.oninput = () => {
+                this._deviceFilter = deviceFilterInput.value;
+                this.render();
+                const restored = this.container.querySelector('#network-device-filter');
+                if (restored) { restored.focus(); restored.selectionStart = restored.selectionEnd = restored.value.length; }
+            };
+        }
 
         // Active network scan
         const scanActiveBtn = this.container.querySelector('#network-scan-active');

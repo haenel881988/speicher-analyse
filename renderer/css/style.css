@@ -4620,9 +4620,14 @@ body {
 .network-diff-up { color: var(--warning, #ffa502); background: rgba(255, 165, 2, 0.1); }
 .network-diff-down { color: var(--success, #2ed573); background: rgba(46, 213, 115, 0.1); }
 .network-diff-new { font-size: 11px; color: var(--accent-text, #c4b5fd); background: rgba(108, 92, 231, 0.15); padding: 2px 6px; border-radius: 4px; cursor: help; }
-.network-scan-progress { display: flex; align-items: center; gap: 12px; padding: 8px 12px; background: var(--bg-secondary); border-radius: 8px; margin-bottom: 8px; font-size: 13px; }
-.network-progress-bar { flex: 1; height: 6px; background: var(--bg-tertiary); border-radius: 3px; overflow: hidden; min-width: 100px; }
+.network-scan-progress { display: flex; align-items: center; gap: 10px; padding: 10px 16px; background: linear-gradient(135deg, rgba(108,92,231,0.15), rgba(108,92,231,0.25)); border: 1px solid rgba(108,92,231,0.35); border-radius: 8px; margin-bottom: 12px; font-size: 13px; font-weight: 500; color: var(--text-primary); }
+.network-scan-spinner { width: 16px; height: 16px; border: 2px solid rgba(108,92,231,0.3); border-top-color: var(--accent, #6c5ce7); border-radius: 50%; animation: network-spin 0.8s linear infinite; flex-shrink: 0; }
+@keyframes network-spin { to { transform: rotate(360deg); } }
+.network-progress-bar { flex: 1; height: 6px; background: var(--bg-tertiary); border-radius: 3px; overflow: hidden; min-width: 80px; }
 .network-progress-fill { height: 100%; background: var(--accent, #6c5ce7); border-radius: 3px; transition: width 0.3s; }
+.network-progress-indeterminate .network-progress-fill { width: 30% !important; animation: network-indeterminate 1.5s ease-in-out infinite; }
+@keyframes network-indeterminate { 0% { transform: translateX(-100%); } 100% { transform: translateX(400%); } }
+.network-progress-msg { font-size: 11px; color: var(--text-secondary); white-space: nowrap; }
 .network-port-badge { display: inline-block; padding: 1px 6px; margin: 1px 2px; border-radius: 3px; font-size: 11px; background: var(--bg-tertiary); border: 1px solid var(--border); }
 .network-port-badge small { color: var(--text-muted); }
 .network-local-badge { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 10px; background: rgba(108, 92, 231, 0.15); color: var(--accent-text, #c4b5fd); margin-left: 4px; }
@@ -4649,28 +4654,16 @@ body {
     color: var(--text-secondary); border: 1px solid var(--border-color);
 }
 
-.netinv-grid {
-    display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px;
-}
-
-.netinv-card {
-    background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px;
-    overflow: hidden; transition: border-color 0.15s;
-}
-.netinv-card:hover { border-color: var(--accent, #6c5ce7); }
-
-.netinv-card-header {
-    display: flex; align-items: center; gap: 10px; padding: 12px 14px;
-    border-bottom: 1px solid var(--border-color);
-}
-.netinv-card-icon {
-    width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center;
-    justify-content: center; flex-shrink: 0;
-    background: var(--bg-tertiary, var(--bg-primary)); color: var(--text-secondary);
-}
-.netinv-card-icon svg { width: 20px; height: 20px; }
-.netinv-type-pc .netinv-card-icon,
-.netinv-type-local { background: rgba(108, 92, 231, 0.12); color: var(--accent-text, #c4b5fd); }
+/* Kompakte Geräte-Tabelle */
+.netinv-table { width: 100%; }
+.netinv-table th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); padding: 6px 8px; }
+.netinv-table td { padding: 6px 8px; font-size: 12px; vertical-align: middle; }
+.netinv-table tbody tr { cursor: pointer; transition: background 0.1s; }
+.netinv-table tbody tr:hover { background: var(--bg-secondary); }
+.netinv-col-icon { width: 32px; text-align: center; }
+.netinv-type-dot { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 6px; }
+.netinv-type-dot svg { width: 16px; height: 16px; }
+.netinv-type-pc, .netinv-type-local { background: rgba(108, 92, 231, 0.12); color: var(--accent-text, #c4b5fd); }
 .netinv-type-router { background: rgba(0, 206, 209, 0.12); color: #00ced1; }
 .netinv-type-printer { background: rgba(255, 165, 0, 0.12); color: #ffa500; }
 .netinv-type-nas { background: rgba(46, 213, 115, 0.12); color: #2ed573; }
@@ -4680,27 +4673,19 @@ body {
 .netinv-type-server { background: rgba(155, 89, 182, 0.12); color: #9b59b6; }
 .netinv-type-mobile { background: rgba(46, 213, 115, 0.12); color: #2ed573; }
 .netinv-type-vm { background: rgba(149, 165, 166, 0.12); color: #95a5a6; }
-
-.netinv-card-title { flex: 1; min-width: 0; }
-.netinv-card-name {
-    font-size: 13px; font-weight: 600; color: var(--text-primary);
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.netinv-card-type { font-size: 11px; color: var(--text-secondary); margin-top: 1px; }
-.netinv-card-rtt { font-size: 12px; font-weight: 500; white-space: nowrap; }
-
-.netinv-card-body { padding: 8px 14px; }
-.netinv-card-row {
-    display: flex; align-items: baseline; gap: 8px; padding: 3px 0;
-    font-size: 12px; color: var(--text-primary);
-}
-.netinv-label {
-    width: 60px; flex-shrink: 0; color: var(--text-secondary); font-size: 11px;
-}
-
-.netinv-card-footer {
-    display: flex; gap: 6px; padding: 8px 14px; border-top: 1px solid var(--border-color);
-}
+.netinv-type-media { background: rgba(230, 126, 34, 0.12); color: #e67e22; }
+.netinv-type-console { background: rgba(231, 76, 60, 0.12); color: #e74c3c; }
+.netinv-type-sbc { background: rgba(39, 174, 96, 0.12); color: #27ae60; }
+.netinv-type-network { background: rgba(52, 73, 94, 0.2); color: #7f8c8d; }
+.netinv-type-webdevice { background: rgba(52, 152, 219, 0.12); color: #3498db; }
+.netinv-type-unknown { background: var(--bg-tertiary); color: var(--text-muted); }
+.netinv-device-name { font-weight: 600; color: var(--text-primary); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
+.netinv-device-ip { font-size: 11px; color: var(--text-muted); font-family: monospace; }
+.netinv-col-type { white-space: nowrap; color: var(--text-secondary); }
+.netinv-col-vendor { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.netinv-col-mac { white-space: nowrap; }
+.netinv-col-ports { max-width: 220px; }
+.netinv-col-rtt { text-align: right; white-space: nowrap; font-weight: 500; }
 
 /* Network Monitor: Header Controls */
 .network-header-controls { display: flex; align-items: center; gap: 12px; }

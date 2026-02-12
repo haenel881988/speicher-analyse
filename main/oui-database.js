@@ -475,19 +475,14 @@ function classifyDevice(device) {
     }
 
     // 2. Port-basierte Erkennung (spezifische Geräte-Ports)
-    for (const [portStr, type] of Object.entries(PORT_TYPE_HINTS)) {
-        if (ports.has(Number(portStr))) {
-            if (type === 'printer' && (ports.has(9100) || ports.has(631) || ports.has(515))) {
-                return _typeToResult('printer', vendor);
-            }
-            if (type === 'nas') {
-                return _typeToResult('nas', vendor);
-            }
-            if (type === 'camera') {
-                return _typeToResult('camera', vendor);
-            }
-        }
-    }
+    //    Drucker: 9100 (RAW Print) = starkes Signal. 631 (IPP) = mittel. 515 (LPD) allein = zu schwach.
+    if (ports.has(9100)) return _typeToResult('printer', vendor);
+    if (ports.has(631) && ports.has(515)) return _typeToResult('printer', vendor);
+    if (ports.has(631) && !ports.has(80)) return _typeToResult('printer', vendor);
+    // NAS: Synology-Ports 5000/5001
+    if (ports.has(5000) || ports.has(5001)) return _typeToResult('nas', vendor);
+    // Kamera: RTSP, Dahua, ONVIF
+    if (ports.has(554) || ports.has(8554) || ports.has(37777)) return _typeToResult('camera', vendor);
 
     // 3. Hostname-basierte Heuristik (VOR OS-Fallback — sonst erkennt "Linux/macOS" alles als PC!)
     const hn = hostname.toLowerCase();
