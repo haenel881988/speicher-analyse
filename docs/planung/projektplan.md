@@ -1,33 +1,28 @@
-# Speicher Analyse - Projektplan
+# Speicher Analyse - Versionshistorie
 
-## Status
+> **Dieses Dokument ist ein reines Nachschlagewerk.** Es dokumentiert was in welcher Version umgesetzt wurde.
+> Für aktuelle Planung, Bugs und nächste Schritte → [`docs/issues/issue.md`](../issues/issue.md)
 
-| Version | Status | Beschreibung |
-|---------|--------|--------------|
-| v3.5 | Fertig | Grundfunktionen (Scan, Tree, Treemap, Dateitypen, Duplikate, Cleanup, Registry) |
-| v4.0 | Fertig | Bloatware, Optimizer, Updates, Dashboard, Autostart, Services, async Registry |
-| v5.0 | Fertig | Hybrid UI (Toolbar+Sidebar), Smart Exclusions, Auto-Scan, Clickable Dateitypen, Top-Files |
-| v5.1 | Fertig | Umlaute, Pin-Toggle, Worker-Terminierung, sfc/DISM, Alte-Dateien-Kontext |
-| v5.2 | Fertig | Sidebar-Fix, Auto-Scan, Performance, Optimizer-Changelog, Treiber-Info, Update-Verifizierung |
-| v6.0 | Fertig | Explorer Phase 1: Adressleiste, Navigation, Dateiliste, Sortierung, Quick-Access, Kontextmenüs |
-| v6.1 | Fertig | Sicherheits-Audit (55 Fixes), Graceful Degradation (Win10/11), Batterie-Awareness |
-| v6.2 | Fertig | Explorer Phase 2: Dual-Panel, Tabs, Omnibar-Suche (3 Ebenen), Batch-Rename |
-| v6.3 | Fertig | Explorer Phase 3: Terminal, System-Tray, Globaler Hotkey, Datei-Tags, Shell-Integration |
-| v7.0 | Fertig | Netzwerk-Monitor, Privacy-Dashboard, Software-Audit, S.M.A.R.T., System-Score |
-| v7.1 | Fertig | Monaco Editor, PDF/DOCX/XLSX-Viewer, Sidebar-Gruppen, Omnibar-Fixes |
-| v7.2 | Fertig | Governance, WCAG-Kontrast-Fixes, Terminal Multi-Shell, Versions-Fix |
-| v7.3 | Fertig | Terminal: node-pty + xterm.js (echtes PTY), CWD-Sync |
-| v7.4 | Fertig | Session-Persistenz, PreferencesStore, Energieverwaltung, Einstellungen-Rewrite |
-| v7.5 | Fertig | Explorer-Ordnergrößen aus Scan-Daten, Proportionsbalken, Session-UI-State-Fix |
-| v8.0 | Fertig | Swiss Security Suite: Hochrisiko-Alarm, Geräte-Erkennung, Sicherheits-Check, PDF-Report |
-| v8.5 | Geplant | Scandaten-Fix + Intelligente Scandaten (Delta-Scan, Verlauf, Hintergrund-Scan) |
-| v9.0 | Geplant | Apps-Kontrollzentrum + Intelligenter Bloatware-Scanner + System-Profil |
-| v9.5 | Geplant | Automatisierung, Browser-Bereinigung, Backup, Undo-Log |
-| v10.0 | Vision | KI-Integration (BYOB: Cloud + Ollama), Notion-Modul |
-| v1.0.0 | Vision | Erster stabiler Release (Semver), Installer, Auto-Update, Lizenzierung |
-| v1.5.0 | Vision | Plugin-System (externe Module laden) |
+## Versionen
 
-> **Neue Roadmap-Abschnitte ab v8.5:** Basierend auf Simons Feedback vom 12.02.2026 — Issues #7-#10
+| Version | Beschreibung |
+|---------|--------------|
+| v3.5 | Grundfunktionen (Scan, Tree, Treemap, Dateitypen, Duplikate, Cleanup, Registry) |
+| v4.0 | Bloatware, Optimizer, Updates, Dashboard, Autostart, Services, async Registry |
+| v5.0 | Hybrid UI (Toolbar+Sidebar), Smart Exclusions, Auto-Scan, Clickable Dateitypen, Top-Files |
+| v5.1 | Umlaute, Pin-Toggle, Worker-Terminierung, sfc/DISM, Alte-Dateien-Kontext |
+| v5.2 | Sidebar-Fix, Auto-Scan, Performance, Optimizer-Changelog, Treiber-Info, Update-Verifizierung |
+| v6.0 | Explorer Phase 1: Adressleiste, Navigation, Dateiliste, Sortierung, Quick-Access, Kontextmenüs |
+| v6.1 | Sicherheits-Audit (55 Fixes), Graceful Degradation (Win10/11), Batterie-Awareness |
+| v6.2 | Explorer Phase 2: Dual-Panel, Tabs, Omnibar-Suche (3 Ebenen), Batch-Rename |
+| v6.3 | Explorer Phase 3: Terminal, System-Tray, Globaler Hotkey, Datei-Tags, Shell-Integration |
+| v7.0 | Netzwerk-Monitor, Privacy-Dashboard, Software-Audit, S.M.A.R.T., System-Score |
+| v7.1 | Monaco Editor, PDF/DOCX/XLSX-Viewer, Sidebar-Gruppen, Omnibar-Fixes |
+| v7.2 | Governance, WCAG-Kontrast-Fixes, Terminal Multi-Shell, Versions-Fix |
+| v7.3 | Terminal: node-pty + xterm.js (echtes PTY), CWD-Sync |
+| v7.4 | Session-Persistenz, PreferencesStore, Energieverwaltung, Einstellungen-Rewrite |
+| v7.5 | Explorer-Ordnergrößen aus Scan-Daten, Proportionsbalken, Session-UI-State-Fix |
+| v8.0 | Swiss Security Suite: Hochrisiko-Alarm, Geräte-Erkennung, Sicherheits-Check, PDF-Report |
 
 Historische Pläne: siehe [`archiv/projektplan_v3-v5.md`](archiv/projektplan_v3-v5.md)
 
@@ -181,248 +176,6 @@ Historische Pläne: siehe [`archiv/projektplan_v3-v5.md`](archiv/projektplan_v3-
 
 ---
 
-## v7.3 - WCAG-Vertiefung & Panel-Customizing (Geplant)
-
-### WCAG 2.2 Vertiefung
-
-User meldet: Kontrast stimmt noch immer nicht überall. Umfassender Audit nötig.
-
-| Aufgabe | Beschreibung | Aufwand |
-|---------|-------------|---------|
-| **Vollständiger WCAG-Audit** | Alle Views systematisch prüfen (Dashboard, Duplikate, Registry, etc.) | Mittel |
-| **Fokus-Ringe** | Sichtbare Keyboard-Focus-Indikatoren für alle interaktiven Elemente | Klein |
-| **aria-Attribute** | Screen-Reader-Support für dynamische Inhalte (live regions, labels) | Klein |
-| **Farbenblindheit** | Kontrast-Prüfung auch für Deuteranopie/Protanopie-Szenarien | Klein |
-
-### Resizable Panels (Vision: Fenster-Individualisierung)
-
-| Feature | Beschreibung | Aufwand |
-|---------|-------------|---------|
-| **Terminal-Resize** | Drag-Handle zum Vergrößern/Verkleinern des Terminal-Panels | Klein |
-| **Dual-Panel-Resize** | Resize-Handle zwischen linkem und rechtem Panel | Klein |
-| **Explorer-Sidebar-Resize** | Breitenverstellung der Sidebar per Drag | Klein |
-| **Panel-Collapse** | Panels komplett ein-/ausklappbar mit Animation | Klein |
-
-### Terminal-Emulation (xterm.js + node-pty)
-
-| Feature | Beschreibung | Aufwand |
-|---------|-------------|---------|
-| **xterm.js** | Echte Terminal-Emulation (ANSI-Farben, Cursor-Steuerung, Scrollback) | Mittel |
-| **node-pty** | Pseudo-Terminal für native Shell-Sitzung | Mittel |
-| **Claude CLI** | Automatisch verfügbar durch echte Shell (wenn installiert) | Null |
-| **Interaktive Befehle** | Programme wie `npm`, `git`, `top` funktionieren korrekt | Null |
-
----
-
-## v8.5 - Scandaten-Fix + Intelligente Scandaten (Geplant)
-
-> Entspricht Issue #2, #3, #7 — Fundament für alle weiteren Features
-
-### Phase 1: Scandaten überall korrekt speichern + wiederherstellen (Issue #2 + #3)
-
-| Feature | Beschreibung | Aufwand |
-|---------|-------------|---------|
-| **Vollständige Datenspeicherung** | ALLE Scan-Daten (Ordner + Dateien) werden beim Schliessen gespeichert | Mittel |
-| **Automatische Wiederherstellung** | Nach dem Öffnen sind alle Daten sofort verfügbar (kein neuer Scan) | Mittel |
-| **Bereichsübergreifend** | Duplikate, Vergleich, Suche, Dashboard — alles funktioniert nach Neustart | Mittel |
-| **Multi-Laufwerk** | Scan-Daten für alle Laufwerke getrennt gespeichert und wiederherstellbar | Klein |
-
-### Phase 2: Intelligente Scandaten (Issue #7)
-
-| Feature | Beschreibung | Aufwand |
-|---------|-------------|---------|
-| **Delta-Scan** | Nur Änderungen seit dem letzten Scan nachscannen (schneller, leiser) | Groß |
-| **Scan-Verlauf** | Speicherplatz-Trend über Zeit ("Waage für die Festplatte") | Mittel |
-| **Hintergrund-Scan** | Beim App-Start leise prüfen ob sich etwas geändert hat | Mittel |
-| **Übergreifende Nutzung** | Scan-Daten werden von Bloatware, Audit, Bereinigung mitverwendet | Mittel |
-| **Smart-Trigger** | "3 neue Programme erkannt — Nachscan empfohlen" | Klein |
-
----
-
-## v9.0 - Apps-Kontrollzentrum + Intelligenter Bloatware-Scanner + System-Profil (Geplant)
-
-> Entspricht Issue #8, #9, #10 — die drei grossen neuen Features
-
-### Apps-Kontrollzentrum (ersetzt "Updates"-Tab) — Issue #9
-
-| Feature | Beschreibung | Aufwand |
-|---------|-------------|---------|
-| **Alle Apps** | Komplette Liste aller Programme + Microsoft-Store Apps | Mittel |
-| **Direkte Deinstallation** | Programme direkt deinstallieren (kein Umweg über Windows) | Mittel |
-| **Update-Check** | Pro App anzeigen ob ein Update verfügbar ist | Mittel |
-| **Vergessene Apps** | "12 Programme seit 6 Monaten unbenutzt — 8 GB belegt" | Klein |
-| **App-Cache aufräumen** | Cache/Temp pro App leeren ohne Deinstallation | Mittel |
-| **App-Gruppen** | Automatische Sortierung (Produktivität, Spiele, System, etc.) | Klein |
-| **Neuinstallations-Export** | App-Liste exportieren als Checkliste für neuen PC | Klein |
-| **Treiber → Hersteller-Links** | Intel Assistent, Nvidia App, Asus-Seite statt eigenem Treiber-Check | Mittel |
-
-### Intelligenter Bloatware-Scanner — Issue #8
-
-| Feature | Beschreibung | Aufwand |
-|---------|-------------|---------|
-| **5-Stufen-Bewertung** | Vertrauenswürdig / Nicht zertifiziert / Fragwürdig / Bloatware / Risiko | Groß |
-| **App-Beschreibungen** | "Was macht dieses Programm?" in einfacher Sprache | Mittel |
-| **Ressourcen-Verbrauch** | Festplatte, Autostart, Hintergrund-Aktivität pro App | Mittel |
-| **Hintergrund-Aktivität** | Welche Apps senden Daten ohne geöffnet zu sein? | Mittel |
-| **Microsoft-Store Apps** | Auch Store-Apps in den Scan einbeziehen | Klein |
-| **Ehrliche Ergebnisse** | Nie "sauber" sagen wenn es das nicht ist | Klein |
-
-### System-Profil — Issue #10
-
-| Feature | Beschreibung | Aufwand |
-|---------|-------------|---------|
-| **Hardware-Übersicht** | Hersteller, Modell, CPU, GPU, RAM, Festplatten | Klein |
-| **Seriennummer** | Automatisch auslesen — kein Laptop umdrehen | Klein |
-| **Hersteller-Links** | Support-Seite, Treiber-Download, Treiber-Tool | Klein |
-| **Garantie-Check** | Link zur Garantieprüfung beim Hersteller | Klein |
-| **Dashboard-Karte** | "Dein System auf einen Blick" | Klein |
-| **Export** | Als Text/PDF für Support-Anfragen | Klein |
-
----
-
-## v9.5 - Automatisierung & Erweiterte Features (Geplant)
-
-| Feature | Beschreibung | Aufwand |
-|---------|-------------|---------|
-| **Automatisierung** | Geplante Scans + Auto-Cleanup nach Regeln (Scheduler) | Mittel |
-| **Browser-Bereinigung** | Cache/Cookies/Verlauf für Chrome/Firefox/Edge gezielt löschen | Mittel |
-| **Einstellungs-Sync** | Export als JSON-Datei in OneDrive/NAS-Ordner → automatische Synchronisierung ohne Backend | Klein |
-| **Portable Modus** | App von USB-Stick startbar (Settings im App-Ordner statt %APPDATA%) | Klein |
-| **Backup / Sicherung** | Dateien/Ordner auf Netzlaufwerk, OneDrive, Google Drive Sync-Ordner sichern | Mittel |
-| **Undo-Log** | Trust-System Phase 3: Protokoll aller Aktionen mit Wiederherstellungsmöglichkeit | Mittel |
-
-### Einstellungs-Sync: Technischer Ansatz
-- Settings als `speicher-analyse-settings.json` exportierbar
-- Speicherort wählbar: OneDrive-Ordner, NAS-Pfad, beliebiger Sync-Ordner
-- Enthält: Theme, Sidebar-Status, Favoriten, Tags, Scan-Einstellungen
-- Beim Start: prüfe ob Sync-Datei neuer ist → Import-Angebot
-
-### Backup / Sicherung: Technischer Ansatz
-- Zielordner wählbar: lokaler Pfad, Netzlaufwerk (UNC), OneDrive/Google Drive Sync-Ordner
-- Inkrementelles Backup: nur geänderte Dateien (via Änderungsdatum + Dateigröße)
-- Node.js `fs.copyFile` / Streams für große Dateien
-- Zeitplanung optional via Windows Task Scheduler (`schtasks`)
-- Backup-Log mit Statistik (kopierte Dateien, Größe, Dauer)
-
----
-
-## v10.0 - KI-Integration (Vision)
-
-Basierend auf User-Vision "Bring Your Own Brain" (BYOB):
-
-| Feature | Beschreibung | Aufwand |
-|---------|-------------|---------|
-| **KI-Provider-Abstraktion** | `AiProvider` Interface mit austauschbaren Backends | Mittel |
-| **Cloud-Option** | OpenAI/Claude/Gemini API (Key in Electron safeStorage) | Mittel |
-| **Local-Option (Ollama)** | localhost:11434, automatische Modell-Erkennung | Mittel |
-| **Chat-UI** | Streaming-Responses, Kontext-Aktionen ("Erkläre diesen Registry-Key") | Groß |
-| **Notion-Modul** | Active Knowledge Board mit KI-Assistent pro Textblock | Groß |
-
-### Technischer Ansatz
-- Abstrakte `AiProvider`-Klasse mit `OllamaProvider` und `CloudProvider`
-- Beim Start: Prüfe ob Ollama läuft → Dropdown mit installierten Modellen
-- Falls nein: Button "Lokale KI einrichten" → Terminal-Modul
-- API-Keys verschlüsselt in Electron `safeStorage`
-- Streaming-Responses für Chat-UI
-
----
-
-## v1.0.0 - Erster stabiler Release (Semver)
-
-Ab hier Umstellung auf Semantic Versioning (Major.Minor.Patch):
-
-| Feature | Beschreibung |
-|---------|-------------|
-| **Installer** | NSIS oder electron-builder Installer (.exe + .msi) |
-| **Auto-Update** | electron-updater via GitHub Releases |
-| **Crash-Reporter** | Lokale Crash-Logs (kein Cloud-Upload) |
-| **Changelog** | Automatisch generiert aus Git-Commits |
-| **Code-Signing** | Optional: EV-Zertifikat gegen SmartScreen-Warnung |
-| **Offline-Lizenzierung** | Ed25519 Signatur-Prüfung (lizenz.key, offline-fähig) |
-
----
-
-## v1.5.0 - Plugin-System
-
-Modulare Erweiterbarkeit für externe Entwickler:
-
-| Komponente | Beschreibung |
-|------------|-------------|
-| **Plugin-API** | Definiertes Interface: registerTab(), registerContextMenu(), registerAnalyzer() |
-| **Plugin-Loader** | Dynamisches Laden aus `plugins/`-Ordner |
-| **Sandbox** | Plugins laufen isoliert (kein Zugriff auf Core-State) |
-| **Plugin-Store** | Lokaler Katalog (JSON), später optional Online-Verzeichnis |
-| **Beispiel-Plugins** | Git-Integration, Markdown-Preview, Bildkomprimierung |
-
----
-
-## Architektur-Überlegungen
-
-### Warum explorer.exe NICHT ersetzen?
-- `explorer.exe` = Dateimanager **+ Taskleiste + Startmenü + Systemtray + Desktop**
-- Ohne explorer.exe: kein Startmenü, kein Desktop, keine Taskleiste
-- Custom Windows Shell = enormer Aufwand, instabil, Update-Probleme
-- **Bessere Strategie:** Parallelbetrieb, Nutzer wählt selbst
-
-### Technische Basis
-- Electron gibt uns vollen Dateisystem-Zugang (fs, child_process)
-- Node.js streams für große Ordner (kein UI-Freeze)
-- Virtual scrolling für Ordner mit 100.000+ Dateien
-- Worker threads für Hintergrund-Operationen
-- PowerShell + WMI/CIM für System-Abfragen (kein wmic)
-
-### Aktuelle Modul-Struktur (Stand v7.2)
-```
-main/
-├── scanner.js + scanner-worker.js    # Disk-Scanner (Worker Thread)
-├── deep-search-worker.js             # Deep Search Worker (Ebene 3)
-├── file-ops.js                       # Dateioperationen (Trash, Delete, Copy, Move)
-├── duplicates.js + duplicate-worker.js  # Duplikat-Finder
-├── old-files.js                      # Alte Dateien
-├── cleanup.js                        # Cleanup-Kategorien
-├── registry.js                       # Registry-Cleaner
-├── autostart.js                      # Autostart-Manager
-├── services.js                       # Windows-Dienste
-├── bloatware.js                      # Bloatware-Erkennung
-├── optimizer.js                      # System-Optimierer
-├── updates.js                        # Update-Manager (Windows/Software/Treiber)
-├── drives.js                         # Laufwerke (Get-CimInstance)
-├── battery.js                        # Batterie-Status
-├── compat.js                         # System-Capabilities
-├── admin.js                          # Admin-Elevation + Session-Restore
-├── cmd-utils.js                      # Zentrale Befehlsausführung
-├── menu.js                           # Kontextmenüs
-├── export.js                         # CSV/PDF Export
-├── preview.js                        # Datei-Vorschau (Monaco/PDF/DOCX/XLSX)
-├── scan-compare.js                   # Scan-Vergleich
-├── exclusions.js                     # Smart Exclusions
-├── file-tags.js                      # Farb-Labels (JSON in %APPDATA%)
-├── tray.js                           # System-Tray Icon + Kontextmenü
-├── global-hotkey.js                  # Globaler Hotkey
-├── shell-integration.js              # Windows-Kontextmenü (HKCU)
-├── terminal.js                       # Multi-Shell Terminal (PS/CMD/WSL)
-├── privacy.js                        # Privacy-Dashboard
-├── smart.js                          # S.M.A.R.T. Festplatten-Gesundheit
-├── software-audit.js                 # Software-Audit + Korrelation
-├── network.js                        # Netzwerk-Monitor
-├── system-score.js                   # System-Score (0-100)
-├── main.js                           # Electron Entry
-├── ipc-handlers.js                   # IPC-Hub
-└── preload.js                        # Context Bridge
-```
-
-### Explorer-Vorteile die wir bieten
-1. **Schneller** - Virtual scrolling, kein COM-Overhead
-2. **Transparenter** - Keine versteckte Telemetrie, Open Source
-3. **Mächtiger** - Integrierte Analyse, Duplikate, Cleanup in einem Tool
-4. **Anpassbar** - Themes, Layouts, Shortcuts konfigurierbar
-5. **Dual-Panel** - Commander-Style für Power-User
-6. **Netzwerk-Sichtbarkeit** - Sehen welcher Prozess wohin Daten sendet
-7. **Code-Editor** - Monaco Editor für Text-/Code-Dateien direkt im Explorer
-8. **Dokument-Viewer** - PDF, DOCX, XLSX Vorschau ohne externe Programme
-
----
-
 ## User-Feedback Tracker
 
 > "Die vertikale Seite klappt sich automatisch ein/aus... NERVTÖTEND!"
@@ -465,7 +218,7 @@ main/
 > → Umgesetzt in v6.0 (Datei-Navigator mit Kontextmenüs, Farbcodierung, Leere-Ordner)
 
 > "Dunkelblaue Schrift auf dunkelblauem Hintergrund, anstrengend zu lesen"
-> → Adressiert in v7.2 (6 WCAG-Kontrast-Fixes, neue CSS-Variablen). Weitere Vertiefung in v7.3 geplant.
+> → Adressiert in v7.2 (6 WCAG-Kontrast-Fixes, neue CSS-Variablen)
 
 > "Terminal öffnen per Rechtsklick funktioniert nicht"
 > → Gelöst in v7.2 (eingebettetes Terminal statt externes Fenster)
@@ -473,20 +226,11 @@ main/
 > "PowerShell im Tool? Linux-Ubuntu Shell möglich?"
 > → Gelöst in v7.2 (Multi-Shell: PowerShell/CMD/WSL)
 
-> "Fenster statisch, Vergrößern/Verkleinern nicht möglich"
-> → Geplant in v7.3 (Resizable Panels)
+> "Scandaten werden nicht gespeichert"
+> → Siehe Issue #2/#3 in [`docs/issues/issue.md`](../issues/issue.md)
 
-> "Terminal noch sehr rudimentär, nahtlose Integration gewünscht"
-> → Geplant in v7.3 (xterm.js + node-pty)
+> "Bloatware-Scanner braucht Intelligenz"
+> → Siehe Issue #8 in [`docs/issues/issue.md`](../issues/issue.md)
 
-> "Scandaten werden nicht gespeichert — Duplikate, Vergleich, Bloatware alles weg nach Neustart"
-> → Geplant in v8.5 (vollständige Datenspeicherung + übergreifende Nutzung)
-
-> "Bloatware-Scanner braucht Intelligenz — nicht zertifiziert ≠ Bloatware, zertifiziert ≠ sicher"
-> → Geplant in v9.0 (5-Stufen-Bewertung, App-Beschreibungen, ehrliche Ergebnisse)
-
-> "Updates-Tab umbenennen zu Apps — alle Programme sehen, direkt deinstallieren, Hersteller-Links statt Treiber"
-> → Geplant in v9.0 (Apps-Kontrollzentrum ersetzt Updates-Tab)
-
-> "Seriennummer auslesen, Hersteller-Links, System-Profil — alles auf einen Blick"
-> → Geplant in v9.0 (System-Profil mit Hardware, Garantie, Hersteller-Links)
+> "Updates-Tab umbenennen zu Apps"
+> → Siehe Issue #9 in [`docs/issues/issue.md`](../issues/issue.md)

@@ -226,10 +226,12 @@ speicher_analyse/
       html2pdf.bundle.min.js
 
   docs/                   # Projektdokumentation (verwaltet durch Claude)
-    planung/             # Projektplanung + Visionen
-      projektplan.md    # Aktiver Projektplan (Roadmap)
-      visionen.md       # User-Visionen & Feature-Ideen
-      archiv/           # Abgeschlossene/historische Pläne
+    issues/              # Aktive Steuerung
+      issue.md          # HAUPTDOKUMENT (Bugs + Features + Planung)
+    planung/             # Historie + Visionen
+      projektplan.md    # NUR Historie (abgeschlossene Versionen)
+      visionen.md       # Simons Ideensammlung
+      archiv/           # Historische Pläne
         projektplan_v3-v5.md
     protokoll/           # Änderungsverfolgung
       aenderungsprotokoll.md  # Aktiv (max. 30 Einträge)
@@ -299,6 +301,17 @@ Ergebnisse erscheinen im Dashboard als klickbare Karten.
 
 **Claude ist verantwortlich für die Verwaltung der `docs/`-Verzeichnisstruktur.**
 
+### Dokumenten-Hierarchie (WICHTIG)
+
+| Datei | Zweck | Pflege |
+|-------|-------|--------|
+| **`docs/issues/issue.md`** | **HAUPTDOKUMENT** — Bugs, geplante Features, Prioritäten, nächste Schritte | Aktiv gepflegt, eine Quelle der Wahrheit |
+| `docs/planung/projektplan.md` | **Nur Historie** — Was wurde wann in welcher Version umgesetzt | Nur bei Releases aktualisieren |
+| `docs/planung/visionen.md` | Simons Ideensammlung — langfristige Träume, Marketing | Nur von Simon |
+| `docs/protokoll/aenderungsprotokoll.md` | Änderungsprotokoll (max. 30 Einträge) | Nach jeder Code-Änderung |
+
+**Regel:** Neue Features, Bugs, Planung und Prioritäten gehören AUSSCHLIESSLICH in die Issue-Datei. Der Projektplan wird NICHT mehr für Planung verwendet — er dokumentiert nur abgeschlossene Versionen.
+
 ### Regeln
 - **Keine losen Dateien** in `docs/` ablegen - immer in den passenden Unterordner
 - **Neue Dateien** nur in bestehende Kategorien einfügen. Neue Kategorie nur nach Rücksprache mit dem User
@@ -309,9 +322,11 @@ Ergebnisse erscheinen im Dashboard als klickbare Karten.
 ### Struktur
 ```
 docs/
-├── planung/                          # Projektplanung + Visionen
-│   ├── projektplan.md                # Aktiver Projektplan (Roadmap)
-│   ├── visionen.md                   # User-Visionen & Feature-Ideen
+├── issues/                           # Aktive Steuerung
+│   └── issue.md                      # HAUPTDOKUMENT (Bugs + Features + Planung)
+├── planung/                          # Historie + Visionen
+│   ├── projektplan.md                # NUR Historie (abgeschlossene Versionen)
+│   ├── visionen.md                   # Simons Ideensammlung
 │   └── archiv/                       # Historische Pläne
 │       └── projektplan_v3-v5.md
 ├── protokoll/                        # Änderungsverfolgung
@@ -322,10 +337,6 @@ docs/
 
 ### Änderungsprotokoll
 → [`docs/protokoll/aenderungsprotokoll.md`](docs/protokoll/aenderungsprotokoll.md) (max. 30 Einträge, dann archivieren nach `archiv/`)
-
-### Projektplanung
-→ [`docs/planung/projektplan.md`](docs/planung/projektplan.md) (aktive Roadmap)
-→ [`docs/planung/visionen.md`](docs/planung/visionen.md) (User-Ideen, werden validiert und in Projektplan übertragen)
 
 ## Features (v7.0)
 1. Festplatten-Scan mit Verzeichnisbaum, Treemap, Dateitypen-Chart, Top 100

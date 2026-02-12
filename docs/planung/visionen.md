@@ -75,7 +75,7 @@ Der Scanner braucht echte Intelligenz. Nicht-zertifizierte Software (wie Advance
 - Microsoft-Store Apps einbeziehen
 - Ehrliche Ergebnisse statt "alles sauber"
 
-**→ Projektplan:** v9.0 — Intelligenter Bloatware-Scanner (Issue #8)
+**→ Issue-Datei:** Issue #8 in [`docs/issues/issue.md`](../issues/issue.md)
 
 ### 3.0b Apps-Kontrollzentrum — Geplant (v9.0)
 
@@ -91,7 +91,7 @@ Der "Updates"-Tab soll zu einem "Apps"-Tab umgebaut werden. Alle installierten A
 - Hersteller-Links statt Treiber-Check (Intel Assistent, Nvidia App, etc.)
 - Seriennummer automatisch auslesen
 
-**→ Projektplan:** v9.0 — Apps-Kontrollzentrum (Issue #9)
+**→ Issue-Datei:** Issue #9 in [`docs/issues/issue.md`](../issues/issue.md)
 
 ### 3.0c System-Profil — Geplant (v9.0)
 
@@ -104,13 +104,13 @@ Alle Informationen über den PC an einem Ort: Hardware, Seriennummer, Hersteller
 - Dashboard-Karte "Dein System auf einen Blick"
 - Export als Text/PDF
 
-**→ Projektplan:** v9.0 — System-Profil (Issue #10)
+**→ Issue-Datei:** Issue #10 in [`docs/issues/issue.md`](../issues/issue.md)
 
 ### 3.0d Intelligente Scandaten — Geplant (v8.5)
 
 Scandaten nicht nur speichern, sondern intelligent verwalten: Delta-Scan (nur Änderungen), Verlauf über Zeit, automatischer Hintergrund-Scan, übergreifende Nutzung der Daten.
 
-**→ Projektplan:** v8.5 — Intelligente Scandaten (Issue #7)
+**→ Issue-Datei:** Issue #7 in [`docs/issues/issue.md`](../issues/issue.md)
 
 ### 3.1 Software-Audit — Umgesetzt (v7.0)
 
