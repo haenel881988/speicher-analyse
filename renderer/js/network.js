@@ -396,65 +396,69 @@ export class NetworkView {
             filtered = filtered.filter(d =>
                 (d.ip || '').includes(q) || (d.mac || '').toLowerCase().includes(q) ||
                 (d.hostname || '').toLowerCase().includes(q) || (d.vendor || '').toLowerCase().includes(q) ||
-                (d.os || '').toLowerCase().includes(q)
+                (d.os || '').toLowerCase().includes(q) || (d.deviceLabel || '').toLowerCase().includes(q)
             );
         }
 
         if (isActive) {
-            // Erweiterte Ansicht für aktiven Scan (mit Ports, OS, etc.)
-            const rows = filtered.map(d => {
-                const expanded = this._expandedDevices.has(d.ip);
-                const portBadges = (d.openPorts || []).map(p =>
+            // Inventar-Zusammenfassung
+            const typeCounts = {};
+            for (const d of filtered) {
+                const t = d.deviceLabel || 'Unbekannt';
+                typeCounts[t] = (typeCounts[t] || 0) + 1;
+            }
+            const summaryBadges = Object.entries(typeCounts)
+                .sort((a, b) => b[1] - a[1])
+                .map(([label, count]) => `<span class="netinv-type-badge">${count}x ${this._esc(label)}</span>`)
+                .join('');
+
+            const summary = `<div class="netinv-summary">
+                <div class="netinv-summary-count">${filtered.length} Gerät${filtered.length !== 1 ? 'e' : ''} im Netzwerk</div>
+                <div class="netinv-summary-types">${summaryBadges}</div>
+            </div>`;
+
+            // Geräte-Karten
+            const cards = filtered.map(d => {
+                const portBadges = (d.openPorts || []).slice(0, 6).map(p =>
                     `<span class="network-port-badge">${p.port} <small>${this._esc(p.label)}</small></span>`
                 ).join(' ');
-                const localBadge = d.isLocal ? ' <span class="network-local-badge">Eigener PC</span>' : '';
+                const morePortsHint = (d.openPorts || []).length > 6 ? `<span class="network-port-badge">+${d.openPorts.length - 6}</span>` : '';
+                const localBadge = d.isLocal ? '<span class="network-local-badge">Eigener PC</span>' : '';
                 const rttClass = d.rtt < 5 ? 'network-rtt-fast' : d.rtt < 50 ? 'network-rtt-medium' : 'network-rtt-slow';
+                const typeLabel = d.deviceLabel || 'Unbekanntes Gerät';
+                const typeIcon = this._deviceIcon(d.deviceIcon || 'help-circle');
+                const shares = (d.shares || []).length > 0
+                    ? `<div class="netinv-card-row"><span class="netinv-label">Freigaben</span><span>${d.shares.map(s => this._esc(s)).join(', ')}</span></div>`
+                    : '';
 
-                let detailRow = '';
-                if (expanded) {
-                    const shares = (d.shares || []).length > 0
-                        ? `<div><strong>Freigegebene Ordner:</strong> ${d.shares.map(s => this._esc(s)).join(', ')}</div>`
-                        : '';
-                    detailRow = `<tr class="network-device-detail-row"><td colspan="8">
-                        <div class="network-device-detail">
-                            ${d.openPorts?.length > 0 ? `<div><strong>Offene Ports:</strong> ${portBadges}</div>` : '<div>Keine offenen Standard-Ports</div>'}
-                            ${shares}
-                            <div class="network-device-actions">
-                                <button class="network-btn-small" data-detail-ports="${this._esc(d.ip)}">Weitere Ports scannen</button>
-                                ${d.openPorts?.some(p => p.port === 445) ? `<button class="network-btn-small" data-detail-shares="${this._esc(d.ip)}">SMB-Freigaben prüfen</button>` : ''}
-                            </div>
+                return `<div class="netinv-card" data-device-toggle="${this._esc(d.ip)}">
+                    <div class="netinv-card-header">
+                        <div class="netinv-card-icon netinv-type-${this._esc(d.deviceType || 'unknown')}">${typeIcon}</div>
+                        <div class="netinv-card-title">
+                            <div class="netinv-card-name">${this._esc(d.hostname) || this._esc(d.ip)} ${localBadge}</div>
+                            <div class="netinv-card-type">${this._esc(typeLabel)}${d.vendor ? ` — ${this._esc(d.vendor)}` : ''}</div>
                         </div>
-                    </td></tr>`;
-                }
-
-                return `<tr class="network-device-row" data-device-toggle="${this._esc(d.ip)}">
-                    <td><span class="network-status-dot network-status-safe"></span></td>
-                    <td>${this._esc(d.hostname) || '<span style="color:var(--text-muted)">—</span>'}${localBadge}</td>
-                    <td class="network-ip">${this._esc(d.ip)}</td>
-                    <td style="font-family:monospace;font-size:11px">${this._esc(d.mac) || '—'}</td>
-                    <td>${this._esc(d.vendor) || '<span style="color:var(--text-muted)">—</span>'}</td>
-                    <td>${this._esc(d.os) || '—'}</td>
-                    <td>${d.openPorts?.length || 0} Port${(d.openPorts?.length || 0) !== 1 ? 's' : ''}</td>
-                    <td><span class="${rttClass}">${d.rtt || 0} ms</span></td>
-                </tr>${detailRow}`;
+                        <div class="netinv-card-rtt"><span class="${rttClass}">${d.rtt || 0} ms</span></div>
+                    </div>
+                    <div class="netinv-card-body">
+                        <div class="netinv-card-row"><span class="netinv-label">IP</span><span class="network-ip">${this._esc(d.ip)}</span></div>
+                        <div class="netinv-card-row"><span class="netinv-label">MAC</span><span style="font-family:monospace;font-size:11px">${this._esc(d.mac) || '—'}</span></div>
+                        ${d.os ? `<div class="netinv-card-row"><span class="netinv-label">OS</span><span>${this._esc(d.os)}</span></div>` : ''}
+                        ${d.openPorts?.length > 0 ? `<div class="netinv-card-row"><span class="netinv-label">Ports</span><div>${portBadges}${morePortsHint}</div></div>` : ''}
+                        ${shares}
+                    </div>
+                    <div class="netinv-card-footer">
+                        <button class="network-btn-small" data-detail-ports="${this._esc(d.ip)}">Alle Ports scannen</button>
+                        ${d.openPorts?.some(p => p.port === 445) ? `<button class="network-btn-small" data-detail-shares="${this._esc(d.ip)}">SMB-Freigaben</button>` : ''}
+                    </div>
+                </div>`;
             }).join('');
 
             return `<div class="network-devices-section">
                 ${toolbar}
                 ${progressBar}
-                <table class="network-table network-devices-table">
-                    <thead><tr>
-                        <th style="width:24px"></th>
-                        <th>Hostname</th>
-                        <th>IP-Adresse</th>
-                        <th>MAC-Adresse</th>
-                        <th>Hersteller</th>
-                        <th>Betriebssystem</th>
-                        <th>Ports</th>
-                        <th>Ping</th>
-                    </tr></thead>
-                    <tbody>${rows}</tbody>
-                </table>
+                ${summary}
+                <div class="netinv-grid">${cards}</div>
             </div>`;
         }
 
@@ -796,10 +800,10 @@ export class NetworkView {
         if (exportDevicesBtn && this._activeScanResult) {
             exportDevicesBtn.onclick = () => {
                 const devices = this._activeScanResult.devices || [];
-                const header = 'IP;Hostname;MAC;Hersteller;Betriebssystem;Ports;Ping (ms);Freigaben';
+                const header = 'IP;Hostname;MAC;Hersteller;Gerätetyp;Betriebssystem;Ports;Ping (ms);Freigaben';
                 const rows = devices.map(d => [
-                    d.ip, d.hostname, d.mac, d.vendor, d.os,
-                    (d.openPorts || []).map(p => `${p.port}/${p.label}`).join(' '),
+                    d.ip, d.hostname, d.mac, d.vendor, d.deviceLabel || '',
+                    d.os, (d.openPorts || []).map(p => `${p.port}/${p.label}`).join(' '),
                     d.rtt, (d.shares || []).join(' '),
                 ].join(';'));
                 const csv = header + '\n' + rows.join('\n');
@@ -907,5 +911,27 @@ export class NetworkView {
     _esc(text) {
         if (!text) return '';
         return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    _deviceIcon(name) {
+        const icons = {
+            'monitor':      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>',
+            'server':       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>',
+            'printer':      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>',
+            'wifi':         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M5 12.55a11 11 0 0114.08 0"/><path d="M1.42 9a16 16 0 0121.16 0"/><path d="M8.53 16.11a6 6 0 016.95 0"/><circle cx="12" cy="20" r="1"/></svg>',
+            'smartphone':   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>',
+            'hard-drive':   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><line x1="22" y1="12" x2="2" y2="12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/><line x1="6" y1="16" x2="6.01" y2="16"/><line x1="10" y1="16" x2="10.01" y2="16"/></svg>',
+            'video':        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>',
+            'home':         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>',
+            'speaker':      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><rect x="4" y="2" width="16" height="20" rx="2"/><circle cx="12" cy="14" r="4"/><line x1="12" y1="6" x2="12.01" y2="6"/></svg>',
+            'tv':           '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><rect x="2" y="7" width="20" height="15" rx="2"/><polyline points="17 2 12 7 7 2"/></svg>',
+            'gamepad':      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><line x1="6" y1="12" x2="10" y2="12"/><line x1="8" y1="10" x2="8" y2="14"/><line x1="15" y1="13" x2="15.01" y2="13"/><line x1="18" y1="11" x2="18.01" y2="11"/><path d="M17.32 5H6.68a4 4 0 00-3.978 3.59c-.006.052-.01.101-.017.152C2.604 9.416 2 14.456 2 16a3 3 0 003 3c1 0 1.5-.5 2-1l1.414-1.414A2 2 0 019.828 16h4.344a2 2 0 011.414.586L17 18c.5.5 1 1 2 1a3 3 0 003-3c0-1.544-.604-6.584-.685-7.258-.007-.05-.011-.1-.017-.151A4 4 0 0017.32 5z"/></svg>',
+            'cpu':          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/></svg>',
+            'cloud':        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M18 10h-1.26A8 8 0 109 20h9a5 5 0 000-10z"/></svg>',
+            'activity':     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>',
+            'globe':        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>',
+            'help-circle':  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+        };
+        return icons[name] || icons['help-circle'];
     }
 }

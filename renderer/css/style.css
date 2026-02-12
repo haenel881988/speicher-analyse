@@ -4635,6 +4635,73 @@ body {
 .network-device-detail { padding: 12px 16px; background: var(--bg-tertiary); border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
 .network-device-actions { display: flex; gap: 8px; margin-top: 4px; }
 
+/* Network Inventory Cards */
+.netinv-summary {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 12px 16px; margin-bottom: 12px;
+    background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px;
+}
+.netinv-summary-count { font-size: 15px; font-weight: 600; color: var(--text-primary); }
+.netinv-summary-types { display: flex; gap: 6px; flex-wrap: wrap; }
+.netinv-type-badge {
+    display: inline-block; padding: 2px 8px; border-radius: 10px;
+    font-size: 11px; background: var(--bg-tertiary, var(--bg-secondary));
+    color: var(--text-secondary); border: 1px solid var(--border-color);
+}
+
+.netinv-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px;
+}
+
+.netinv-card {
+    background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px;
+    overflow: hidden; transition: border-color 0.15s;
+}
+.netinv-card:hover { border-color: var(--accent, #6c5ce7); }
+
+.netinv-card-header {
+    display: flex; align-items: center; gap: 10px; padding: 12px 14px;
+    border-bottom: 1px solid var(--border-color);
+}
+.netinv-card-icon {
+    width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center;
+    justify-content: center; flex-shrink: 0;
+    background: var(--bg-tertiary, var(--bg-primary)); color: var(--text-secondary);
+}
+.netinv-card-icon svg { width: 20px; height: 20px; }
+.netinv-type-pc .netinv-card-icon,
+.netinv-type-local { background: rgba(108, 92, 231, 0.12); color: var(--accent-text, #c4b5fd); }
+.netinv-type-router { background: rgba(0, 206, 209, 0.12); color: #00ced1; }
+.netinv-type-printer { background: rgba(255, 165, 0, 0.12); color: #ffa500; }
+.netinv-type-nas { background: rgba(46, 213, 115, 0.12); color: #2ed573; }
+.netinv-type-camera { background: rgba(255, 71, 87, 0.12); color: #ff4757; }
+.netinv-type-smarthome { background: rgba(255, 215, 0, 0.12); color: #ffd700; }
+.netinv-type-tv { background: rgba(52, 152, 219, 0.12); color: #3498db; }
+.netinv-type-server { background: rgba(155, 89, 182, 0.12); color: #9b59b6; }
+.netinv-type-mobile { background: rgba(46, 213, 115, 0.12); color: #2ed573; }
+.netinv-type-vm { background: rgba(149, 165, 166, 0.12); color: #95a5a6; }
+
+.netinv-card-title { flex: 1; min-width: 0; }
+.netinv-card-name {
+    font-size: 13px; font-weight: 600; color: var(--text-primary);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.netinv-card-type { font-size: 11px; color: var(--text-secondary); margin-top: 1px; }
+.netinv-card-rtt { font-size: 12px; font-weight: 500; white-space: nowrap; }
+
+.netinv-card-body { padding: 8px 14px; }
+.netinv-card-row {
+    display: flex; align-items: baseline; gap: 8px; padding: 3px 0;
+    font-size: 12px; color: var(--text-primary);
+}
+.netinv-label {
+    width: 60px; flex-shrink: 0; color: var(--text-secondary); font-size: 11px;
+}
+
+.netinv-card-footer {
+    display: flex; gap: 6px; padding: 8px 14px; border-top: 1px solid var(--border-color);
+}
+
 /* Network Monitor: Header Controls */
 .network-header-controls { display: flex; align-items: center; gap: 12px; }
 

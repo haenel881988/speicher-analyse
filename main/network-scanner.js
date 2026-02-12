@@ -2,6 +2,7 @@
 
 const { runPS } = require('./cmd-utils');
 const log = require('./logger').createLogger('network-scanner');
+const { lookupVendor, classifyDevice } = require('./oui-database');
 
 const PS_TIMEOUT = 30000;
 
@@ -12,48 +13,6 @@ function _isValidIPv4(ip) {
     if (typeof ip !== 'string') return false;
     return /^(\d{1,3}\.){3}\d{1,3}$/.test(ip) &&
         ip.split('.').every(p => { const n = Number(p); return n >= 0 && n <= 255; });
-}
-
-// ---------------------------------------------------------------------------
-// Häufigste MAC-OUI-Prefixe für Vendor-Erkennung (kein npm-Paket nötig)
-// ---------------------------------------------------------------------------
-const OUI_PREFIXES = {
-    '00:50:56': 'VMware', '00:0C:29': 'VMware', '00:15:5D': 'Hyper-V',
-    '00:1A:11': 'Google', '3C:5A:B4': 'Google', '94:EB:2C': 'Google',
-    'AC:67:B2': 'Amazon', '74:C2:46': 'Amazon', 'F0:D2:F1': 'Amazon',
-    '00:17:88': 'Philips Hue', '00:1E:06': 'Wibrain',
-    'B8:27:EB': 'Raspberry Pi', 'DC:A6:32': 'Raspberry Pi', 'E4:5F:01': 'Raspberry Pi',
-    '00:1A:2B': 'Ayecom', '00:0D:B9': 'PC Engines',
-    '44:D9:E7': 'Ubiquiti', '68:D7:9A': 'Ubiquiti', '74:83:C2': 'Ubiquiti',
-    'F8:1A:67': 'TP-Link', '50:C7:BF': 'TP-Link', '98:DA:C4': 'TP-Link',
-    '00:1F:1F': 'Edimax', 'A0:F3:C1': 'TP-Link',
-    '00:24:D7': 'Intel', '8C:EC:4B': 'Intel', 'A4:4C:C8': 'Intel',
-    '3C:22:FB': 'Apple', 'A4:83:E7': 'Apple', '00:1B:63': 'Apple', 'F0:18:98': 'Apple',
-    '00:26:AB': 'Samsung', 'E4:7C:F9': 'Samsung', '5C:3A:45': 'Samsung',
-    'B0:BE:76': 'TP-Link', '30:B5:C2': 'TP-Link',
-    '00:E0:4C': 'Realtek', '00:D0:59': 'Ambit', '52:54:00': 'QEMU/KVM',
-    '08:00:27': 'VirtualBox', '0A:00:27': 'VirtualBox',
-    '00:23:24': 'AVM (Fritz!Box)', 'C8:0E:14': 'AVM (Fritz!Box)', '2C:3A:FD': 'AVM (Fritz!Box)',
-    'EC:08:6B': 'TP-Link', 'C0:25:E9': 'TP-Link',
-    '00:0F:B5': 'Netgear', '28:C6:8E': 'Netgear', '20:E5:2A': 'Netgear',
-    '00:18:E7': 'Cameo', '00:09:5B': 'Netgear',
-    '00:1E:58': 'D-Link', '28:10:7B': 'D-Link', '1C:7E:E5': 'D-Link',
-    '00:14:A5': 'Gemtek', '00:1C:7E': 'Toshiba',
-    '00:11:32': 'Synology', '00:1A:A0': 'Dell', 'F8:B4:6A': 'Hewlett-Packard',
-    'FC:15:B4': 'Hewlett-Packard', 'F4:39:09': 'Hewlett-Packard',
-    '60:F6:77': 'Intel', 'A0:36:9F': 'Intel', 'A4:34:D9': 'Intel',
-    '00:50:B6': 'Microsoft', '00:15:17': 'Intel', '3C:F0:11': 'Microsoft',
-    '00:03:FF': 'Microsoft', '7C:1E:52': 'Microsoft',
-};
-
-/**
- * Versucht den Hersteller aus dem MAC-OUI-Prefix zu bestimmen.
- */
-function lookupVendor(mac) {
-    if (!mac || mac === '00-00-00-00-00-00' || mac === 'ff-ff-ff-ff-ff-ff') return '';
-    const normalized = mac.replace(/-/g, ':').toUpperCase();
-    const prefix = normalized.substring(0, 8);
-    return OUI_PREFIXES[prefix] || '';
 }
 
 /**
@@ -171,8 +130,10 @@ function _detectOS(ttl) {
 const PORT_LABELS = {
     21: 'FTP', 22: 'SSH', 23: 'Telnet', 25: 'SMTP', 53: 'DNS', 80: 'HTTP',
     110: 'POP3', 135: 'RPC', 139: 'NetBIOS', 143: 'IMAP', 443: 'HTTPS',
-    445: 'SMB', 993: 'IMAPS', 995: 'POP3S', 3306: 'MySQL', 3389: 'RDP',
-    5432: 'PostgreSQL', 5900: 'VNC', 8080: 'HTTP-Alt', 8443: 'HTTPS-Alt',
+    445: 'SMB', 515: 'LPD', 554: 'RTSP', 631: 'IPP',
+    993: 'IMAPS', 995: 'POP3S', 3306: 'MySQL', 3389: 'RDP',
+    5000: 'Synology', 5001: 'Synology-SSL', 5432: 'PostgreSQL',
+    5900: 'VNC', 8080: 'HTTP-Alt', 8443: 'HTTPS-Alt', 9100: 'Drucker',
 };
 
 // ---------------------------------------------------------------------------
@@ -282,7 +243,7 @@ async function scanNetworkActive(onProgress) {
     const ipList = onlineDevices.map(d => `'${d.ip}'`).join(',');
     const portScanScript = `
         $ips = @(${ipList})
-        $ports = @(22, 80, 135, 443, 445, 3389, 8080)
+        $ports = @(22, 80, 135, 443, 445, 515, 554, 631, 3389, 5000, 5001, 8080, 9100)
         $arp = Get-NetNeighbor -AddressFamily IPv4 -ErrorAction SilentlyContinue
         $arpMap = @{}
         foreach ($a in $arp) { $arpMap[$a.IPAddress] = $a.LinkLayerAddress }
@@ -365,20 +326,27 @@ async function scanNetworkActive(onProgress) {
         }
     }
 
-    // Ergebnis zusammenbauen
+    // Ergebnis zusammenbauen (mit Gerätetyp-Klassifizierung)
     const devices = onlineDevices.map(d => {
         const portInfo = portMap.get(d.ip) || { ports: [], mac: '' };
         const mac = portInfo.mac.replace(/-/g, ':');
         const openPorts = portInfo.ports.map(p => ({ port: p, label: PORT_LABELS[p] || `${p}` }));
         const shares = sharesMap.get(d.ip) || [];
         const isLocal = d.ip === subnetInfo.localIP;
+        const vendor = lookupVendor(portInfo.mac || '');
+        const os = _detectOS(d.ttl);
+
+        // Gerätetyp-Erkennung (kombiniert Hersteller + Ports + OS + Hostname + TTL)
+        const deviceType = classifyDevice({
+            vendor, openPorts, os, hostname: d.hostname || '', ttl: d.ttl || 0, isLocal,
+        });
 
         return {
             ip: d.ip,
             hostname: d.hostname || '',
             mac,
-            vendor: lookupVendor(portInfo.mac || ''),
-            os: _detectOS(d.ttl),
+            vendor,
+            os,
             ttl: d.ttl || 0,
             rtt: d.rtt || 0,
             online: true,
@@ -386,6 +354,9 @@ async function scanNetworkActive(onProgress) {
             shares,
             isLocal,
             state: 'Online',
+            deviceType: deviceType.type,
+            deviceLabel: deviceType.label,
+            deviceIcon: deviceType.icon,
         };
     });
 
