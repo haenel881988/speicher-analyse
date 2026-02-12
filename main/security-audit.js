@@ -9,6 +9,13 @@ const log = require('./logger').createLogger('security-audit');
 const PS_TIMEOUT = 30000;
 const MAX_HISTORY = 50;
 
+/** Robuste Boolean-Konvertierung für PowerShell-Ausgaben (bool, int, string) */
+function _psBool(val) {
+    if (val === true || val === 1) return true;
+    if (typeof val === 'string') return val.toLowerCase() === 'true';
+    return false;
+}
+
 function _getHistoryPath() {
     return path.join(app.getPath('userData'), 'audit-history.json');
 }
@@ -28,7 +35,7 @@ async function _checkFirewall() {
 
         const results = arr.map(p => ({
             name: p.Name || '',
-            enabled: p.Enabled === true || p.Enabled === 'True',
+            enabled: _psBool(p.Enabled),
         }));
         const allEnabled = results.every(p => p.enabled);
 
@@ -213,7 +220,7 @@ async function _checkLocalUsers() {
         const raw = JSON.parse(stdout.trim());
         const users = Array.isArray(raw) ? raw : [raw];
 
-        const activeUsers = users.filter(u => u.Enabled === true || u.Enabled === 'True');
+        const activeUsers = users.filter(u => _psBool(u.Enabled));
         const suspiciousCount = activeUsers.filter(u => {
             const name = (u.Name || '').toLowerCase();
             return name !== 'administrator' && !name.includes('default') && !name.includes('gast') && !name.includes('guest');
@@ -224,7 +231,7 @@ async function _checkLocalUsers() {
             label: 'Lokale Benutzerkonten',
             status: suspiciousCount > 3 ? 'warning' : 'ok',
             message: `${activeUsers.length} aktive Konten${suspiciousCount > 3 ? ' — Ungewöhnlich viele aktive Benutzer' : ''}`,
-            details: users.map(u => ({ name: u.Name, enabled: u.Enabled === true || u.Enabled === 'True', lastLogon: u.LastLogon || '' })),
+            details: users.map(u => ({ name: u.Name, enabled: _psBool(u.Enabled), lastLogon: u.LastLogon || '' })),
         };
     } catch (err) {
         log.error('User-Check fehlgeschlagen:', err.message);
