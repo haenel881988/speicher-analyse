@@ -110,7 +110,7 @@ async function lookupVendor(mac) {
  * @param {string[]} macs - Array von MAC-Adressen
  * @returns {Promise<Map<string, string>>} Map: Original-MAC → Herstellername
  */
-async function lookupVendorsBatch(macs) {
+async function lookupVendorsBatch(macs, onProgress = null) {
     const results = new Map();
     if (!macs || macs.length === 0) return results;
 
@@ -137,6 +137,7 @@ async function lookupVendorsBatch(macs) {
     let apiLookups = 0;
     let offlineFallbacks = 0;
     let isFirst = true;
+    let lookupsDone = 0;
 
     for (const [prefix, originalMacs] of prefixGroups) {
         let vendor = '';
@@ -187,6 +188,9 @@ async function lookupVendorsBatch(macs) {
         for (const mac of originalMacs) {
             results.set(mac, vendor);
         }
+
+        lookupsDone++;
+        if (onProgress) onProgress(lookupsDone, uniqueCount);
     }
 
     log.info(`OUI-Lookup abgeschlossen: ${apiLookups} live, ${offlineFallbacks} offline-fallback`);
@@ -390,24 +394,47 @@ const OFFLINE_FALLBACK = new Map([
 // Gerätetyp-Erkennung (kombiniert Hersteller, offene Ports, TTL, Hostname)
 // ---------------------------------------------------------------------------
 
-const VENDOR_HINTS = {
-    'Brother': 'printer', 'Canon': 'printer', 'Epson': 'printer',
-    'Kyocera': 'printer', 'Konica Minolta': 'printer', 'Lexmark': 'printer',
-    'Synology': 'nas', 'QNAP': 'nas', 'Buffalo': 'nas',
-    'Western Digital': 'nas', 'Seagate': 'nas',
-    'Philips Hue': 'smarthome', 'Shelly': 'smarthome', 'Tuya Smart': 'smarthome',
-    'TP-Link Smart Home': 'smarthome', 'IKEA TRADFRI': 'smarthome',
-    'Sonos': 'media', 'Roku': 'media', 'Google Nest': 'smarthome',
-    'LG Electronics': 'tv', 'Sony': 'tv',
-    'Hikvision': 'camera', 'Dahua': 'camera', 'Reolink': 'camera',
-    'Axis Communications': 'camera',
-    'Nintendo': 'console',
-    'Raspberry Pi': 'sbc',
-    'VMware': 'vm', 'Hyper-V': 'vm', 'QEMU/KVM': 'vm', 'VirtualBox': 'vm',
-    'AVM (Fritz!Box)': 'router', 'MikroTik': 'router',
-    'Ubiquiti': 'network', 'Cisco': 'network', 'Cisco Meraki': 'network',
-    'Aruba Networks': 'network',
-};
+// Muster-basierte Hersteller→Typ Zuordnung.
+// WICHTIG: Längere/spezifischere Muster ZUERST (Reihenfolge = Priorität).
+// Matching: case-insensitive substring (vendor.includes(pattern)).
+// Damit funktionieren sowohl kurze Offline-Fallback-Namen ("Brother")
+// als auch volle IEEE-API-Namen ("Brother Industries, Ltd.").
+const VENDOR_PATTERNS = [
+    // --- Drucker ---
+    ['Konica Minolta', 'printer'],
+    ['Brother', 'printer'], ['Canon', 'printer'], ['Epson', 'printer'],
+    ['Kyocera', 'printer'], ['Lexmark', 'printer'],
+    // --- NAS / Speicher ---
+    ['Western Digital', 'nas'],
+    ['Synology', 'nas'], ['QNAP', 'nas'], ['Buffalo', 'nas'], ['Seagate', 'nas'],
+    // --- Smart Home / IoT (spezifisch → generisch) ---
+    ['Philips Lighting', 'smarthome'], ['Signify', 'smarthome'], ['Philips Hue', 'smarthome'],
+    ['TP-Link Smart Home', 'smarthome'],  // vor 'TP-Link' (Offline-Fallback)
+    ['Google Nest', 'smarthome'],
+    ['Shelly', 'smarthome'], ['Tuya', 'smarthome'], ['IKEA', 'smarthome'],
+    // --- Media ---
+    ['Sonos', 'media'], ['Roku', 'media'],
+    // --- TV ---
+    ['LG Electronics', 'tv'], ['Sony', 'tv'],
+    // --- Kameras ---
+    ['Axis Communications', 'camera'],
+    ['Hikvision', 'camera'], ['Dahua', 'camera'], ['Reolink', 'camera'],
+    // --- Konsolen ---
+    ['Nintendo', 'console'],
+    // --- Einplatinencomputer ---
+    ['Raspberry', 'sbc'],
+    // --- Virtualisierung ---
+    ['VMware', 'vm'], ['Hyper-V', 'vm'], ['QEMU', 'vm'], ['VirtualBox', 'vm'],
+    // --- Router / Gateway ---
+    ['Fritz!Box', 'router'], ['AVM', 'router'], ['MikroTik', 'router'],
+    // --- Netzwerk (spezifisch → generisch) ---
+    ['Cisco Meraki', 'network'],
+    ['Ubiquiti', 'network'], ['Aruba', 'network'], ['Cisco', 'network'],
+    // --- Netzwerk-Hersteller (generisch, niedrigste Prio) ---
+    ['TP-Link', 'network'], ['Netgear', 'network'], ['D-Link', 'network'],
+    ['Linksys', 'network'], ['Edimax', 'network'], ['ZyXEL', 'network'],
+    ['Huawei', 'network'],
+];
 
 const PORT_TYPE_HINTS = {
     9100: 'printer', 631: 'printer', 515: 'printer',
@@ -432,9 +459,14 @@ function classifyDevice(device) {
     const ports = new Set(openPorts.map(p => typeof p === 'object' ? p.port : p));
 
     // 1. Hersteller-basierte Erkennung (höchste Priorität für spezifische Hersteller)
-    const vendorHint = VENDOR_HINTS[vendor];
-    if (vendorHint) {
-        return _typeToResult(vendorHint, vendor);
+    //    Substring-Matching: funktioniert mit kurzen Offline-Namen UND vollen IEEE-API-Namen
+    const vendorLower = vendor.toLowerCase();
+    if (vendorLower) {
+        for (const [pattern, type] of VENDOR_PATTERNS) {
+            if (vendorLower.includes(pattern.toLowerCase())) {
+                return _typeToResult(type, vendor);
+            }
+        }
     }
 
     // 2. Port-basierte Erkennung

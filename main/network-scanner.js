@@ -349,12 +349,15 @@ async function scanNetworkActive(onProgress) {
     }
 
     // Live OUI-Lookup für alle gefundenen MAC-Adressen (IEEE-Datenbank via API)
-    if (onProgress) onProgress({ phase: 'vendor', current: 0, total: 0, message: 'Hersteller werden identifiziert (IEEE-Datenbank)...' });
-
     const allMacs = onlineDevices
         .map(d => (portMap.get(d.ip) || { mac: '' }).mac)
         .filter(Boolean);
-    const vendorMap = allMacs.length > 0 ? await lookupVendorsBatch(allMacs) : new Map();
+
+    if (onProgress) onProgress({ phase: 'vendor', current: 0, total: 0, message: 'Hersteller werden identifiziert (IEEE-Datenbank)...' });
+
+    const vendorMap = allMacs.length > 0 ? await lookupVendorsBatch(allMacs, (current, total) => {
+        if (onProgress) onProgress({ phase: 'vendor', current, total, message: `Hersteller ${current}/${total} identifiziert...` });
+    }) : new Map();
 
     // Ergebnis zusammenbauen (mit Gerätetyp-Klassifizierung)
     const devices = onlineDevices.map(d => {
