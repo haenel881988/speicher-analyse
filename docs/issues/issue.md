@@ -424,6 +424,479 @@ Eine Art "Waage für die Festplatte":
 
 ---
 
+# Produktstrategie — Von der System-App zum IT-Werkzeugkasten
+
+> Basierend auf der Markt- und Zielgruppenanalyse ([`recherche.md`](../planung/recherche.md)).
+> Diese Strategie beschreibt den Weg von der heutigen System-App bis zum professionellen IT-Werkzeug in 4 Stufen.
+> Jede Stufe baut auf der vorherigen auf. Nichts wird übersprungen.
+
+---
+
+## Warum 4 Stufen?
+
+Die App vereint heute schon Funktionen, die man sonst nur in 5-6 verschiedenen Programmen findet (Speicheranalyse, Bereinigung, Netzwerk, Datenschutz, Explorer, Terminal). Das ist der Grundstein. Aber der Markt zeigt: Wer nur "PC aufräumen" anbietet, konkurriert mit kostenlosen Tools und hat es schwer.
+
+Der Weg nach vorne führt über **schrittweise Erweiterung** — von der Einzelplatz-App zum IT-Werkzeug für Profis. Jede Stufe erschliesst neue Nutzergruppen und rechtfertigt den Preis besser.
+
+| Stufe | Name | Wer profitiert davon? | Zeitrahmen |
+|-------|------|-----------------------|------------|
+| **1** | System-Werkzeugkasten | Alle Nutzer (Privatanwender, Power-User, Freelancer) | Aktuell — nächste Versionen |
+| **2** | Netzwerk & Sicherheit | Power-User, Admins, sicherheitsbewusste Nutzer | Mittelfristig |
+| **3** | IT-Dokumentation & Inventar | Admins, kleine IT-Abteilungen, Freelancer-IT | Langfristig |
+| **4** | Fernwartung & Leichtes RMM | MSPs, Systemhäuser, IT-Dienstleister | Vision |
+
+---
+
+## Stufe 1 — System-Werkzeugkasten (Aktuell)
+
+> **Ziel:** Die bestehenden Funktionen perfektionieren, fehlende Puzzlestücke ergänzen und das Vertrauen der Nutzer gewinnen.
+> **Zielgruppe:** Power-User, Freelancer, Admins, technik-affine Privatanwender
+
+### Was in dieser Stufe passiert
+
+Die App hat bereits einen beeindruckenden Funktionsumfang. Jetzt geht es darum, das Vorhandene **zuverlässig, verständlich und vertrauenswürdig** zu machen. Denn im Markt gibt es viel Misstrauen gegenüber "Tuning-Tools" — wer hier Qualität zeigt, hebt sich sofort ab.
+
+### Geplante Verbesserungen (Stufe 1)
+
+#### 1.1 Ein-Klick Gesundheitscheck — "Diagnose-Knopf"
+
+**Was es ist:** Ein einzelner Knopf im Dashboard, der den gesamten PC durchleuchtet und einen verständlichen Bericht erstellt.
+
+**Was der Nutzer sieht:**
+- "Dein PC auf einen Blick" — eine Zusammenfassung nach dem Scan
+- Klare Handlungsempfehlungen: "5 Dinge, die du jetzt tun kannst"
+- Ampel-Bewertung: Was ist gut (grün), was könnte besser sein (gelb), was ist kritisch (rot)
+- Alles auf einer Seite, ohne durch 10 Tabs klicken zu müssen
+
+**Warum das wichtig ist:** Die Recherche zeigt: Freelancer und weniger technische Nutzer wollen keine 100 Einstellungen durchgehen. Sie wollen **eine klare Antwort**: "Was stimmt nicht und was soll ich tun?" Genau das liefert der Diagnose-Knopf.
+
+→ *Neues Feature, kein bestehendes Issue*
+
+---
+
+#### 1.2 Intelligenter Bloatware-Scanner — Issue #8
+
+**Was sich ändert:** Der Bloatware-Scanner bekommt ein 5-Stufen-Bewertungssystem statt einem simplen Ja/Nein.
+
+**Was der Nutzer sieht:**
+- Jedes Programm bekommt eine Bewertung: Vertrauenswürdig (grün), Nicht zertifiziert (blau), Fragwürdig (gelb), Bloatware (orange), Risiko (rot)
+- Kurze Erklärung: "Dieses Programm wurde von deinem PC-Hersteller vorinstalliert. Du hast es noch nie benutzt."
+- Ressourcenverbrauch pro App: Speicherplatz, Autostart-Einträge, Hintergrundaktivität
+- Ehrliche Zusammenfassung: Nie "System ist sauber" wenn es das nicht ist
+
+**Warum das wichtig ist:** Bestehende Bloatware-Scanner machen entweder Panik (alles ist rot!) oder sind zu harmlos. Die 5 Stufen geben eine ehrliche, differenzierte Einschätzung — genau das, was im Markt fehlt.
+
+→ *Details: siehe Issue #8 weiter oben*
+
+---
+
+#### 1.3 System-Profil — Issue #10
+
+**Was es ist:** Alle Informationen über den PC an einem Ort — Hardware, Seriennummer, Hersteller, Garantie.
+
+**Was der Nutzer sieht:**
+- "Dein Gerät auf einen Blick": Hersteller, Modell, Prozessor, Grafikkarte, RAM, Festplatten
+- Seriennummer automatisch ausgelesen — kein Laptop umdrehen mehr
+- Direkter Link zur Hersteller-Support-Seite und Treiber-Downloads
+- Exportierbar als Text oder PDF (für Support-Anfragen: "Schick mir mal deine Systeminfos")
+
+**Warum das wichtig ist:** Admins und Helpdesk-Mitarbeiter brauchen diese Infos ständig. Heute müssen sie dafür mehrere Windows-Dialoge durchklicken oder PowerShell-Befehle tippen. Ein Klick — alles da.
+
+→ *Details: siehe Issue #10 weiter oben*
+
+---
+
+#### 1.4 Apps-Kontrollzentrum — Issue #9
+
+**Was sich ändert:** Der "Updates"-Tab wird zum "Apps"-Tab umgebaut — alle Programme, Updates und Aufräum-Funktionen an einem Ort.
+
+**Was der Nutzer sieht:**
+- Alle installierten Programme und Store-Apps in einer Liste
+- Sortierung nach Grösse, Installationsdatum, letzte Nutzung
+- "Diese 12 Programme hast du seit 6 Monaten nicht benutzt — zusammen belegen sie 8 GB"
+- Direkte Deinstallation, Cache leeren, Update-Prüfung
+- Exportierbare Programmliste (für neuen PC oder Windows-Neuinstallation)
+
+**Warum das wichtig ist:** Der aktuelle "Updates"-Tab ist zu eng gefasst. Nutzer wollen nicht nur Updates, sondern einen **Gesamtüberblick über ihre Programme** — was brauche ich, was kann weg, was frisst Platz?
+
+→ *Details: siehe Issue #9 weiter oben*
+
+---
+
+#### 1.5 Intelligente Scandaten — Issue #7
+
+**Was sich ändert:** Die App merkt sich nicht nur die Scan-Ergebnisse, sondern versteht auch Veränderungen über die Zeit.
+
+**Was der Nutzer sieht:**
+- Delta-Scan: "Seit dem letzten Scan wurden 2 Programme installiert und 15 GB neue Dateien angelegt"
+- Trend-Anzeige: "Dein Speicherplatz wird alle 2 Wochen um ca. 3 GB weniger — bei dem Tempo ist die Platte in 4 Monaten voll"
+- Hintergrund-Prüfung beim Start: dezenter Hinweis wenn sich etwas Wesentliches geändert hat
+
+**Warum das wichtig ist:** Andere Tools zeigen immer nur den aktuellen Zustand. Aber die spannende Frage ist: **Was hat sich verändert?** Das hilft Problemen vorzubeugen statt sie nur zu beheben.
+
+→ *Details: siehe Issue #7 weiter oben*
+
+---
+
+#### 1.6 Vertrauens-System vervollständigen — Issue #15
+
+**Was noch fehlt:** Ein vollständiges Undo-Log — jede Aktion (Registry löschen, Dateien bereinigen, Bloatware entfernen) kann rückgängig gemacht werden.
+
+**Warum das wichtig ist:** Die Recherche zeigt klar: Das grösste Hindernis für "Tuning-Tools" ist **Vertrauen**. Nutzer haben Angst, etwas kaputt zu machen. Ein Undo-Button nimmt diese Angst.
+
+→ *Details: siehe Issue #15 weiter oben*
+
+---
+
+#### 1.7 Weitere Stufe-1-Aufgaben
+
+| Issue | Was | Status |
+|-------|-----|--------|
+| #2/#3 | Scandaten korrekt speichern und wiederherstellen | Wartet auf Test |
+| #4 | Privacy Dashboard verständlicher machen | Wartet auf Test |
+| #5 | PDF Vollansicht und Bearbeitung | Offen |
+| #12 | WCAG-Kontrast vollständig konform | Teilweise |
+| #13 | Fenster-Bereiche frei verschiebbar | Offen |
+| #14 | Echte Terminal-Emulation | Teilweise |
+
+---
+
+### Stufe 1 — Zusammenfassung
+
+| Was | Nutzen | Aufwand |
+|-----|--------|---------|
+| Diagnose-Knopf | Sofortiger Überblick für alle Nutzer | Mittel |
+| Bloatware 5-Stufen (#8) | Ehrliche Bewertung, hebt sich von Konkurrenz ab | Mittel |
+| System-Profil (#10) | Admins sparen Zeit, Support wird einfacher | Klein |
+| Apps-Kontrollzentrum (#9) | Alle Programme im Griff, vergessene Apps finden | Gross |
+| Intelligente Scandaten (#7) | Veränderungen sichtbar machen, Delta-Scan | Gross |
+| Undo-Log (#15) | Vertrauen aufbauen, Angst nehmen | Mittel |
+
+**Ergebnis Stufe 1:** Ein ausgereiftes, vertrauenswürdiges System-Werkzeug das sich klar von CCleaner, TuneUp und Co. abhebt — durch Ehrlichkeit, Tiefe und Transparenz.
+
+---
+
+## Stufe 2 — Netzwerk & Sicherheit
+
+> **Ziel:** Die App wird zum Sicherheits- und Netzwerk-Werkzeug. Nicht nur sehen was auf dem eigenen PC passiert, sondern auch was im Netzwerk los ist.
+> **Zielgruppe:** Admins, sicherheitsbewusste Power-User, Heimnetzwerk-Enthusiasten
+
+### Was in dieser Stufe passiert
+
+Die Grundlagen sind da: Netzwerk-Monitor, Geräte-Scanner, Verbindungs-Verlauf. Stufe 2 vertieft diese Funktionen und macht sie professioneller.
+
+### Geplante Verbesserungen (Stufe 2)
+
+#### 2.1 Netzwerk-Paketaufzeichnung — Issue #11
+
+**Was es ist:** Nicht nur sehen WELCHE Programme ins Internet verbinden, sondern auch WAS sie senden.
+
+**Was der Nutzer sieht:**
+- "Chrome hat in den letzten 10 Minuten 47 MB an Google gesendet — davon 12 MB an Werbe-Netzwerke"
+- Verdächtige Verbindungen im Detail aufschlüsseln
+- Beweise sammeln wenn eine App sich verdächtig verhält
+- Einfacher als Wireshark, aber deutlich mehr als nur eine Verbindungsliste
+
+**Warum das wichtig ist:** GlassWire macht etwas Ähnliches, kostet aber 35 Euro pro Jahr und kann nur Netzwerk. In der App wäre es ein Modul von vielen — mehr Wert für das Geld.
+
+→ *Details: siehe Issue #11 weiter oben*
+
+---
+
+#### 2.2 GPO-Scanner — Simons Idee
+
+**Was es ist:** Ein Scan der Windows-Gruppenrichtlinien (GPOs), der potenziell problematische Einstellungen erkennt.
+
+**Was der Nutzer sieht:**
+- "Es gibt eine Richtlinie, die Windows-Updates verzögert — das kann zu Sicherheitslücken führen"
+- "Diese Einstellung blockiert den Windows Store — gewollt oder versehentlich?"
+- Kombiniert mit der Registry-Analyse: subtile Probleme sichtbar machen, die sonst Bluescreens oder Fehler verursachen
+- Schritt-für-Schritt-Hilfe: welche übergeordnete Richtlinie das Problem verursacht
+
+**Warum das wichtig ist:** GPO-Probleme sind eine der häufigsten Ursachen für schwer erklärbare Windows-Fehler. Kein bestehendes Consumer-Tool prüft GPOs — das wäre ein echtes Alleinstellungsmerkmal.
+
+→ *Aus Simons Ideen Salat (oben in dieser Datei)*
+
+---
+
+#### 2.3 Erweiterter Sicherheits-Check
+
+**Was sich ändert:** Der bestehende Sicherheits-Check wird umfassender.
+
+**Was der Nutzer sieht:**
+- Prüfung auf bekannte Schwachstellen (fehlende Patches, unsichere Einstellungen)
+- Bewertung der Passwort-Richtlinien (Gastkonto ohne Passwort? Administrator-Konto aktiviert?)
+- Verschlüsselungsstatus aller Laufwerke
+- Netzwerk-Exposition: "Dein PC ist von 3 anderen Geräten im Netzwerk erreichbar auf Port 445 (Dateifreigabe)"
+- Alles als druckbarer PDF-Bericht
+
+**Warum das wichtig ist:** Die Recherche zeigt: Datenschutz und Sicherheit sind im DACH-Raum ein starkes Verkaufsargument. "100% Offline — Deine Daten gehören Dir" plus ein umfassender Sicherheits-Check ist ein Alleinstellungsmerkmal.
+
+---
+
+#### 2.4 Firewall-Verwaltung
+
+**Was sich ändert:** Statt nur Firewall-Regeln anzuzeigen, kann der Nutzer sie auch verwalten.
+
+**Was der Nutzer sieht:**
+- "Diese App hat 14 Verbindungen ins Internet — möchtest du sie blockieren?"
+- Ein-Klick Firewall-Regel erstellen, direkt aus dem Netzwerk-Monitor
+- Übersicht: welche Programme dürfen ins Internet, welche nicht
+- Vorlagen für häufige Szenarien: "Alle Telemetrie blockieren", "Nur Browser erlauben"
+
+---
+
+### Stufe 2 — Zusammenfassung
+
+| Was | Nutzen | Aufwand |
+|-----|--------|---------|
+| Paketaufzeichnung (#11) | Sehen was Apps wirklich senden | Gross |
+| GPO-Scanner | Versteckte Probleme finden die sonst niemand findet | Mittel |
+| Erweiterter Sicherheits-Check | Umfassender Schutz-Bericht | Mittel |
+| Firewall-Verwaltung | Programme blockieren ohne Fachwissen | Klein |
+
+**Ergebnis Stufe 2:** Die App wird zum "Sicherheits-Berater" — nicht nur Speicher aufräumen, sondern den PC wirklich verstehen und schützen. Das spricht besonders Admins und sicherheitsbewusste Nutzer an.
+
+---
+
+## Stufe 3 — IT-Dokumentation & Inventar
+
+> **Ziel:** Vom Einzelplatz-Tool zum Werkzeug für mehrere Geräte. IT-Verantwortliche können alle PCs dokumentieren und überblicken.
+> **Zielgruppe:** IT-Admins in KMU, Freelancer-IT, kleine Systemhäuser
+> **Paradigmenwechsel:** Die App denkt nicht mehr nur an "meinen PC", sondern an "alle PCs im Netzwerk"
+
+### Was in dieser Stufe passiert
+
+Hier wird es spannend für den Business-Markt. Bestehende IT-Dokumentations-Tools (Docusnap, Lansweeper) kosten tausende Euro und sind für kleine Umgebungen völlig überdimensioniert. Ein Admin mit 20-50 PCs braucht etwas Schlankes, Schnelles — und genau das kann die App werden.
+
+### Geplante Verbesserungen (Stufe 3)
+
+#### 3.1 System-Inventar über mehrere Geräte
+
+**Was es ist:** Die App sammelt Informationen nicht nur vom eigenen PC, sondern auch von anderen Geräten im Netzwerk.
+
+**Was der Nutzer sieht:**
+- "Du betreust 15 PCs — hier ist der Überblick"
+- Pro Gerät: Hardware, installierte Software, Sicherheitsstatus, Speicherplatz
+- Warnungen: "3 Geräte haben seit 30 Tagen kein Windows-Update gemacht"
+- Vergleich: "Auf welchen PCs fehlt diese Software?"
+
+**Wie das funktioniert:**
+- Variante A: Die App wird auf jedem PC installiert und meldet sich an einen zentralen PC
+- Variante B: Ein Admin-PC scannt andere Geräte im Netzwerk (wenn Zugriffsrechte vorhanden)
+- Alles lokal — keine Cloud, kein externer Server
+
+---
+
+#### 3.2 IT-Berichte und Export
+
+**Was es ist:** Professionelle Berichte über den Zustand aller Geräte — für den Chef, den Kunden oder das Audit.
+
+**Was der Nutzer sieht:**
+- PDF-Bericht: "IT-Gesundheitsbericht Februar 2026 — 15 Geräte geprüft"
+- Kapitel: Hardware-Übersicht, Software-Inventar, Sicherheitsbewertung, Empfehlungen
+- Vergleich mit letztem Bericht: "Seit dem letzten Check wurden 3 Programme deinstalliert und 2 Sicherheitslücken geschlossen"
+
+**Warum das wichtig ist:** MSPs und IT-Admins müssen regelmässig Bericht erstatten. Ein automatischer, professioneller Bericht spart Stunden — und sieht beim Kunden gut aus.
+
+---
+
+#### 3.3 Backup-Modul — Issue #16
+
+**Was es ist:** Direkt in der App eine Sicherung einrichten.
+
+**Was der Nutzer sieht:**
+- Zielordner wählen: lokaler Pfad, Netzlaufwerk, OneDrive/Google Drive Sync-Ordner
+- Nur geänderte Dateien sichern (inkrementell)
+- Optional: automatisch nach Zeitplan
+- "Letzte Sicherung: vor 3 Tagen — 147 Dateien gesichert (2.3 GB)"
+
+→ *Details: siehe Issue #16 weiter oben*
+
+---
+
+#### 3.4 Hardware-Lebenszyklus
+
+**Was es ist:** Die App verfolgt, wie alt die Hardware ist und wann Ersatz fällig wird.
+
+**Was der Nutzer sieht:**
+- "Deine Festplatte ist 4 Jahre alt und hat 23'000 Betriebsstunden — Erfahrungsgemäss halten Festplatten 5-7 Jahre"
+- "Der Arbeitsspeicher-Auslastung liegt regelmässig bei 90% — ein Upgrade auf 16 GB würde helfen"
+- Empfehlungen: Wann lohnt sich eine Aufrüstung, wann ein neuer PC?
+
+---
+
+### Stufe 3 — Zusammenfassung
+
+| Was | Nutzen | Aufwand |
+|-----|--------|---------|
+| Multi-Geräte-Inventar | Alle PCs auf einen Blick | Sehr gross |
+| IT-Berichte (PDF) | Professionelle Dokumentation automatisch | Gross |
+| Backup-Modul (#16) | Datensicherung ohne Zusatz-Software | Gross |
+| Hardware-Lebenszyklus | Vorausschauende Planung statt Überraschungen | Klein |
+
+**Ergebnis Stufe 3:** Die App wird zum "IT-Assistenten" für kleine Umgebungen. Ein Admin mit 20 PCs hat alles im Griff — ohne teure Enterprise-Software. Das eröffnet den Business-Markt mit höherer Zahlungsbereitschaft.
+
+**Preismodell-Erweiterung:** Ab Stufe 3 macht eine Business-Edition Sinn (z.B. pro Techniker-Lizenz oder pro Anzahl verwalteter Geräte), die den Preis rechtfertigt.
+
+---
+
+## Stufe 4 — Fernwartung & Leichtes RMM (Vision)
+
+> **Ziel:** Die App wird zur leichtgewichtigen Alternative zu NinjaRMM, ConnectWise und Co. — ohne Cloud-Zwang, ohne Gerätegebühr.
+> **Zielgruppe:** MSPs, Systemhäuser, IT-Dienstleister mit 10-200 betreuten Geräten
+> **Achtung:** Dies ist die ambitionierteste Stufe. Sie verändert das Geschäftsmodell grundlegend.
+
+### Warum diese Stufe wichtig ist
+
+Die Recherche zeigt: Kleine MSPs im DACH-Raum zahlen oft 800+ Euro pro Monat für RMM-Software — oder verzichten ganz darauf und arbeiten manuell. Es gibt eine echte Marktlücke für ein **bezahlbares, schlankes RMM-Tool ohne Cloud-Zwang**.
+
+Aber: Diese Stufe bringt auch die grössten Herausforderungen mit sich — Sicherheit, Support-Erwartungen und die Glaubwürdigkeit als Ein-Personen-Produkt.
+
+### Geplante Funktionen (Stufe 4)
+
+#### 4.1 Fernwartung (Remote-Desktop)
+
+**Was es ist:** Von einem PC aus auf einen anderen zugreifen — ohne TeamViewer, ohne AnyDesk.
+
+**Was der Nutzer sieht:**
+- Host-Modus: "Erlaube Fernzugriff auf diesen PC"
+- Client-Modus: "Verbinde dich mit einem anderen PC"
+- Direkte Verbindung im lokalen Netzwerk (ohne Server)
+- Optional: Verbindung über Internet mit verschlüsseltem Relay
+
+**Vergleich:** TeamViewer Business kostet 400+ Euro pro Jahr. AnyDesk 10-20 Euro pro Monat. Eine integrierte Fernwartung in der App wäre ein enormes Verkaufsargument.
+
+---
+
+#### 4.2 Zentrales Dashboard
+
+**Was es ist:** Ein Überblick über alle betreuten Geräte — welche sind online, welche haben Probleme, wo wird Aktion benötigt?
+
+**Was der Nutzer sieht:**
+- Alle Geräte in einer Übersicht mit Status-Ampel
+- Alarme: "PC bei Kunde Müller hat seit 15 Tagen kein Update gemacht"
+- Fernzugriff direkt aus dem Dashboard starten
+- Gruppierung nach Kunde, Standort oder Kategorie
+
+---
+
+#### 4.3 Automatisierung & Monitoring
+
+**Was es ist:** Die App überwacht Geräte im Hintergrund und meldet Probleme automatisch.
+
+**Was der Nutzer sieht:**
+- "Festplatte bei Kunde Schmidt ist zu 95% voll — Handlungsbedarf"
+- "Antivirus-Definitionen auf 3 Geräten veraltet"
+- Automatische Skript-Ausführung: z.B. Cache leeren, Temp-Dateien bereinigen
+- Alles ohne dass der MSP aktiv werden muss — nur bei echten Problemen
+
+---
+
+#### 4.4 KI-Integration — Issue #17 + #19
+
+**Was es ist:** Eine KI-Schnittstelle, über die ein KI-Assistent direkt auf die App zugreifen kann.
+
+**Was der Nutzer sieht:**
+- "Hey Claude, analysiere den PC von Kunde Müller und sag mir was zu tun ist"
+- Die KI hat Zugriff auf Scan-Ergebnisse, Netzwerkdaten, Sicherheitsstatus
+- Empfehlungen in einfacher Sprache
+- Optional: lokales KI-Modell (Ollama) für 100% Offline-Betrieb
+
+**Zwei Wege:**
+- MCP-Server (Issue #19): KI-Assistenten greifen direkt auf die App-Daten zu
+- BYOB — "Bring Your Own Brain" (Issue #17): Nutzer bringt seinen eigenen API-Key mit
+
+→ *Details: siehe Issues #17 und #19 weiter oben*
+
+---
+
+#### 4.5 Offline-Lizenzierung — Issue #18
+
+**Was es ist:** Ein Lizenz-System das ohne Internetverbindung funktioniert.
+
+**Warum das hier reingehört:** Für MSPs und Unternehmen ist es wichtig, dass die Software auch in abgeschotteten Netzwerken funktioniert. Signierte Lizenzdateien, die offline geprüft werden — kein "nach Hause telefonieren".
+
+→ *Details: siehe Issue #18 weiter oben*
+
+---
+
+### Stufe 4 — Zusammenfassung
+
+| Was | Nutzen | Aufwand |
+|-----|--------|---------|
+| Fernwartung (Remote) | Kein TeamViewer/AnyDesk mehr nötig | Sehr gross |
+| Zentrales Dashboard | Alle Geräte auf einen Blick | Sehr gross |
+| Monitoring & Alarme | Probleme erkennen bevor der Kunde anruft | Gross |
+| KI-Integration (#17/#19) | Intelligente Analyse und Empfehlungen | Gross |
+| Offline-Lizenzierung (#18) | Funktioniert auch ohne Internet | Mittel |
+
+**Ergebnis Stufe 4:** Die App wird zum "Schweizer Taschenmesser für IT-Profis" — ein schlankes, bezahlbares RMM das kein Cloud-Abo braucht und von einem einzigen Werkzeug aus alles abdeckt.
+
+**Preismodell-Erweiterung:** Hier macht eine MSP-Edition Sinn:
+- Basis-Edition (Einzelplatz): 89 Euro/Jahr — Stufe 1 + 2
+- Business-Edition (Multi-Geräte): z.B. 199 Euro/Jahr — Stufe 1-3
+- MSP-Edition (Fernwartung + Dashboard): z.B. 499 Euro/Jahr pro Techniker — Stufe 1-4
+- Zum Vergleich: NinjaRMM kostet ca. 3-4 Euro pro Gerät/Monat → bei 50 Geräten = 2'400 Euro/Jahr
+
+---
+
+### Voraussetzungen für Stufe 4
+
+Bevor Stufe 4 angegangen wird, müssen diese Bedingungen erfüllt sein:
+
+1. **Stufe 1-3 müssen stabil laufen** — ein RMM-Tool das im Einzelplatzbetrieb Fehler hat, wird niemand remote einsetzen
+2. **Sicherheitsaudit** — Fernzugriff ist ein Einfallstor. Der Code muss geprüft werden (evtl. externer Audit)
+3. **Support-Struktur** — MSPs erwarten schnelle Hilfe bei Problemen. Als Ein-Personen-Projekt muss man ehrlich sein, was man leisten kann
+4. **Rechtliche Grundlage** — Datenschutz (DSGVO), Auftragsverarbeitung (AVV) für MSPs, evtl. Firmengründung
+5. **Community aufbauen** — Erste Nutzer aus Stufe 1-3 werden zu Botschaftern und Testern für Stufe 4
+
+---
+
+## Gesamtübersicht — Alle Issues nach Stufen
+
+| Stufe | Issues | Neue Features |
+|-------|--------|---------------|
+| **1** | #2, #3, #4, #5, #7, #8, #9, #10, #12, #13, #14, #15 | Diagnose-Knopf |
+| **2** | #11 | GPO-Scanner, Erweiterter Sicherheits-Check, Firewall-Verwaltung |
+| **3** | #16 | Multi-Geräte-Inventar, IT-Berichte, Hardware-Lebenszyklus |
+| **4** | #17, #18, #19 | Fernwartung, Zentrales Dashboard, Monitoring, Automatisierung |
+
+---
+
+## Wer ist die Zielgruppe pro Stufe?
+
+Die Recherche identifiziert 6 Nutzergruppen. So passen sie zu den Stufen:
+
+| Nutzergruppe | Stufe 1 | Stufe 2 | Stufe 3 | Stufe 4 |
+|--------------|---------|---------|---------|---------|
+| **Privatanwender** (PC aufräumen, Bloatware) | Kern | — | — | — |
+| **Power-User** (alles in einem Tool) | Kern | Kern | — | — |
+| **Freelancer** (kein IT-Support, wenig Zeit) | Kern | Nutzt mit | Nutzt mit | — |
+| **IT-Admins** (schnelle Diagnose, portabel) | Kern | Kern | Kern | Nutzt mit |
+| **MSPs** (viele Kunden-PCs, Kosten sparen) | Testet | Nutzt mit | Kern | Kern |
+| **Kleine Unternehmen** (kein IT-Wissen) | — | — | Indirekt (via MSP) | Indirekt (via MSP) |
+
+---
+
+## Empfohlene Reihenfolge innerhalb Stufe 1
+
+Basierend auf Aufwand, Nutzen und Abhängigkeiten:
+
+| Schritt | Was | Begründung |
+|---------|-----|------------|
+| 1 | Issue #2/#3 fertig testen (Scandaten) | Grundlage für alles Weitere |
+| 2 | Issue #4 fertig testen (Privacy Dashboard) | Bereits implementiert, wartet auf Test |
+| 3 | System-Profil (#10) | Klein, sofort sichtbarer Mehrwert |
+| 4 | Bloatware 5-Stufen (#8) | Differenzierung vom Wettbewerb |
+| 5 | Diagnose-Knopf (neu) | Bringt alles zusammen, "Wow-Effekt" |
+| 6 | Apps-Kontrollzentrum (#9) | Grösseres Projekt, ersetzt bestehenden Tab |
+| 7 | Intelligente Scandaten (#7) | Technisch aufwändig, baut auf #2/#3 auf |
+| 8 | Undo-Log (#15) | Vertrauensaufbau, kann parallel laufen |
+| 9 | Verbleibende Issues (#5, #12, #13, #14) | Feinschliff und Qualität |
+
+---
+
 # Prozess-Verbesserungen
 
 ## Kommunikation KI ↔ Simon
