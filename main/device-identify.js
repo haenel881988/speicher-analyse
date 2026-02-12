@@ -370,8 +370,12 @@ function _parseDeviceXML(xml) {
     }
 
     // Hersteller dem Modellnamen voranstellen, wenn er nicht schon enthalten ist
-    if (fullModel && manufacturer && !fullModel.toLowerCase().includes(manufacturer.toLowerCase().split(' ')[0])) {
-        fullModel = `${manufacturer} ${fullModel}`;
+    // Normalisierung: "Sonos, Inc." → "sonos", "Philips Lighting BV" → "philips"
+    if (fullModel && manufacturer) {
+        const mfgKey = manufacturer.toLowerCase().replace(/[,.\s].*/, '').trim();  // Erstes Wort, ohne Komma/Punkt
+        if (mfgKey.length >= 3 && !fullModel.toLowerCase().includes(mfgKey)) {
+            fullModel = `${manufacturer} ${fullModel}`;
+        }
     }
 
     if (!fullModel && !serialNumber) return null;
