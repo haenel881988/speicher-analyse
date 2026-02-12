@@ -63,6 +63,12 @@ async function saveSession(scans, uiState) {
     const json = JSON.stringify(payload);
     const compressed = zlib.gzipSync(json);
     await fs.promises.writeFile(SESSION_FILE, compressed);
+
+    // Verify + log
+    const stat = await fs.promises.stat(SESSION_FILE);
+    for (const s of sessions) {
+        log.info(`Auto-Save: ${s.rootPath} — ${s.filesFound} Dateien, ${s.dirsScanned} Ordner, tree=${s.tree.length}, dirFiles=${s.dirFiles ? s.dirFiles.length : 'null'} → ${(stat.size / 1024).toFixed(0)} KB`);
+    }
     return true;
 }
 

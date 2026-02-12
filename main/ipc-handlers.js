@@ -757,7 +757,7 @@ function register(mainWindow) {
             for (const s of persistentSession.scans) {
                 const scanner = session.reconstructScanner(s);
                 scans.set(s.scanId, scanner);
-                log.info(`Scan ${s.scanId} rekonstruiert: ${s.rootPath}, ${s.filesFound} Dateien, ${s.dirsScanned} Ordner`);
+                log.info(`Scan rekonstruiert: ${s.rootPath} — ${s.filesFound} Dateien, ${s.dirsScanned} Ordner, tree=${scanner.tree.size}, dirFiles=${scanner.dirFiles ? scanner.dirFiles.size : 'null'}, nameIndex=${scanner.nameIndex.size}`);
             }
             restoredSessions = persistentSession.scans.map(s => ({
                 scan_id: s.scanId,
@@ -1140,8 +1140,17 @@ function register(mainWindow) {
                 if (sessions.length > 0) {
                     if (!fss.existsSync(SESSION_DIR)) fss.mkdirSync(SESSION_DIR, { recursive: true });
                     const payload = { version: 1, savedAt: new Date().toISOString(), ui: lastKnownUiState, scans: sessions };
-                    const compressed = zlib.gzipSync(JSON.stringify(payload));
+                    const json = JSON.stringify(payload);
+                    const compressed = zlib.gzipSync(json);
                     fss.writeFileSync(SESSION_FILE, compressed);
+                    // Verify file was written
+                    const fileSize = fss.statSync(SESSION_FILE).size;
+                    for (const s of sessions) {
+                        log.info(`Session gesichert: ${s.rootPath} — ${s.dirsScanned} Ordner, ${s.filesFound} Dateien, tree=${s.tree.length}, dirFiles=${s.dirFiles ? s.dirFiles.length + ' Ordner' : 'WARNUNG:null'} → ${(fileSize / 1024).toFixed(0)} KB komprimiert`);
+                        if (!s.dirFiles) log.warn('dirFiles ist null — Duplikate, Suche und Dateityp-Details werden nach Neustart nicht funktionieren!');
+                    }
+                } else {
+                    log.info('before-quit: Keine abgeschlossenen Scans zum Speichern');
                 }
             } catch (err) {
                 log.error('Session-Save beim Beenden fehlgeschlagen:', err.message);

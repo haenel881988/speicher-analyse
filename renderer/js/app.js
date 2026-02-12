@@ -326,7 +326,7 @@ async function init() {
                 } catch { /* explorer might not be ready yet */ }
 
                 setStatus('Bereit');
-                showToast('Scan-Daten wurden wiederhergestellt');
+                showToast(`Scan von ${progress.current_path} wiederhergestellt — ${formatNumber(progress.dirs_scanned)} Ordner, ${formatNumber(progress.files_found)} Dateien`);
                 setTimeout(() => els.scanProgress.classList.remove('active'), 3000);
 
                 // Dashboard-Analyse im Hintergrund starten (ohne Tab-Wechsel)
