@@ -2,7 +2,7 @@
 
 const { runPS } = require('./cmd-utils');
 const log = require('./logger').createLogger('network-scanner');
-const { lookupVendor, classifyDevice } = require('./oui-database');
+const { lookupVendorsBatch, classifyDevice } = require('./oui-database');
 
 const PS_TIMEOUT = 30000;
 
@@ -63,15 +63,26 @@ async function _scanViaGetNetNeighbor() {
     const raw = JSON.parse(stdout.trim());
     const arr = Array.isArray(raw) ? raw : [raw];
 
-    return arr
+    const devices = arr
         .filter(d => d.ip && d.mac)
         .map(d => ({
             ip: d.ip || '',
             mac: (d.mac || '').replace(/-/g, ':'),
             hostname: d.hostname || '',
-            vendor: lookupVendor(d.mac || ''),
+            vendor: '',
             state: _translateState(d.state),
         }));
+
+    // Live OUI-Lookup (IEEE-Datenbank via API)
+    const macs = devices.map(d => d.mac).filter(Boolean);
+    if (macs.length > 0) {
+        const vendorMap = await lookupVendorsBatch(macs);
+        for (const device of devices) {
+            device.vendor = vendorMap.get(device.mac) || '';
+        }
+    }
+
+    return devices;
 }
 
 /**
@@ -98,15 +109,26 @@ async function _scanViaArp() {
     const raw = JSON.parse(stdout.trim());
     const arr = Array.isArray(raw) ? raw : [raw];
 
-    return arr
+    const devices = arr
         .filter(d => d.ip && d.mac && d.mac !== 'ff-ff-ff-ff-ff-ff')
         .map(d => ({
             ip: d.ip || '',
             mac: (d.mac || '').replace(/-/g, ':'),
             hostname: '',
-            vendor: lookupVendor(d.mac || ''),
+            vendor: '',
             state: d.state === 'dynamic' ? 'Erreichbar' : d.state === 'static' ? 'Statisch' : d.state || '',
         }));
+
+    // Live OUI-Lookup (IEEE-Datenbank via API)
+    const macs = devices.map(d => d.mac).filter(Boolean);
+    if (macs.length > 0) {
+        const vendorMap = await lookupVendorsBatch(macs);
+        for (const device of devices) {
+            device.vendor = vendorMap.get(device.mac) || '';
+        }
+    }
+
+    return devices;
 }
 
 function _translateState(state) {
@@ -326,6 +348,14 @@ async function scanNetworkActive(onProgress) {
         }
     }
 
+    // Live OUI-Lookup für alle gefundenen MAC-Adressen (IEEE-Datenbank via API)
+    if (onProgress) onProgress({ phase: 'vendor', current: 0, total: 0, message: 'Hersteller werden identifiziert (IEEE-Datenbank)...' });
+
+    const allMacs = onlineDevices
+        .map(d => (portMap.get(d.ip) || { mac: '' }).mac)
+        .filter(Boolean);
+    const vendorMap = allMacs.length > 0 ? await lookupVendorsBatch(allMacs) : new Map();
+
     // Ergebnis zusammenbauen (mit Gerätetyp-Klassifizierung)
     const devices = onlineDevices.map(d => {
         const portInfo = portMap.get(d.ip) || { ports: [], mac: '' };
@@ -333,7 +363,7 @@ async function scanNetworkActive(onProgress) {
         const openPorts = portInfo.ports.map(p => ({ port: p, label: PORT_LABELS[p] || `${p}` }));
         const shares = sharesMap.get(d.ip) || [];
         const isLocal = d.ip === subnetInfo.localIP;
-        const vendor = lookupVendor(portInfo.mac || '');
+        const vendor = vendorMap.get(portInfo.mac) || '';
         const os = _detectOS(d.ttl);
 
         // Gerätetyp-Erkennung (kombiniert Hersteller + Ports + OS + Hostname + TTL)
