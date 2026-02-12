@@ -14,6 +14,13 @@
 
 ---
 
+
+# Ideen-Salat von Simon
+
+
+
+
+
 # Prioritäten-Reihenfolge
 
 | Prio | Issue | Thema | Status |
@@ -25,6 +32,7 @@
 | 5 | #10 | System-Profil (Hardware, Seriennummer, Hersteller-Links) | Neu — Planung |
 | 6 | #4 | Privacy Dashboard anwenderfreundlicher | Überarbeitung implementiert — wartet auf Test |
 | 7 | #5 | PDF Vollansicht + Bearbeitung | Offen |
+| 8 | #11 | Netzwerk-Paketaufzeichnung (Deep Packet Inspection) | Neu — Idee |
 
 ---
 
@@ -285,6 +293,24 @@ Statt einem eigenen Treiber-Bereich (der nie zuverlässig war):
 - **Aufklärung:** Warum Hersteller-Updates besser sind als Dritt-Tools
 
 **Status:** Neu — Planung
+
+---
+
+## 11. Netzwerk-Paketaufzeichnung (Deep Packet Inspection)
+
+**Simons Idee:** Nicht nur sehen WELCHE Programme ins Internet verbinden, sondern auch WAS sie genau senden und empfangen. Ähnlich wie Wireshark, aber einfach zu bedienen.
+
+**Was das bringen würde:**
+- Sehen welche Daten Apps wirklich nach Hause schicken (Telemetrie, Tracking, Passwörter?)
+- "Diese App hat in den letzten 10 Minuten 47 MB an Google gesendet — was war das?"
+- Verdächtige Verbindungen im Detail analysieren (nicht nur IP-Adresse, sondern Inhalt)
+- Beweise sammeln wenn eine App sich verdächtig verhält
+
+**Technischer Aufwand:** Deutlich höher als die bisherigen Netzwerk-Funktionen. Zwei mögliche Wege:
+1. **Windows-Bordmittel:** `netsh trace start capture=yes` (braucht Administratorrechte, erzeugt ETL-Dateien die umgewandelt werden müssen)
+2. **Externe Bibliothek:** npcap + raw sockets (professioneller, aber aufwändiger zu integrieren)
+
+**Status:** Neu — Idee für spätere Version. Wird nicht in der aktuellen Phase umgesetzt.
 
 ---
 

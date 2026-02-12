@@ -980,6 +980,31 @@ function register(mainWindow) {
         return network.resolveIPs(ipAddresses);
     });
 
+    ipcMain.handle('get-polling-data', async () => {
+        const network = require('./network');
+        return network.getPollingData();
+    });
+
+    ipcMain.handle('save-network-snapshot', async (_event, pollingData) => {
+        const history = require('./network-history');
+        return history.saveSnapshot(pollingData);
+    });
+
+    ipcMain.handle('get-network-history', async () => {
+        const history = require('./network-history');
+        return history.getHistory();
+    });
+
+    ipcMain.handle('clear-network-history', async () => {
+        const history = require('./network-history');
+        return history.clearHistory();
+    });
+
+    ipcMain.handle('export-network-history', async (_event, format) => {
+        const history = require('./network-history');
+        return history.exportHistory(format);
+    });
+
     // === System Info ===
     ipcMain.handle('get-system-info', async () => {
         const os = require('os');
@@ -1008,6 +1033,25 @@ function register(mainWindow) {
     ipcMain.handle('scan-local-network', async () => {
         const { scanLocalNetwork } = require('./network-scanner');
         return scanLocalNetwork();
+    });
+
+    ipcMain.handle('scan-network-active', async () => {
+        const { scanNetworkActive } = require('./network-scanner');
+        return scanNetworkActive((progress) => {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('network-scan-progress', progress);
+            }
+        });
+    });
+
+    ipcMain.handle('scan-device-ports', async (_event, ip) => {
+        const { scanDevicePorts } = require('./network-scanner');
+        return scanDevicePorts(ip);
+    });
+
+    ipcMain.handle('get-smb-shares', async (_event, ip) => {
+        const { getSMBShares } = require('./network-scanner');
+        return getSMBShares(ip);
     });
 
     // === System Score ===

@@ -649,6 +649,134 @@ async function resolveIPs(ipAddresses) {
     return transformed;
 }
 
+// ---------------------------------------------------------------------------
+// 9) getPollingData – Kombinierter Endpoint für Echtzeit-Polling
+//    Sammelt Summary + Grouped Connections + Bandwidth in EINEM Aufruf.
+//    IP-Auflösung nutzt NUR den Cache (keine API-Calls → schnell).
+// ---------------------------------------------------------------------------
+async function getPollingData() {
+    // Ein einziger PowerShell-Call für Connections + Summary + Bandwidth
+    const psScript = `
+        $conns = Get-NetTCPConnection | Select-Object LocalAddress, LocalPort, RemoteAddress, RemotePort, State, OwningProcess
+        $pids = $conns | Select-Object -ExpandProperty OwningProcess -Unique
+        $procs = @{}
+        foreach ($p in (Get-Process -Id $pids -ErrorAction SilentlyContinue)) {
+            $procs[$p.Id] = @{ Name = $p.ProcessName; Path = $p.Path }
+        }
+        $connections = @(foreach ($c in $conns) {
+            $pi = $procs[[int]$c.OwningProcess]
+            [PSCustomObject]@{
+                la = $c.LocalAddress
+                lp = $c.LocalPort
+                ra = $c.RemoteAddress
+                rp = $c.RemotePort
+                st = [string]$c.State
+                op = $c.OwningProcess
+                pn = if ($pi) { $pi.Name } else { '' }
+                pp = if ($pi -and $pi.Path) { $pi.Path } else { '' }
+            }
+        })
+        $total = $conns.Count
+        $established = ($conns | Where-Object { $_.State -eq 'Established' }).Count
+        $listening = ($conns | Where-Object { $_.State -eq 'Listen' }).Count
+        $uniqueIPs = ($conns | Where-Object { $_.RemoteAddress -ne '0.0.0.0' -and $_.RemoteAddress -ne '::' -and $_.RemoteAddress -ne '::1' -and $_.RemoteAddress -ne '127.0.0.1' } | Select-Object -ExpandProperty RemoteAddress -Unique).Count
+        $pidCounts = $conns | Group-Object OwningProcess | Sort-Object Count -Descending | Select-Object -First 10
+        $topProcesses = @(foreach ($g in $pidCounts) {
+            $pid = [int]$g.Name
+            [PSCustomObject]@{ name = if ($procs.ContainsKey($pid)) { $procs[$pid].Name } else { "PID $pid" }; cc = $g.Count }
+        })
+        $adapters = Get-NetAdapter -ErrorAction SilentlyContinue | Select-Object Name, InterfaceDescription, Status, LinkSpeed
+        $stats = Get-NetAdapterStatistics -ErrorAction SilentlyContinue | Select-Object Name, ReceivedBytes, SentBytes, ReceivedUnicastPackets, SentUnicastPackets
+        $statsMap = @{}; foreach ($s in $stats) { $statsMap[$s.Name] = $s }
+        $bw = @(foreach ($a in $adapters) {
+            $s = $statsMap[$a.Name]
+            [PSCustomObject]@{ n=$a.Name; d=$a.InterfaceDescription; s=[string]$a.Status; ls=$a.LinkSpeed; rb=if($s){$s.ReceivedBytes}else{0}; sb=if($s){$s.SentBytes}else{0}; rp=if($s){$s.ReceivedUnicastPackets}else{0}; sp=if($s){$s.SentUnicastPackets}else{0} }
+        })
+        [PSCustomObject]@{
+            connections = $connections
+            summary = [PSCustomObject]@{ tc=$total; ec=$established; lc=$listening; ui=$uniqueIPs; tp=$topProcesses }
+            bandwidth = $bw
+        } | ConvertTo-Json -Depth 4 -Compress
+    `.trim();
+
+    try {
+        const { stdout } = await runPS(psScript, { timeout: PS_TIMEOUT, maxBuffer: 10 * 1024 * 1024 });
+        const data = JSON.parse(stdout.trim());
+
+        // Connections parsen
+        const rawConns = Array.isArray(data.connections) ? data.connections : (data.connections ? [data.connections] : []);
+        const connections = rawConns.map(c => ({
+            localAddress: c.la || '', localPort: Number(c.lp) || 0,
+            remoteAddress: c.ra || '', remotePort: Number(c.rp) || 0,
+            state: c.st || '', owningProcess: Number(c.op) || 0,
+            processName: c.pn || '', processPath: c.pp || '',
+        }));
+
+        // Summary parsen
+        const s = data.summary || {};
+        const topProc = Array.isArray(s.tp) ? s.tp.map(p => ({ name: p.name || '', connectionCount: Number(p.cc) || 0 })) : [];
+        const summary = {
+            totalConnections: Number(s.tc) || 0, establishedCount: Number(s.ec) || 0,
+            listeningCount: Number(s.lc) || 0, uniqueRemoteIPs: Number(s.ui) || 0, topProcesses: topProc,
+        };
+
+        // Bandwidth parsen
+        const rawBw = Array.isArray(data.bandwidth) ? data.bandwidth : (data.bandwidth ? [data.bandwidth] : []);
+        const bandwidth = rawBw.map(b => ({
+            name: b.n || '', description: b.d || '', status: b.s || '', linkSpeed: b.ls || '',
+            receivedBytes: Number(b.rb) || 0, sentBytes: Number(b.sb) || 0,
+            receivedPackets: Number(b.rp) || 0, sentPackets: Number(b.sp) || 0,
+        }));
+
+        // Gruppierung (wie getGroupedConnections, aber NUR mit Cache-Daten)
+        const groups = new Map();
+        for (const conn of connections) {
+            const key = conn.processName || 'System';
+            if (!groups.has(key)) {
+                groups.set(key, { processName: key, processPath: conn.processPath || '', connections: [], uniqueRemoteIPs: new Set(), states: {} });
+            }
+            const group = groups.get(key);
+            group.connections.push(conn);
+            if (conn.remoteAddress && !isPrivateIP(conn.remoteAddress)) group.uniqueRemoteIPs.add(conn.remoteAddress);
+            group.states[conn.state] = (group.states[conn.state] || 0) + 1;
+        }
+
+        // IP-Auflösung NUR aus Cache (keine API-Calls → sofort)
+        const grouped = [];
+        for (const [name, group] of groups) {
+            const companies = new Set();
+            let hasTrackers = false, hasHighRisk = false;
+            for (const ip of group.uniqueRemoteIPs) {
+                const info = _ipCache.get(ip);
+                if (info) {
+                    if (info.org && info.org !== 'Unbekannt') companies.add(info.org);
+                    if (info.isTracker) hasTrackers = true;
+                    if (info.isHighRisk) hasHighRisk = true;
+                }
+            }
+            const enrichedConnections = group.connections.map(c => ({
+                ...c,
+                resolved: isPrivateIP(c.remoteAddress)
+                    ? { org: 'Lokal', isp: '', country: '', countryCode: '', as: '', isTracker: false, isHighRisk: false, isLocal: true }
+                    : { ...(_ipCache.get(c.remoteAddress) || { org: 'Unbekannt', isp: '', country: '', countryCode: '', as: '', isTracker: false, isHighRisk: false }), isLocal: false },
+            }));
+            grouped.push({
+                processName: name, processPath: group.processPath,
+                connectionCount: group.connections.length, uniqueIPCount: group.uniqueRemoteIPs.size,
+                uniqueIPs: [...group.uniqueRemoteIPs], states: group.states,
+                isRunning: true, // Beim Polling überspringen wir den Process-Check (zu langsam)
+                connections: enrichedConnections, resolvedCompanies: [...companies], hasTrackers, hasHighRisk,
+            });
+        }
+        grouped.sort((a, b) => b.connectionCount - a.connectionCount);
+
+        return { summary, grouped, bandwidth };
+    } catch (err) {
+        log.error('Polling-Daten konnten nicht abgerufen werden:', err.message);
+        throw err;
+    }
+}
+
 module.exports = {
     getConnections,
     getBandwidth,
@@ -657,6 +785,7 @@ module.exports = {
     unblockProcess,
     getNetworkSummary,
     getGroupedConnections,
+    getPollingData,
     resolveIPs,
     lookupIPs,
 };

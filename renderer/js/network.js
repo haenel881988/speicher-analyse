@@ -20,6 +20,28 @@ export class NetworkView {
         this._errorCount = 0;
         this.localDevices = [];
         this._devicesLoading = false;
+        this._isRefreshing = false;
+        this._historyData = [];
+        this._historyLoaded = false;
+        this._activeScanResult = null;
+        this._activeScanProgress = null;
+        this._activeScanRunning = false;
+        this._expandedDevices = new Set();
+        this._setupScanProgressListener();
+    }
+
+    _setupScanProgressListener() {
+        if (window.api.onNetworkScanProgress) {
+            window.api.onNetworkScanProgress((progress) => {
+                this._activeScanProgress = progress;
+                if (this.activeSubTab === 'devices' && this._activeScanRunning) {
+                    const progressEl = this.container.querySelector('#network-scan-progress-bar');
+                    if (progressEl) {
+                        progressEl.innerHTML = this._renderScanProgress();
+                    }
+                }
+            });
+        }
     }
 
     async init() {
@@ -30,17 +52,29 @@ export class NetworkView {
         await this.refresh();
     }
 
-    async refresh() {
+    async refresh(usePollingEndpoint = false) {
+        // Overlap-Prevention: wenn bereits ein Refresh läuft, überspringen
+        if (this._isRefreshing) return;
+        this._isRefreshing = true;
+
         try {
-            // Sequentiell laden um PowerShell-Parallelprobleme zu vermeiden
-            const summary = await window.api.getNetworkSummary();
-            this.summary = summary;
+            if (usePollingEndpoint) {
+                // Kombinierter Endpoint: 1 PS-Call statt 3 (für Echtzeit-Polling)
+                const data = await window.api.getPollingData();
+                this.summary = data.summary;
+                this.groupedData = data.grouped || [];
+                this.bandwidth = data.bandwidth || [];
+            } else {
+                // Voller Refresh mit IP-Auflösung (für manuellen Snapshot)
+                const summary = await window.api.getNetworkSummary();
+                this.summary = summary;
 
-            const grouped = await window.api.getGroupedConnections();
-            this.groupedData = grouped || [];
+                const grouped = await window.api.getGroupedConnections();
+                this.groupedData = grouped || [];
 
-            const bandwidth = await window.api.getBandwidth();
-            this.bandwidth = bandwidth || [];
+                const bandwidth = await window.api.getBandwidth();
+                this.bandwidth = bandwidth || [];
+            }
 
             this._lastRefreshTime = new Date();
             this._lastError = null;
@@ -80,12 +114,14 @@ export class NetworkView {
                     await this.refresh();
                 };
             }
+        } finally {
+            this._isRefreshing = false;
         }
     }
 
-    startPolling(intervalMs = 5000) {
+    startPolling(intervalMs = 10000) {
         this.stopPolling();
-        this.pollInterval = setInterval(() => this.refresh(), intervalMs);
+        this.pollInterval = setInterval(() => this.refresh(true), intervalMs);
     }
 
     stopPolling() {
@@ -119,6 +155,7 @@ export class NetworkView {
                     <button class="network-tab ${this.activeSubTab === 'devices' ? 'active' : ''}" data-subtab="devices">Lokale Geräte${this.localDevices.length > 0 ? ` (${this.localDevices.length})` : ''}</button>
                     <button class="network-tab ${this.activeSubTab === 'bandwidth' ? 'active' : ''}" data-subtab="bandwidth">Bandbreite</button>
                     <button class="network-tab ${this.activeSubTab === 'top' ? 'active' : ''}" data-subtab="top">Top-Prozesse</button>
+                    <button class="network-tab ${this.activeSubTab === 'history' ? 'active' : ''}" data-subtab="history">Verlauf${this._historyData.length > 0 ? ` (${this._historyData.length})` : ''}</button>
                 </div>
                 <div class="network-toolbar">
                     <input type="text" class="network-search" placeholder="Filtern nach Prozess oder IP..." value="${this._esc(this.filter)}">
@@ -145,6 +182,7 @@ export class NetworkView {
             case 'devices': return this._renderLocalDevices();
             case 'bandwidth': return this._renderBandwidth();
             case 'top': return this._renderTopProcesses();
+            case 'history': return this._renderHistory();
             default: return '';
         }
     }
@@ -271,29 +309,111 @@ export class NetworkView {
         return String.fromCodePoint(cc.charCodeAt(0) + offset, cc.charCodeAt(1) + offset);
     }
 
+    _renderScanProgress() {
+        const p = this._activeScanProgress;
+        if (!p) return '<span>Scan wird vorbereitet...</span>';
+        const phaseLabels = { init: 'Vorbereitung', ping: 'Ping Sweep', ports: 'Port-Scan', shares: 'SMB-Freigaben', done: 'Abgeschlossen' };
+        const label = phaseLabels[p.phase] || p.phase;
+        const pct = p.total > 0 ? Math.round((p.current / p.total) * 100) : 0;
+        return `<span>${label}${p.total > 0 ? ` (${p.current}/${p.total})` : ''}</span>
+            ${p.total > 0 ? `<div class="network-progress-bar"><div class="network-progress-fill" style="width:${pct}%"></div></div>` : ''}
+            <span style="font-size:11px;color:var(--text-muted)">${this._esc(p.message || '')}</span>`;
+    }
+
     _renderLocalDevices() {
-        if (this._devicesLoading) {
-            return '<div class="loading-state">Netzwerk wird gescannt...</div>';
-        }
+        const hasActiveScan = this._activeScanResult && this._activeScanResult.devices;
+        const devices = hasActiveScan ? this._activeScanResult.devices : this.localDevices;
+        const isActive = hasActiveScan;
 
-        const scanBtn = `<button class="network-btn" id="network-scan-devices">Netzwerk scannen</button>`;
+        const toolbar = `<div class="network-devices-toolbar">
+            <button class="network-btn" id="network-scan-active" ${this._activeScanRunning ? 'disabled' : ''}>${this._activeScanRunning ? 'Scan läuft...' : 'Netzwerk scannen'}</button>
+            <button class="network-btn network-btn-secondary" id="network-scan-passive" ${this._activeScanRunning ? 'disabled' : ''} title="Schneller passiver Scan (nur ARP-Tabelle)">Schnellscan</button>
+            ${hasActiveScan ? `<span class="network-timestamp">Subnetz: ${this._esc(this._activeScanResult.subnet)} | Eigene IP: ${this._esc(this._activeScanResult.localIP)}</span>` : ''}
+            ${devices.length > 0 ? `<span class="network-timestamp">${devices.length} Gerät${devices.length !== 1 ? 'e' : ''}</span>` : ''}
+            ${hasActiveScan ? `<button class="network-btn network-btn-secondary" id="network-export-devices">Export CSV</button>` : ''}
+        </div>`;
 
-        if (this.localDevices.length === 0) {
+        const progressBar = this._activeScanRunning
+            ? `<div class="network-scan-progress" id="network-scan-progress-bar">${this._renderScanProgress()}</div>`
+            : '';
+
+        if (devices.length === 0 && !this._activeScanRunning) {
             return `<div class="network-devices-section">
-                <div class="network-devices-toolbar">${scanBtn}</div>
-                <div class="network-empty">Noch kein Scan durchgeführt. Klicke "Netzwerk scannen" um Geräte im lokalen Netzwerk zu finden.</div>
+                ${toolbar}
+                ${progressBar}
+                <div class="network-empty">Noch kein Scan durchgeführt. Klicke "Netzwerk scannen" für einen vollständigen Scan mit Port-Erkennung.</div>
             </div>`;
         }
 
-        let filtered = this.localDevices;
+        let filtered = devices;
         if (this.filter) {
             const q = this.filter.toLowerCase();
             filtered = filtered.filter(d =>
-                d.ip.includes(q) || d.mac.toLowerCase().includes(q) ||
-                d.hostname.toLowerCase().includes(q) || d.vendor.toLowerCase().includes(q)
+                (d.ip || '').includes(q) || (d.mac || '').toLowerCase().includes(q) ||
+                (d.hostname || '').toLowerCase().includes(q) || (d.vendor || '').toLowerCase().includes(q) ||
+                (d.os || '').toLowerCase().includes(q)
             );
         }
 
+        if (isActive) {
+            // Erweiterte Ansicht für aktiven Scan (mit Ports, OS, etc.)
+            const rows = filtered.map(d => {
+                const expanded = this._expandedDevices.has(d.ip);
+                const portBadges = (d.openPorts || []).map(p =>
+                    `<span class="network-port-badge">${p.port} <small>${this._esc(p.label)}</small></span>`
+                ).join(' ');
+                const localBadge = d.isLocal ? ' <span class="network-local-badge">Eigener PC</span>' : '';
+                const rttClass = d.rtt < 5 ? 'network-rtt-fast' : d.rtt < 50 ? 'network-rtt-medium' : 'network-rtt-slow';
+
+                let detailRow = '';
+                if (expanded) {
+                    const shares = (d.shares || []).length > 0
+                        ? `<div><strong>Freigegebene Ordner:</strong> ${d.shares.map(s => this._esc(s)).join(', ')}</div>`
+                        : '';
+                    detailRow = `<tr class="network-device-detail-row"><td colspan="8">
+                        <div class="network-device-detail">
+                            ${d.openPorts?.length > 0 ? `<div><strong>Offene Ports:</strong> ${portBadges}</div>` : '<div>Keine offenen Standard-Ports</div>'}
+                            ${shares}
+                            <div class="network-device-actions">
+                                <button class="network-btn-small" data-detail-ports="${this._esc(d.ip)}">Weitere Ports scannen</button>
+                                ${d.openPorts?.some(p => p.port === 445) ? `<button class="network-btn-small" data-detail-shares="${this._esc(d.ip)}">SMB-Freigaben prüfen</button>` : ''}
+                            </div>
+                        </div>
+                    </td></tr>`;
+                }
+
+                return `<tr class="network-device-row" data-device-toggle="${this._esc(d.ip)}">
+                    <td><span class="network-status-dot network-status-safe"></span></td>
+                    <td>${this._esc(d.hostname) || '<span style="color:var(--text-muted)">—</span>'}${localBadge}</td>
+                    <td class="network-ip">${this._esc(d.ip)}</td>
+                    <td style="font-family:monospace;font-size:11px">${this._esc(d.mac) || '—'}</td>
+                    <td>${this._esc(d.vendor) || '<span style="color:var(--text-muted)">—</span>'}</td>
+                    <td>${this._esc(d.os) || '—'}</td>
+                    <td>${d.openPorts?.length || 0} Port${(d.openPorts?.length || 0) !== 1 ? 's' : ''}</td>
+                    <td><span class="${rttClass}">${d.rtt || 0} ms</span></td>
+                </tr>${detailRow}`;
+            }).join('');
+
+            return `<div class="network-devices-section">
+                ${toolbar}
+                ${progressBar}
+                <table class="network-table network-devices-table">
+                    <thead><tr>
+                        <th style="width:24px"></th>
+                        <th>Hostname</th>
+                        <th>IP-Adresse</th>
+                        <th>MAC-Adresse</th>
+                        <th>Hersteller</th>
+                        <th>Betriebssystem</th>
+                        <th>Ports</th>
+                        <th>Ping</th>
+                    </tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>`;
+        }
+
+        // Passive Ansicht (nur ARP-Tabelle, wie vorher)
         const rows = filtered.map(d => {
             const stateClass = d.state === 'Erreichbar' ? 'network-device-reachable' :
                 d.state === 'Veraltet' ? 'network-device-stale' : '';
@@ -307,10 +427,8 @@ export class NetworkView {
         }).join('');
 
         return `<div class="network-devices-section">
-            <div class="network-devices-toolbar">
-                ${scanBtn}
-                <span class="network-timestamp">${filtered.length} Gerät${filtered.length !== 1 ? 'e' : ''} gefunden</span>
-            </div>
+            ${toolbar}
+            ${progressBar}
             <table class="network-table network-devices-table">
                 <thead><tr>
                     <th>Hostname</th>
@@ -374,11 +492,117 @@ export class NetworkView {
         </div>`;
     }
 
+    _renderHistory() {
+        if (!this._historyLoaded) {
+            return '<div class="loading-state">Verlauf wird geladen...</div>';
+        }
+
+        if (this._historyData.length === 0) {
+            return `<div class="network-history-section">
+                <div class="network-devices-toolbar">
+                    <button class="network-btn" id="network-save-snapshot">Aktuellen Snapshot speichern</button>
+                </div>
+                <div class="network-empty">Noch keine Snapshots gespeichert. Klicke "Aktuellen Snapshot speichern" oder nutze den Echtzeit-Modus.</div>
+            </div>`;
+        }
+
+        const snapshots = [...this._historyData].reverse();
+
+        const rows = snapshots.map((s, i) => {
+            const ts = new Date(s.timestamp);
+            const dateStr = ts.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' });
+            const timeStr = ts.toLocaleTimeString('de-DE');
+            const trackerCount = s.groups.filter(g => g.hasTrackers).length;
+            const highRiskCount = s.groups.filter(g => g.hasHighRisk).length;
+
+            let diffHtml = '';
+            if (i < snapshots.length - 1) {
+                const prev = snapshots[i + 1];
+                const delta = s.summary.totalConnections - prev.summary.totalConnections;
+                const prevProcesses = new Set(prev.groups.map(g => g.processName));
+                const newProcs = s.groups.filter(g => !prevProcesses.has(g.processName));
+                if (delta !== 0 || newProcs.length > 0) {
+                    const deltaStr = delta > 0 ? `+${delta}` : `${delta}`;
+                    const deltaClass = delta > 0 ? 'network-diff-up' : delta < 0 ? 'network-diff-down' : '';
+                    diffHtml = `<span class="network-diff ${deltaClass}">${deltaStr}</span>`;
+                    if (newProcs.length > 0) {
+                        diffHtml += ` <span class="network-diff-new" title="${newProcs.map(p => p.processName).join(', ')}">+${newProcs.length} neue${newProcs.length === 1 ? 'r' : ''} Prozess${newProcs.length === 1 ? '' : 'e'}</span>`;
+                    }
+                }
+            }
+
+            return `<tr>
+                <td>${dateStr} ${timeStr}</td>
+                <td>${s.summary.totalConnections}</td>
+                <td>${s.summary.establishedCount}</td>
+                <td>${s.summary.uniqueRemoteIPs}</td>
+                <td>${s.groups.length}</td>
+                <td>${trackerCount > 0 ? `<span class="network-tracker-badge">${trackerCount}</span>` : '-'}</td>
+                <td>${highRiskCount > 0 ? `<span class="network-highrisk-badge">${highRiskCount}</span>` : '-'}</td>
+                <td>${diffHtml || '-'}</td>
+            </tr>`;
+        }).join('');
+
+        return `<div class="network-history-section">
+            <div class="network-devices-toolbar">
+                <button class="network-btn" id="network-save-snapshot">Aktuellen Snapshot speichern</button>
+                <button class="network-btn" id="network-export-history-csv" title="Als CSV exportieren">Export CSV</button>
+                <button class="network-btn" id="network-export-history-json" title="Als JSON exportieren">Export JSON</button>
+                <button class="network-btn network-btn-danger" id="network-clear-history">Verlauf löschen</button>
+                <span class="network-timestamp">${this._historyData.length} Snapshot${this._historyData.length !== 1 ? 's' : ''}</span>
+            </div>
+            <table class="network-table">
+                <thead><tr>
+                    <th>Zeitpunkt</th>
+                    <th>Verbindungen</th>
+                    <th>Aktiv</th>
+                    <th>Remote-IPs</th>
+                    <th>Prozesse</th>
+                    <th>Tracker</th>
+                    <th>Hochrisiko</th>
+                    <th>Änderung</th>
+                </tr></thead>
+                <tbody>${rows}</tbody>
+            </table>
+        </div>`;
+    }
+
+    async _loadHistory() {
+        try {
+            this._historyData = await window.api.getNetworkHistory();
+            this._historyLoaded = true;
+        } catch (err) {
+            console.error('Verlauf laden fehlgeschlagen:', err);
+            this._historyData = [];
+            this._historyLoaded = true;
+        }
+    }
+
+    async _saveCurrentSnapshot() {
+        if (!this.summary || !this.groupedData) return;
+        try {
+            const result = await window.api.saveNetworkSnapshot({
+                summary: this.summary,
+                grouped: this.groupedData,
+            });
+            if (result.success) {
+                showToast(`Snapshot gespeichert (${result.snapshotCount} insgesamt)`, 'success');
+                await this._loadHistory();
+                if (this.activeSubTab === 'history') this.render();
+            }
+        } catch (err) {
+            showToast('Snapshot speichern fehlgeschlagen: ' + err.message, 'error');
+        }
+    }
+
     _wireEvents() {
         // Sub-tabs
         this.container.querySelectorAll('.network-tab').forEach(tab => {
-            tab.onclick = () => {
+            tab.onclick = async () => {
                 this.activeSubTab = tab.dataset.subtab;
+                if (tab.dataset.subtab === 'history' && !this._historyLoaded) {
+                    await this._loadHistory();
+                }
                 this.render();
             };
         });
@@ -408,7 +632,7 @@ export class NetworkView {
             realtimeToggle.onchange = () => {
                 this.snapshotMode = !realtimeToggle.checked;
                 if (!this.snapshotMode) {
-                    this.startPolling(5000);
+                    this.startPolling(10000);
                 } else {
                     this.stopPolling();
                 }
@@ -430,21 +654,118 @@ export class NetworkView {
             };
         });
 
-        // Device scan
-        const scanDevicesBtn = this.container.querySelector('#network-scan-devices');
-        if (scanDevicesBtn) {
-            scanDevicesBtn.onclick = async () => {
+        // Active network scan
+        const scanActiveBtn = this.container.querySelector('#network-scan-active');
+        if (scanActiveBtn) {
+            scanActiveBtn.onclick = async () => {
+                this._activeScanRunning = true;
+                this._activeScanProgress = null;
+                this.render();
+                try {
+                    this._activeScanResult = await window.api.scanNetworkActive();
+                    showToast(`${this._activeScanResult.devices.length} Geräte gefunden`, 'success');
+                } catch (err) {
+                    console.error('Aktiver Scan Fehler:', err);
+                    showToast('Netzwerk-Scan fehlgeschlagen: ' + err.message, 'error');
+                }
+                this._activeScanRunning = false;
+                this.render();
+            };
+        }
+
+        // Passive scan (schnell, nur ARP)
+        const scanPassiveBtn = this.container.querySelector('#network-scan-passive');
+        if (scanPassiveBtn) {
+            scanPassiveBtn.onclick = async () => {
                 this._devicesLoading = true;
+                this._activeScanResult = null;
                 this.render();
                 try {
                     this.localDevices = await window.api.scanLocalNetwork();
                 } catch (err) {
-                    console.error('Geräte-Scan Fehler:', err);
+                    console.error('Schnellscan Fehler:', err);
                     this.localDevices = [];
-                    showToast('Geräte-Scan fehlgeschlagen: ' + err.message, 'error');
+                    showToast('Schnellscan fehlgeschlagen: ' + err.message, 'error');
                 }
                 this._devicesLoading = false;
                 this.render();
+            };
+        }
+
+        // Device row toggle (expand/collapse)
+        this.container.querySelectorAll('[data-device-toggle]').forEach(row => {
+            row.onclick = (e) => {
+                if (e.target.closest('button')) return;
+                const ip = row.dataset.deviceToggle;
+                if (this._expandedDevices.has(ip)) {
+                    this._expandedDevices.delete(ip);
+                } else {
+                    this._expandedDevices.add(ip);
+                }
+                this.render();
+            };
+        });
+
+        // Detail: Port-Scan für einzelnes Gerät
+        this.container.querySelectorAll('[data-detail-ports]').forEach(btn => {
+            btn.onclick = async (e) => {
+                e.stopPropagation();
+                const ip = btn.dataset.detailPorts;
+                btn.disabled = true;
+                btn.textContent = 'Scanne...';
+                try {
+                    const ports = await window.api.scanDevicePorts(ip);
+                    if (this._activeScanResult) {
+                        const device = this._activeScanResult.devices.find(d => d.ip === ip);
+                        if (device) device.openPorts = ports;
+                    }
+                    this.render();
+                } catch (err) {
+                    showToast('Port-Scan fehlgeschlagen: ' + err.message, 'error');
+                }
+            };
+        });
+
+        // Detail: SMB-Shares
+        this.container.querySelectorAll('[data-detail-shares]').forEach(btn => {
+            btn.onclick = async (e) => {
+                e.stopPropagation();
+                const ip = btn.dataset.detailShares;
+                btn.disabled = true;
+                btn.textContent = 'Prüfe...';
+                try {
+                    const shares = await window.api.getSMBShares(ip);
+                    if (this._activeScanResult) {
+                        const device = this._activeScanResult.devices.find(d => d.ip === ip);
+                        if (device) device.shares = shares.map(s => s.name);
+                    }
+                    this.render();
+                } catch (err) {
+                    showToast('SMB-Prüfung fehlgeschlagen: ' + err.message, 'error');
+                }
+            };
+        });
+
+        // Export devices as CSV
+        const exportDevicesBtn = this.container.querySelector('#network-export-devices');
+        if (exportDevicesBtn && this._activeScanResult) {
+            exportDevicesBtn.onclick = () => {
+                const devices = this._activeScanResult.devices || [];
+                const header = 'IP;Hostname;MAC;Hersteller;Betriebssystem;Ports;Ping (ms);Freigaben';
+                const rows = devices.map(d => [
+                    d.ip, d.hostname, d.mac, d.vendor, d.os,
+                    (d.openPorts || []).map(p => `${p.port}/${p.label}`).join(' '),
+                    d.rtt, (d.shares || []).join(' '),
+                ].join(';'));
+                const csv = header + '\n' + rows.join('\n');
+                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `netzwerk-geraete-${new Date().toISOString().slice(0, 10)}.csv`;
+                a.click();
+                URL.revokeObjectURL(url);
+                showToast('CSV exportiert', 'success');
             };
         }
 
@@ -468,6 +789,74 @@ export class NetworkView {
                 btn.disabled = false;
             };
         });
+
+        // History: Snapshot speichern
+        const saveSnapshotBtn = this.container.querySelector('#network-save-snapshot');
+        if (saveSnapshotBtn) {
+            saveSnapshotBtn.onclick = async () => {
+                saveSnapshotBtn.disabled = true;
+                saveSnapshotBtn.textContent = 'Wird gespeichert...';
+                await this._saveCurrentSnapshot();
+                saveSnapshotBtn.disabled = false;
+                saveSnapshotBtn.textContent = 'Aktuellen Snapshot speichern';
+            };
+        }
+
+        // History: Export CSV
+        const exportCsvBtn = this.container.querySelector('#network-export-history-csv');
+        if (exportCsvBtn) {
+            exportCsvBtn.onclick = async () => {
+                try {
+                    const csv = await window.api.exportNetworkHistory('csv');
+                    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `netzwerk-verlauf-${new Date().toISOString().slice(0, 10)}.csv`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    showToast('CSV exportiert', 'success');
+                } catch (err) {
+                    showToast('Export fehlgeschlagen: ' + err.message, 'error');
+                }
+            };
+        }
+
+        // History: Export JSON
+        const exportJsonBtn = this.container.querySelector('#network-export-history-json');
+        if (exportJsonBtn) {
+            exportJsonBtn.onclick = async () => {
+                try {
+                    const json = await window.api.exportNetworkHistory('json');
+                    const blob = new Blob([json], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `netzwerk-verlauf-${new Date().toISOString().slice(0, 10)}.json`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    showToast('JSON exportiert', 'success');
+                } catch (err) {
+                    showToast('Export fehlgeschlagen: ' + err.message, 'error');
+                }
+            };
+        }
+
+        // History: Verlauf löschen
+        const clearHistoryBtn = this.container.querySelector('#network-clear-history');
+        if (clearHistoryBtn) {
+            clearHistoryBtn.onclick = async () => {
+                if (!confirm('Gesamten Netzwerk-Verlauf löschen?')) return;
+                try {
+                    await window.api.clearNetworkHistory();
+                    this._historyData = [];
+                    showToast('Verlauf gelöscht', 'success');
+                    this.render();
+                } catch (err) {
+                    showToast('Löschen fehlgeschlagen: ' + err.message, 'error');
+                }
+            };
+        }
     }
 
     _esc(text) {

@@ -239,7 +239,16 @@ contextBridge.exposeInMainWorld('api', {
     getNetworkSummary: () => ipcRenderer.invoke('get-network-summary'),
     getGroupedConnections: () => ipcRenderer.invoke('get-grouped-connections'),
     resolveIPs: (ipAddresses) => ipcRenderer.invoke('resolve-ips', ipAddresses),
+    getPollingData: () => ipcRenderer.invoke('get-polling-data'),
+    saveNetworkSnapshot: (data) => ipcRenderer.invoke('save-network-snapshot', data),
+    getNetworkHistory: () => ipcRenderer.invoke('get-network-history'),
+    clearNetworkHistory: () => ipcRenderer.invoke('clear-network-history'),
+    exportNetworkHistory: (format) => ipcRenderer.invoke('export-network-history', format),
     scanLocalNetwork: () => ipcRenderer.invoke('scan-local-network'),
+    scanNetworkActive: () => ipcRenderer.invoke('scan-network-active'),
+    scanDevicePorts: (ip) => ipcRenderer.invoke('scan-device-ports', ip),
+    getSMBShares: (ip) => ipcRenderer.invoke('get-smb-shares', ip),
+    onNetworkScanProgress: (callback) => ipcRenderer.on('network-scan-progress', (_event, data) => callback(data)),
 
     // === System Info ===
     getSystemInfo: () => ipcRenderer.invoke('get-system-info'),
