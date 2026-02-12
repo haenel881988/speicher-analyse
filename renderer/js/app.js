@@ -11,7 +11,6 @@ import {
 import { OldFilesView } from './old-files.js';
 import { DuplicatesView } from './duplicates.js';
 import { CleanupView } from './cleanup.js';
-import { ScanCompareView } from './scan-compare.js';
 import { EditorPanel } from './preview.js';
 import { RegistryView } from './registry.js';
 import { DashboardView } from './dashboard.js';
@@ -101,7 +100,6 @@ const editorPanel = new EditorPanel(els.previewContent, els.previewTitle, els.pr
 const oldFilesView = new OldFilesView(document.getElementById('view-old-files'));
 const duplicatesView = new DuplicatesView(document.getElementById('view-duplicates'));
 const cleanupView = new CleanupView(document.getElementById('view-cleanup'));
-const scanCompareView = new ScanCompareView(document.getElementById('view-compare'));
 const registryView = new RegistryView(document.getElementById('view-registry'));
 const dashboardView = new DashboardView(document.getElementById('view-dashboard'));
 const autostartView = new AutostartView(document.getElementById('view-autostart'));
@@ -571,8 +569,6 @@ async function loadAllViews(skipPostAnalysis = false) {
     oldFilesView.init(state.currentScanId);
     duplicatesView.init(state.currentScanId);
     cleanupView.init(state.currentScanId);
-    scanCompareView.init(state.currentScanId);
-
     // Init dashboard
     dashboardView.init(state.currentScanId, state.lastScanProgress || {});
 

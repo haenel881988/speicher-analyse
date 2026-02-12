@@ -19,23 +19,23 @@ for (const [size, group] of sizeGroups) {
     }
 }
 
-const totalToHash = candidates.reduce((sum, g) => sum + g.files.length, 0);
+let currentPhaseTotal = candidates.reduce((sum, g) => sum + g.files.length, 0);
 let filesHashed = 0;
 let lastProgressTime = 0;
-const startTime = Date.now();
+let phaseStartTime = Date.now();
 
 function sendProgress(phase, currentFile) {
     const now = Date.now();
     if (now - lastProgressTime >= 250) {
         lastProgressTime = now;
-        const elapsed = (now - startTime) / 1000;
-        const pct = totalToHash > 0 ? filesHashed / totalToHash : 0;
+        const elapsed = (now - phaseStartTime) / 1000;
+        const pct = currentPhaseTotal > 0 ? filesHashed / currentPhaseTotal : 0;
         const eta = pct > 0.05 ? Math.round(elapsed / pct - elapsed) : 0;
         parentPort.postMessage({
             type: 'progress',
             phase,
             filesHashed,
-            totalToHash,
+            totalToHash: currentPhaseTotal,
             currentFile,
             eta,
         });
@@ -93,6 +93,8 @@ for (const candidate of candidates) {
 
 // Phase 2: Full hash only where partial hashes match
 filesHashed = 0;
+currentPhaseTotal = Array.from(partialGroups.values()).reduce((sum, g) => g.size > PARTIAL_SIZE ? sum + g.files.length : sum, 0);
+phaseStartTime = Date.now();
 const finalGroups = [];
 
 for (const [, candidate] of partialGroups) {

@@ -73,6 +73,10 @@ contextBridge.exposeInMainWorld('api', {
         ipcRenderer.removeAllListeners('duplicate-complete');
         ipcRenderer.on('duplicate-complete', (_e, data) => callback(data));
     },
+    onDuplicateError: (callback) => {
+        ipcRenderer.removeAllListeners('duplicate-error');
+        ipcRenderer.on('duplicate-error', (_e, data) => callback(data));
+    },
 
     // === Size Duplicates (pre-scan) ===
     getSizeDuplicates: (scanId, minSize) => ipcRenderer.invoke('get-size-duplicates', scanId, minSize),
@@ -83,10 +87,6 @@ contextBridge.exposeInMainWorld('api', {
     // === Cleanup ===
     scanCleanupCategories: (scanId) => ipcRenderer.invoke('scan-cleanup-categories', scanId),
     cleanCategory: (categoryId, paths) => ipcRenderer.invoke('clean-category', categoryId, paths),
-
-    // === Scan Compare ===
-    saveScan: (scanId) => ipcRenderer.invoke('save-scan', scanId),
-    compareScan: (scanId) => ipcRenderer.invoke('compare-scan', scanId),
 
     // === Preview ===
     readFilePreview: (filePath, maxLines) => ipcRenderer.invoke('read-file-preview', filePath, maxLines),

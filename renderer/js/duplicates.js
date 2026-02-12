@@ -17,13 +17,14 @@ export class DuplicatesView {
     }
 
     render() {
+        const hasScan = !!this.scanId;
         this.container.innerHTML = `
             <div class="tool-toolbar">
-                <button class="btn btn-primary" id="dup-start-scan">Duplikat-Scan starten</button>
+                <button class="btn btn-primary" id="dup-start-scan" ${hasScan ? '' : 'disabled'}>Duplikat-Scan starten</button>
                 <button class="btn" id="dup-cancel-scan" style="display:none">Abbrechen</button>
                 <div class="tool-filters" style="display:inline-flex;gap:8px;margin-left:12px">
-                    <label>Min: <input type="text" id="dup-min-size" class="filter-input" value="1KB" style="width:70px"></label>
-                    <label>Max: <input type="text" id="dup-max-size" class="filter-input" value="2GB" style="width:70px"></label>
+                    <label>Min: <input type="text" id="dup-min-size" class="filter-input" value="1KB" style="width:70px" ${hasScan ? '' : 'disabled'}></label>
+                    <label>Max: <input type="text" id="dup-max-size" class="filter-input" value="2GB" style="width:70px" ${hasScan ? '' : 'disabled'}></label>
                 </div>
                 <div class="tool-summary" id="dup-summary"></div>
             </div>
@@ -37,7 +38,9 @@ export class DuplicatesView {
                 <span class="selected-info" id="dup-selected-info"></span>
             </div>
             <div class="tool-results" id="dup-results">
-                <div class="tool-placeholder">Klicke "Duplikat-Scan starten" nach einem abgeschlossenen Laufwerk-Scan</div>
+                <div class="tool-placeholder">${hasScan
+                    ? 'Klicke "Duplikat-Scan starten" um doppelte Dateien zu finden'
+                    : 'Bitte zuerst ein Laufwerk scannen, bevor Duplikate gesucht werden können'}</div>
             </div>
         `;
 
@@ -74,6 +77,14 @@ export class DuplicatesView {
             cancelBtn.style.display = 'none';
             progressEl.style.display = 'none';
             this.renderResults();
+        });
+
+        window.api.onDuplicateError((data) => {
+            this.scanning = false;
+            startBtn.style.display = 'inline-block';
+            cancelBtn.style.display = 'none';
+            progressEl.style.display = 'none';
+            showToast(data.error || 'Duplikat-Scan fehlgeschlagen', 'error');
         });
 
         try {

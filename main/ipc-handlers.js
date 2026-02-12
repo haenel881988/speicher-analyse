@@ -9,7 +9,6 @@ const { generateCSV } = require('./export');
 const { getOldFiles } = require('./old-files');
 const { DuplicateFinder } = require('./duplicates');
 const { scanCategories, cleanCategory } = require('./cleanup');
-const { saveScan, loadScan, compareScans } = require('./scan-compare');
 const { readFilePreview } = require('./preview');
 const registry = require('./registry');
 const autostart = require('./autostart');
@@ -288,7 +287,7 @@ function register(mainWindow) {
     // === Duplicate Finder ===
     ipcMain.handle('start-duplicate-scan', async (_event, scanId, options) => {
         const scanner = scans.get(scanId);
-        if (!scanner) throw new Error('Scan nicht gefunden');
+        if (!scanner) throw new Error('Bitte zuerst ein Laufwerk scannen, bevor Duplikate gesucht werden können.');
 
         // Cancel any existing finder for this scan
         const existing = duplicateFinders.get(scanId);
@@ -349,50 +348,6 @@ function register(mainWindow) {
 
     ipcMain.handle('clean-category', async (_event, categoryId, paths) => {
         return cleanCategory(categoryId, paths);
-    });
-
-    // === Scan Compare ===
-    ipcMain.handle('save-scan', async (_event, scanId) => {
-        const scanner = scans.get(scanId);
-        if (!scanner) return { error: 'Scan nicht gefunden' };
-
-        const result = await dialog.showSaveDialog(mainWindow, {
-            title: 'Scan speichern',
-            defaultPath: `scan-${new Date().toISOString().slice(0, 10)}.scan.gz`,
-            filters: [{ name: 'Scan-Dateien', extensions: ['scan.gz'] }],
-        });
-
-        if (result.canceled) return { canceled: true };
-
-        const saveResult = saveScan(scanner, result.filePath);
-        return { ...saveResult, path: result.filePath };
-    });
-
-    ipcMain.handle('compare-scan', async (_event, scanId) => {
-        const scanner = scans.get(scanId);
-        if (!scanner) return { error: 'Scan nicht gefunden' };
-
-        const result = await dialog.showOpenDialog(mainWindow, {
-            title: 'Früheren Scan laden',
-            filters: [{ name: 'Scan-Dateien', extensions: ['scan.gz'] }],
-            properties: ['openFile'],
-        });
-
-        if (result.canceled) return { canceled: true };
-
-        try {
-            const oldScan = loadScan(result.filePaths[0]);
-            // Build a comparable scan object from current scanner
-            const newScan = {
-                timestamp: new Date().toISOString(),
-                rootPath: scanner.rootPath,
-                totalSize: scanner.totalSize,
-                tree: [...scanner.tree.entries()],
-            };
-            return compareScans(oldScan, newScan);
-        } catch (err) {
-            return { error: err.message };
-        }
     });
 
     // === Preview ===
