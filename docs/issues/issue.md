@@ -300,12 +300,17 @@ Eine Art "Waage für die Festplatte":
 - 6 Kontrastverletzungen in v7.2 behoben
 - Governance-Datei mit WCAG 2.2 AA Pflicht erstellt
 - Akzentfarben nur noch für Rahmen/Hintergründe, nie für Inhaltstext
+- **13.02.2026:** 11 weitere Kontrastverletzungen in Optimizer und Netzwerk-Monitor behoben:
+  - Graue Texte (Kategoriezähler, manuelle Pfade, Port-Beschriftungen) waren zu dunkel → heller gemacht
+  - Weisse Schrift auf rotem/blauem Hintergrund bei Badges unlesbar → dunkle Schrift
+  - Lila Schrift auf halbtransparentem Hintergrund bei Netzwerk-Badges → weisse Schrift
+  - Tabellen-Überschriften und IP-Adressen im Netzwerk-Inventar heller gemacht
+  - Mit echtem Browser-Test (Puppeteer, getComputedStyle) verifiziert — nicht nur mathematisch
 
 **Was noch fehlt:**
-- Vollständiger WCAG-Audit aller Views (jede Seite einzeln prüfen)
-- Prüfung mit echten Kontrast-Tools (nicht nur Berechnung)
+- Vollständiger WCAG-Audit ALLER Views (bisher nur Optimizer + Netzwerk geprüft)
 
-**Status:** Teilweise umgesetzt — vollständiger Audit steht aus
+**Status:** In Prüfung — Optimizer und Netzwerk-Monitor sind jetzt konform, andere Views noch nicht geprüft
 
 ---
 

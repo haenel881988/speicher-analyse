@@ -28,7 +28,7 @@ Es gibt keine Ausnahme. Nicht eine einzige. Nicht heute, nicht morgen, nicht in 
 
 3. **Pflicht zur Ursachenforschung:** Die KI MUSS so lange analysieren, recherchieren, iterieren und den Quellcode durchsuchen, bis die ECHTE Wurzelursache gefunden und behoben ist. Ob das 1 Minute oder 100 Tage dauert, ist irrelevant.
 
-4. **Visuelles Ergebnis ist die Wahrheit.** Nicht der Code, nicht die mathematische Berechnung, nicht die Theorie. Was der User auf dem Bildschirm sieht, ist die einzige Realität die zählt.
+4. **Visuelles Ergebnis ist die Wahrheit.** Nicht der Code, nicht die mathematische Berechnung, nicht die Theorie. Was der User auf dem Bildschirm sieht, ist die einzige Realität die zählt. → **Visuelle Prüfung = `/visual-verify` Skill verwenden. Immer.**
 
 5. **Keine Zwischenlösungen.** Eine Lösung die erfordert, dass der User etwas manuell tun muss (Task killen, neustarten, Tasten drücken), ist KEINE Lösung. Der Code muss sich selbst aktualisieren, selbst korrigieren, selbst funktionieren.
 
@@ -94,41 +94,62 @@ Backend-Code-Analyse allein hat zu falschen Schlussfolgerungen geführt: Daten s
 
 ## DIREKTIVE: Skill-First-Prinzip (UNVERHANDELBAR)
 
-**Bevor auch nur eine Zeile Code geschrieben wird, MUSS geprüft werden ob ein passender Skill existiert.**
+**JEDE Aufgabe MUSS über einen Skill ausgeführt werden. Ad-hoc-Arbeit ist VERBOTEN.**
 
-### Ablauf
+### Das Gesetz
 
-1. **Skill-Check:** Bei JEDER Aufgabe zuerst prüfen: Gibt es unter `.claude/skills/` einen Skill der zu dieser Aufgabe passt?
+1. **Skill-Check ist PFLICHT.** Bei JEDER Aufgabe — ohne Ausnahme — zuerst prüfen: Gibt es unter `.claude/skills/` einen passenden Skill? Wenn ja: `Skill`-Tool aufrufen.
 
-2. **Skill vorhanden → Skill verwenden.** Kein Freestyle, kein "ich mache es mal schnell so". Der Skill definiert den Workflow, die Konventionen und die Qualitätsstandards. Er wird befolgt.
+2. **Kein Skill vorhanden → Skill ZUERST erstellen, DANN arbeiten.** Es gibt keine Ausnahme. Auch für "schnelle" Aufgaben. Der Skill stellt sicher, dass die Arbeit beim nächsten Mal genauso gründlich gemacht wird.
 
-3. **Kein Skill vorhanden, aber wiederkehrendes Muster erkannt → Skill ZUERST erstellen.**
-   - Wenn die Aufgabe ein Muster ist das in Zukunft wieder vorkommen wird (neuer IPC-Handler, neuer Tab, neuer PowerShell-Befehl, etc.), wird ZUERST der Skill erstellt
-   - Dann wird der neue Skill angewendet
-   - So wächst die Skill-Bibliothek organisch mit dem Projekt
+3. **Ad-hoc-Code ist VERBOTEN.** Keine Wegwerf-Scripts. Keine "ich mache es mal schnell so"-Lösungen. Jedes Script das wiederverwendbar ist, gehört in einen Skill.
 
-4. **Einmalige Aufgabe ohne Muster → Direkt arbeiten.** Nur bei echten Einmal-Aufgaben (z.B. einen spezifischen Bug fixen der kein Muster hat) darf ohne Skill gearbeitet werden. Im Zweifel: Skill erstellen.
+4. **Sub-Agent-Delegation über Skills.** Wenn mehrere unabhängige Aufgaben anstehen, werden sie über `Task`-Tool an Sub-Agents delegiert — jeder Sub-Agent folgt dem zugewiesenen Skill.
 
-### Verfügbare Skills
+### Pflicht-Skills (MÜSSEN verwendet werden)
+
+| Situation | PFLICHT-Skill | Verstoß wenn nicht verwendet |
+|-----------|--------------|------------------------------|
+| Bug gemeldet | `/fix-bug` | Fix ohne Struktur = schlampig |
+| Problem analysieren | `/deep-analyze` | Oberflächliche Analyse = Wiederholung |
+| Visuelle Prüfung JEDER Art | `/visual-verify` | "Sieht gut aus" ohne Beweis = LÜGE |
+| Issue testen | `/test-issue` | "PASS" ohne Einzelprüfung = BETRUG |
+| Code-Qualität prüfen | `/audit-code` | Oberflächlicher Check = nutzlos |
+| Änderungsprotokoll | `/changelog` | Manueller Eintrag = Formatfehler-Risiko |
+
+### Alle verfügbaren Skills
 
 | Skill | Aufruf | Anwendungsfall |
 |-------|--------|----------------|
 | `/fix-bug` | `/fix-bug [beschreibung]` | Jeder Bug-Fix |
 | `/deep-analyze` | `/deep-analyze [problem]` | Problemanalyse vor dem Fix |
+| `/visual-verify` | `/visual-verify [view]` | **Visuelle Prüfung via Puppeteer (PFLICHT bei jeder UI-Aussage)** |
+| `/test-issue` | `/test-issue [#nummer]` | **Issue testen mit Beweis (PFLICHT bei jedem Test)** |
+| `/audit-code` | `/audit-code [datei/modul/all]` | Codequalitäts-Audit |
 | `/new-feature` | `/new-feature [name]` | Komplett neues Feature (Backend + Frontend) |
 | `/add-ipc` | `/add-ipc [handler] [modul]` | Neuer IPC-Handler |
 | `/add-sidebar-tab` | `/add-sidebar-tab [name] [gruppe]` | Neuer Sidebar-Tab mit View |
 | `/powershell-cmd` | `/powershell-cmd [name] [modul]` | Neuer PowerShell-Befehl |
 | `/changelog` | `/changelog [typ] [beschreibung]` | Änderungsprotokoll aktualisieren |
 | `/git-release` | `/git-release [version]` | Release erstellen (Version + Tag + Push) |
-| `/audit-code` | `/audit-code [datei/modul/all]` | Codequalitäts-Audit |
 
-### Warum diese Direktive existiert
+### Verbotene Verhaltensweisen
 
-- **Konsistenz:** Jeder IPC-Handler, jeder Tab, jeder PowerShell-Befehl folgt dem gleichen Pattern
-- **Qualität:** Skills enthalten alle Lessons Learned und verhindern bekannte Fehler
-- **Effizienz:** Kein Rad wird neu erfunden, kein Pattern wird vergessen
-- **Nachvollziehbarkeit:** Simon kann die Skills lesen und weiß exakt was Claude tut
+- **"Sieht gut aus" / "PASS" / "BESTANDEN"** ohne `/visual-verify` oder `/test-issue` → VERBOTEN
+- **Kontrast nur mathematisch berechnen** ohne visuellen Screenshot → VERBOTEN (Lektion: WCAG-Vorfall)
+- **Mehrere Issues schnell abhaken** statt jedes einzeln gründlich zu testen → VERBOTEN
+- **Ad-hoc Puppeteer-Scripts** statt Skill-basiertem Workflow → VERBOTEN
+- **"Ich prüfe das kurz"** ohne den entsprechenden Skill aufzurufen → VERBOTEN
+
+### Warum diese Direktive existiert (Kontext: Qualitäts-Vorfall 13.02.2026)
+
+Die KI hat Issues "getestet" ohne Skills zu verwenden:
+- WCAG-Kontrast nur mathematisch geprüft → offensichtliche Lesbarkeits-Probleme übersehen
+- Issues mit "BESTANDEN" markiert obwohl graue Schrift auf dunklem Hintergrund klar unlesbar war
+- Ad-hoc-Scripts geschrieben statt strukturierte Skills zu verwenden
+- Quantität (viele Issues schnell testen) über Qualität (jedes Issue gründlich) gestellt
+
+**Das passiert nie wieder.** Skills erzwingen Gründlichkeit.
 
 ---
 

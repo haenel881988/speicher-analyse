@@ -2439,7 +2439,7 @@ body {
 
 .opt-category-count {
     font-size: 12px;
-    color: var(--text-muted);
+    color: var(--text-secondary);
     font-weight: 400;
 }
 
@@ -2476,7 +2476,7 @@ body {
 
 .opt-item-manual {
     font-size: 11px;
-    color: var(--text-muted);
+    color: var(--text-secondary);
     margin-top: 4px;
     font-style: italic;
 }
@@ -2526,9 +2526,9 @@ body {
     font-weight: 600;
 }
 
-.impact-high { background: var(--danger); color: #fff; }
+.impact-high { background: var(--danger); color: #000; }
 .impact-medium { background: var(--warning); color: #000; }
-.impact-low { background: var(--info); color: #fff; }
+.impact-low { background: var(--info); color: #000; }
 
 /* ===== Updates ===== */
 .updates-view {
@@ -4629,8 +4629,8 @@ body {
 @keyframes network-indeterminate { 0% { transform: translateX(-100%); } 100% { transform: translateX(400%); } }
 .network-progress-msg { font-size: 11px; color: var(--text-secondary); white-space: nowrap; }
 .network-port-badge { display: inline-block; padding: 1px 6px; margin: 1px 2px; border-radius: 3px; font-size: 11px; background: var(--bg-tertiary); border: 1px solid var(--border); }
-.network-port-badge small { color: var(--text-muted); }
-.network-local-badge { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 10px; background: rgba(108, 92, 231, 0.15); color: var(--accent-text, #c4b5fd); margin-left: 4px; }
+.network-port-badge small { color: var(--text-secondary); }
+.network-local-badge { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 10px; background: rgba(108, 92, 231, 0.15); color: var(--text-primary); margin-left: 4px; }
 .network-rtt-fast { color: var(--success, #2ed573); }
 .network-rtt-medium { color: var(--warning, #ffa502); }
 .network-rtt-slow { color: var(--danger, #ff4757); }
@@ -4656,7 +4656,7 @@ body {
 
 /* Kompakte Geräte-Tabelle */
 .netinv-table { width: 100%; }
-.netinv-table th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); padding: 6px 8px; }
+.netinv-table th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-secondary); padding: 6px 8px; }
 .netinv-table td { padding: 6px 8px; font-size: 12px; vertical-align: middle; }
 .netinv-table tbody tr { cursor: pointer; transition: background 0.1s; }
 .netinv-table tbody tr:hover { background: var(--bg-secondary); }
@@ -4678,16 +4678,16 @@ body {
 .netinv-type-sbc { background: rgba(39, 174, 96, 0.12); color: #27ae60; }
 .netinv-type-network { background: rgba(52, 73, 94, 0.2); color: #7f8c8d; }
 .netinv-type-webdevice { background: rgba(52, 152, 219, 0.12); color: #3498db; }
-.netinv-type-unknown { background: var(--bg-tertiary); color: var(--text-muted); }
+.netinv-type-unknown { background: var(--bg-tertiary); color: var(--text-secondary); }
 .netinv-device-name { font-weight: 600; color: var(--text-primary); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
-.netinv-device-ip { font-size: 11px; color: var(--text-muted); font-family: monospace; }
+.netinv-device-ip { font-size: 11px; color: var(--text-secondary); font-family: monospace; }
 .netinv-col-type { white-space: nowrap; color: var(--text-secondary); }
 .netinv-col-vendor { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .netinv-col-model { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .netinv-model-name { color: var(--text-primary); font-size: 12px; }
 .netinv-serial {
     display: inline-block; font-size: 9px; font-weight: 700; letter-spacing: 0.5px;
-    background: var(--accent-light, rgba(108, 92, 231, 0.12)); color: var(--accent-text, #c4b5fd);
+    background: var(--accent-light, rgba(108, 92, 231, 0.12)); color: var(--text-primary);
     padding: 1px 5px; border-radius: 3px; margin-left: 6px; cursor: help; vertical-align: middle;
 }
 .netinv-col-mac { white-space: nowrap; }
@@ -4702,7 +4702,7 @@ body {
     display: inline-block; font-size: 10px; padding: 0 5px; min-width: 18px; text-align: center;
     border-radius: 9px; background: var(--bg-tertiary); color: var(--text-secondary); margin-left: 4px;
 }
-.network-tab.active .network-tab-count { background: var(--accent-light); color: var(--accent-text); }
+.network-tab.active .network-tab-count { background: var(--accent-light); color: var(--text-primary); }
 
 /* Network Monitor: Übersicht (Overview Dashboard) */
 .network-overview { display: flex; flex-direction: column; gap: 20px; }

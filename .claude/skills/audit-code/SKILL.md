@@ -33,11 +33,15 @@ Du führst ein Codequalitäts-Audit für die Speicher Analyse Electron-App durch
 
 ### 3. WCAG / Barrierefreiheit
 
-- **Kontrastwerte:** Text-auf-Hintergrund mindestens 4.5:1 Ratio
+**WICHTIG: WCAG-Prüfung MUSS visuell über `/visual-verify` erfolgen. Mathematische CSS-Variablen-Prüfung allein ist VERBOTEN und hat nachweislich zu Fehlern geführt (13.02.2026).**
+
+- **Kontrastwerte:** Text-auf-Hintergrund mindestens 4.5:1 Ratio — gemessen an GERENDERTEN `rgb()`-Werten via `getComputedStyle`, NICHT an CSS-Variablen
 - **Akzentfarben:** `--accent` (#6c5ce7) NUR für Borders/Backgrounds, NICHT für Text
 - **Text-Farben:** `--text-primary` für Inhaltstext, `--accent-text` (#c4b5fd) für Labels
 - **Hue-Similarity:** Lila/Violett auf dunklem Navy = schlecht wahrnehmbar trotz mathematischem Kontrast
-- **Muted-Text:** `--text-muted` muss gegen TATSÄCHLICHEN Hintergrund geprüft werden
+- **Muted-Text:** `--text-muted` muss gegen TATSÄCHLICHEN Hintergrund geprüft werden (Parent-Chain traversieren)
+- **Hardcoded Farben:** Viele Elemente nutzen NICHT die CSS-Variablen sondern hardcoded Farben → nur Puppeteer findet das
+- **PFLICHT:** Bei WCAG-Audit IMMER `/visual-verify` für jeden View aufrufen und Screenshots analysieren
 
 ### 4. Electron Best Practices
 
