@@ -346,6 +346,27 @@ Ergebnisse erscheinen im Dashboard als klickbare Karten.
 - **Single-Instance:** `app.requestSingleInstanceLock()` ist aktiv - verhindert GPU-Cache-Konflikte bei Tray-Betrieb
 - **GPU Cache:** `--disable-gpu-shader-disk-cache` aktiv - keine GPU-Dateisperren möglich
 
+### WCAG-Kontrast-Pflicht (bei JEDER CSS-Änderung)
+Bei JEDER Änderung an `renderer/css/style.css` müssen BEIDE Checks bestehen:
+
+1. **Statischer Check:** `node mcp-wrapper/wcag-static-check.js` — prüft CSS-Datei OHNE App
+   - Alle Text-Variablen auf allen Hintergründen ≥ 4.5:1
+   - Alle `color: #fff` Stellen gegen ihre Hintergründe
+   - Globale `::placeholder`-Regel vorhanden
+   - Keine gefährlichen Muster (`#fff` auf danger/success/warning)
+
+2. **Laufzeit-Check:** `node mcp-wrapper/wcag-gate.js` — prüft gerenderte Elemente IN der App
+   - Navigiert zu allen 14 Views
+   - Prüft alle Text-Elemente mit getComputedStyle
+   - Alpha-Blending für halbtransparente Hintergründe
+   - Placeholder-Kontrast
+
+**Regeln für neue Farbverwendung:**
+- `color: #fff` NUR auf `--accent` (#6c5ce7) Hintergründen (4.86:1 ✓)
+- `color: #000` auf `--danger`, `--success`, `--warning` und allen hellen Hintergründen
+- NIEMALS `color: #fff` auf `--danger`, `--success` oder `--warning`
+- Alle Inputs müssen `::placeholder` über die globale Regel erben (opacity: 1)
+
 ## Dateimanagement (docs/)
 
 **Claude ist verantwortlich für die Verwaltung der `docs/`-Verzeichnisstruktur.**

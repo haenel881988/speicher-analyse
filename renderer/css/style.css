@@ -92,6 +92,13 @@ body {
     background: var(--scrollbar-thumb);
     border-radius: 4px;
 }
+
+/* Global Placeholder — WCAG: Alle Inputs müssen lesbaren Placeholder haben */
+input::placeholder,
+textarea::placeholder {
+    color: var(--text-muted);
+    opacity: 1;
+}
 ::-webkit-scrollbar-thumb:hover {
     background: var(--text-muted);
 }
@@ -229,9 +236,6 @@ body {
     border-color: var(--accent);
 }
 
-.toolbar-search-input::placeholder {
-    color: var(--text-muted);
-}
 
 .toolbar-filter-input {
     width: 70px;

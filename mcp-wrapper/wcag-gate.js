@@ -98,7 +98,20 @@ const viewsToCheck = requestedViews
         await cdp.send('Runtime.evaluate', {
             expression: `document.querySelector('.sidebar-nav-btn[data-tab="${tabName}"]')?.click()`,
         });
-        await new Promise(r => setTimeout(r, 2000));
+
+        // Intelligentes Warten: Warte bis View sichtbar UND Inhalt vorhanden
+        for (let wait = 0; wait < 10; wait++) {
+            await new Promise(r => setTimeout(r, 500));
+            const { result: readyResult } = await cdp.send('Runtime.evaluate', {
+                expression: `(function() {
+                    const v = document.querySelector('${viewSel}');
+                    if (!v) return false;
+                    return v.offsetParent !== null && v.children.length > 0;
+                })()`,
+                returnByValue: true,
+            });
+            if (readyResult.value === true) break;
+        }
 
         // Take screenshot via Electron IPC (bypasses CDP hang)
         if (saveScreenshots) {
@@ -172,7 +185,41 @@ const viewsToCheck = requestedViews
                     if (results.length >= 500) break;
                 }
 
-                return JSON.stringify({ elements: results });
+                // === Placeholder-Check: Alle Inputs mit Placeholder prüfen ===
+                const placeholders = [];
+                for (const input of view.querySelectorAll('input[placeholder], textarea[placeholder]')) {
+                    if (!input.offsetParent) continue;
+                    const phText = input.getAttribute('placeholder');
+                    if (!phText || phText.length < 2) continue;
+
+                    const cs = getComputedStyle(input);
+                    // Placeholder-Farbe via getComputedStyle auf Pseudo-Element (nicht direkt zugreifbar)
+                    // Fallback: Prüfe ob eine ::placeholder CSS-Regel existiert
+                    // Wir verwenden die Input-Farbe als Annäherung (::placeholder erbt oder wird gesetzt)
+                    const inputBgLayers = [];
+                    let bgEl = input;
+                    while (bgEl) {
+                        const bg = getComputedStyle(bgEl).backgroundColor;
+                        if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') {
+                            inputBgLayers.push(bg);
+                            const m = bg.match(/rgba?\\((\\d+),\\s*(\\d+),\\s*(\\d+)(?:,\\s*([\\d.]+))?\\)/);
+                            if (m && (m[4] === undefined || parseFloat(m[4]) >= 1)) break;
+                        }
+                        bgEl = bgEl.parentElement;
+                    }
+
+                    placeholders.push({
+                        cls: (input.className || '').toString().substring(0, 60),
+                        text: 'placeholder: ' + phText.substring(0, 40),
+                        color: cs.color, // Input text color als Proxy
+                        bgLayers: inputBgLayers,
+                        fontSize: cs.fontSize,
+                        fontWeight: cs.fontWeight,
+                        isPlaceholder: true,
+                    });
+                }
+
+                return JSON.stringify({ elements: results, placeholders });
             })()`,
             returnByValue: true,
         });
@@ -183,7 +230,7 @@ const viewsToCheck = requestedViews
             continue;
         }
 
-        const elements = data.elements;
+        const elements = [...data.elements, ...(data.placeholders || [])];
         totalViews++;
         totalElements += elements.length;
 
