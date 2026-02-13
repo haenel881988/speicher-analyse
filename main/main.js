@@ -89,14 +89,6 @@ if (!gotLock) {
         const { register, preferences } = require('./ipc-handlers');
         register(mainWindow);
 
-        // Start internal API server for external tools (MCP)
-        try {
-            const { startApiServer } = require('./api-server');
-            startApiServer(mainWindow);
-        } catch (err) {
-            log.error('API-Server init error:', err);
-        }
-
         // System Tray
         try {
             const { createTray } = require('./tray');

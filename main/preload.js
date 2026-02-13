@@ -299,8 +299,4 @@ contextBridge.exposeInMainWorld('api', {
         ipcRenderer.removeAllListeners('open-folder');
         ipcRenderer.on('open-folder', (_e, folderPath) => callback(folderPath));
     },
-    onTriggerScanCommand: (callback) => {
-        ipcRenderer.removeAllListeners('trigger-scan-command');
-        ipcRenderer.on('trigger-scan-command', (_e, drive) => callback(drive));
-    },
 });
