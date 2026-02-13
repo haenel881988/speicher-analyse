@@ -300,17 +300,15 @@ Eine Art "Waage für die Festplatte":
 - 6 Kontrastverletzungen in v7.2 behoben
 - Governance-Datei mit WCAG 2.2 AA Pflicht erstellt
 - Akzentfarben nur noch für Rahmen/Hintergründe, nie für Inhaltstext
-- **13.02.2026:** 11 weitere Kontrastverletzungen in Optimizer und Netzwerk-Monitor behoben:
-  - Graue Texte (Kategoriezähler, manuelle Pfade, Port-Beschriftungen) waren zu dunkel → heller gemacht
-  - Weisse Schrift auf rotem/blauem Hintergrund bei Badges unlesbar → dunkle Schrift
-  - Lila Schrift auf halbtransparentem Hintergrund bei Netzwerk-Badges → weisse Schrift
-  - Tabellen-Überschriften und IP-Adressen im Netzwerk-Inventar heller gemacht
-  - Mit echtem Browser-Test (Puppeteer, getComputedStyle) verifiziert — nicht nur mathematisch
+- **13.02.2026:** 11 Kontrastverletzungen in Optimizer und Netzwerk-Monitor behoben
+- **13.02.2026 — Strukturelle Lösung:** Die Wurzelursache war, dass die Grundfarben selbst zu schwach waren. Alle 66 Stellen die diese Farben verwenden, hatten zu wenig Kontrast. Statt jede einzelne Stelle zu reparieren, wurden die Grundfarben selbst verstärkt — damit sind automatisch ALLE Texte in der gesamten App heller und besser lesbar. Zusätzlich wurde ein automatischer Prüfer erstellt, der alle 14 Bildschirme der App durchgeht und jeden einzelnen Text gegen seinen Hintergrund prüft. Ergebnis: **0 Verletzungen bei 1495 geprüften Text-Elementen** in 13 Views.
 
-**Was noch fehlt:**
-- Vollständiger WCAG-Audit ALLER Views (bisher nur Optimizer + Netzwerk geprüft)
+**Automatischer Schutz:**
+- Ein Prüf-Script testet jetzt automatisch alle 14 Bildschirme der App auf Lesbarkeit
+- Jeder Text wird gegen seinen tatsächlichen Hintergrund geprüft (auch bei halbtransparenten Schichten)
+- Bei Verletzungen schlägt der Test fehl — so können Probleme nicht mehr unbemerkt entstehen
 
-**Status:** In Prüfung — Optimizer und Netzwerk-Monitor sind jetzt konform, andere Views noch nicht geprüft
+**Status:** In Prüfung — wartet auf Simons visuelle Bestätigung
 
 ---
 

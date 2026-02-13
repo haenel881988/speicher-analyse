@@ -299,4 +299,7 @@ contextBridge.exposeInMainWorld('api', {
         ipcRenderer.removeAllListeners('open-folder');
         ipcRenderer.on('open-folder', (_e, folderPath) => callback(folderPath));
     },
+
+    // === Screenshot (für Puppeteer/WCAG-Tests) ===
+    captureScreenshot: () => ipcRenderer.invoke('capture-screenshot'),
 });

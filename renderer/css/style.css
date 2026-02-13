@@ -6,8 +6,8 @@
     --bg-hover: #2a2e42;
     --bg-input: #181b25;
     --text-primary: #e8e8ed;
-    --text-secondary: #a0a4b8;
-    --text-muted: #8890a8;
+    --text-secondary: #b0b4c8;
+    --text-muted: #9ba2b8;
     --accent: #6c5ce7;
     --accent-hover: #7f71f0;
     --accent-light: rgba(108, 92, 231, 0.15);
@@ -39,8 +39,8 @@
     --bg-hover: #f0f1f5;
     --bg-input: #f0f1f5;
     --text-primary: #1a1d27;
-    --text-secondary: #4a4e62;
-    --text-muted: #656a82;
+    --text-secondary: #3d4155;
+    --text-muted: #555972;
     --accent: #6c5ce7;
     --accent-hover: #5a4bd6;
     --accent-light: rgba(108, 92, 231, 0.1);
@@ -2237,7 +2237,7 @@ body {
     padding: 1px 6px;
     border-radius: 3px;
     background: var(--danger);
-    color: #fff;
+    color: #000;
     font-size: 10px;
     font-weight: 600;
     margin-left: 4px;
@@ -2414,9 +2414,9 @@ body {
     font-weight: 600;
 }
 
-.risk-badge.risk-high { background: var(--danger); color: #fff; }
+.risk-badge.risk-high { background: var(--danger); color: #000; }
 .risk-badge.risk-medium { background: var(--warning); color: #000; }
-.risk-badge.risk-low { background: var(--info); color: #fff; }
+.risk-badge.risk-low { background: var(--info); color: #000; }
 
 /* ===== Optimizer ===== */
 .opt-category {
@@ -2634,9 +2634,9 @@ body {
     font-weight: 600;
 }
 
-.severity-critical { background: var(--danger); color: #fff; }
+.severity-critical { background: var(--danger); color: #000; }
 .severity-important { background: var(--warning); color: #000; }
-.severity-moderate { background: var(--info); color: #fff; }
+.severity-moderate { background: var(--info); color: #000; }
 .severity-low, .severity-unbekannt { background: var(--bg-hover); color: var(--text-secondary); }
 
 .driver-old td { color: var(--warning); }
@@ -2680,8 +2680,8 @@ body {
     font-weight: 600;
 }
 
-.history-status-2 { background: var(--success); color: #fff; }
-.history-status-4 { background: var(--danger); color: #fff; }
+.history-status-2 { background: var(--success); color: #000; }
+.history-status-4 { background: var(--danger); color: #000; }
 .history-status-0, .history-status-1, .history-status-3, .history-status-5 { background: var(--bg-hover); color: var(--text-secondary); }
 
 .history-failed td { opacity: 0.7; }
@@ -3990,7 +3990,7 @@ body {
 .privacy-detail-risk strong {
     display: block;
     font-size: 11px;
-    color: var(--danger);
+    color: #ff8a9a;
     text-transform: uppercase;
     letter-spacing: 0.5px;
     margin-bottom: 4px;
@@ -4286,6 +4286,7 @@ body {
     font-size: 10px;
     font-weight: 600;
     white-space: nowrap;
+    color: var(--text-primary) !important;
 }
 .audit-category-filter {
     padding: 5px 8px;

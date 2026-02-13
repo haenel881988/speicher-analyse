@@ -1199,6 +1199,19 @@ function register(mainWindow) {
         }
         deepSearchWorkers.clear();
     });
+
+    // === Screenshot (für Puppeteer/WCAG-Tests) ===
+    ipcMain.handle('capture-screenshot', async () => {
+        try {
+            if (!mainWindow || mainWindow.isDestroyed()) {
+                return { error: 'Fenster nicht verfügbar' };
+            }
+            const image = await mainWindow.webContents.capturePage();
+            return { success: true, dataUrl: image.toDataURL(), size: image.getSize() };
+        } catch (err) {
+            return { error: err.message };
+        }
+    });
 }
 
 module.exports = { register, preferences };
