@@ -28,5 +28,13 @@ Desktop.ini
 release/
 build/
 
+# Puppeteer/WCAG temp files
+mcp-wrapper/*.png
+mcp-wrapper/pup-*.js
+mcp-wrapper/cdp-*.js
+mcp-wrapper/snap*.js
+mcp-wrapper/verify-*.js
+mcp-wrapper/test-*.js
+
 # Temp
 nul
