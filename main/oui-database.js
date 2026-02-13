@@ -475,10 +475,12 @@ function classifyDevice(device) {
     }
 
     // 2. Port-basierte Erkennung (spezifische Geräte-Ports)
-    //    Drucker: 9100 (RAW Print) = starkes Signal. 631 (IPP) = mittel. 515 (LPD) allein = zu schwach.
+    //    Drucker: 9100 (RAW Print) = sehr stark. 631 (IPP) + 515 (LPD) = stark.
+    //    515 (LPD) allein = stark (LPD ist ein reines Druckerprotokoll, keine PCs nutzen es).
     if (ports.has(9100)) return _typeToResult('printer', vendor);
     if (ports.has(631) && ports.has(515)) return _typeToResult('printer', vendor);
     if (ports.has(631) && !ports.has(80)) return _typeToResult('printer', vendor);
+    if (ports.has(515)) return _typeToResult('printer', vendor);
     // NAS: Synology-Ports 5000/5001
     if (ports.has(5000) || ports.has(5001)) return _typeToResult('nas', vendor);
     // Kamera: RTSP, Dahua, ONVIF

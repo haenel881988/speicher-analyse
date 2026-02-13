@@ -64,6 +64,34 @@ Wenn der User ein Problem meldet und die KI die Ursache nicht im Quellcode finde
 
 ---
 
+## DIREKTIVE: Frontend-Verifikation via Puppeteer (UNVERHANDELBAR)
+
+**Jede Analyse, jeder Fix und jede Verifikation MUSS über das Frontend erfolgen — ausschließlich mit Puppeteer.**
+
+### Regeln
+
+1. **Backend-Code allein ist NICHT aussagekräftig.** Was im Code steht, ist irrelevant. Nur was der User im Frontend SIEHT, zählt. Puppeteer verbindet sich über `--remote-debugging-port=9222` zur laufenden Electron-App.
+
+2. **Pflicht bei JEDEM Fix:**
+   - VORHER: Screenshot vom betroffenen Bereich machen (IST-Zustand dokumentieren)
+   - Code ändern
+   - NACHHER: Screenshot machen und visuell bestätigen, dass der Fix greift
+
+3. **Analyse = Screenshots aller relevanten UI-Bereiche.** Bei der Analyse eines Features (z.B. Netzwerk-Monitor) müssen ALLE Tabs/Views per Puppeteer durchgeklickt und dokumentiert werden. Nicht nur einer.
+
+4. **Puppeteer-Wrapper:** `mcp-wrapper/index.js` — verbindet sich via Chrome DevTools Protocol auf Port 9222.
+   - `page.evaluate(() => el.click())` verwenden (NICHT `page.click()` — hängt häufig)
+   - Screenshots über `page.screenshot()` erstellen
+   - Daten auslesen über `page.evaluate(() => document.querySelector(...).textContent)`
+
+5. **Kein Fix ohne Frontend-Beweis.** Wenn Puppeteer nicht verfügbar ist (App nicht gestartet, Port nicht offen), MUSS zuerst die Verbindung hergestellt werden, bevor Fixes gemacht werden.
+
+### Warum diese Direktive existiert
+
+Backend-Code-Analyse allein hat zu falschen Schlussfolgerungen geführt: Daten sahen im Code korrekt aus, wurden aber im Frontend falsch dargestellt. Der User hat zu Recht insistiert, dass NUR das Frontend die Wahrheit zeigt.
+
+---
+
 ## DIREKTIVE: Skill-First-Prinzip (UNVERHANDELBAR)
 
 **Bevor auch nur eine Zeile Code geschrieben wird, MUSS geprüft werden ob ein passender Skill existiert.**
