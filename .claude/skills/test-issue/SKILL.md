@@ -94,5 +94,5 @@ Task(subagent_type="general-purpose", prompt="Führe /test-issue #19 aus...")
 - **App muss laufen** auf Port 9222
 - **Puppeteer-Verbindung:** `puppeteer.connect({ browserURL: 'http://127.0.0.1:9222' })`
 - **`page.click()` hängt** → immer `page.evaluate(() => el.click())` verwenden
-- **Puppeteer-Scripts** liegen in `mcp-wrapper/` (dort ist puppeteer-core installiert)
+- **Puppeteer-Scripts** liegen in `tools/wcag/` (dort ist puppeteer-core installiert)
 - **Verwandte Skills:** `/visual-verify` für Sichtprüfung, `/fix-bug` für gefundene Probleme

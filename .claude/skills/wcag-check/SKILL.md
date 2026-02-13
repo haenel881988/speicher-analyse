@@ -16,7 +16,7 @@ Du prüfst ob CSS-Änderungen die WCAG 2.2 AA Kontrast-Anforderungen einhalten. 
 ### Stufe 1: Statischer CSS-Check (IMMER zuerst)
 
 ```bash
-node mcp-wrapper/wcag-static-check.js
+node tools/wcag/wcag-static-check.js
 ```
 
 Prüft OHNE laufende App:
@@ -30,7 +30,7 @@ Prüft OHNE laufende App:
 ### Stufe 2: Laufzeit-Check (wenn App läuft)
 
 ```bash
-node mcp-wrapper/wcag-gate.js [--views optimizer,network] [--save-screenshots]
+node tools/wcag/wcag-gate.js [--views optimizer,network] [--save-screenshots]
 ```
 
 Prüft IN der laufenden App:

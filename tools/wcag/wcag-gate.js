@@ -9,7 +9,7 @@
  * Exit-Code 0 = keine Verletzungen
  * Exit-Code 1 = Verletzungen gefunden
  *
- * Nutzung: node mcp-wrapper/wcag-gate.js [--views optimizer,network] [--save-screenshots]
+ * Nutzung: node tools/wcag/wcag-gate.js [--views optimizer,network] [--save-screenshots]
  */
 const puppeteer = require('puppeteer-core');
 const fs = require('fs');

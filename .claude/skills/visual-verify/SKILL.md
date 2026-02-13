@@ -104,6 +104,6 @@ Task(subagent_type="general-purpose", prompt="Führe /visual-verify für den [vi
 ## Hinweise
 
 - **`page.click()` hängt** in dieser Electron-App → immer `page.evaluate(() => el.click())` verwenden
-- **Puppeteer-Scripts** liegen in `mcp-wrapper/` (dort ist puppeteer-core installiert)
+- **Puppeteer-Scripts** liegen in `tools/wcag/` (dort ist puppeteer-core installiert)
 - **Puppeteer-Verbindung:** `puppeteer.connect({ browserURL: 'http://127.0.0.1:9222' })`
 - **Dieser Skill ersetzt NICHT `/audit-code`** — er ergänzt ihn um die visuelle Komponente

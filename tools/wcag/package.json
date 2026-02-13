@@ -1,0 +1,9 @@
+{
+  "name": "wcag-tools",
+  "version": "1.0.0",
+  "description": "WCAG-Kontrastprüfung für Speicher Analyse",
+  "type": "commonjs",
+  "dependencies": {
+    "puppeteer-core": "^24.37.2"
+  }
+}

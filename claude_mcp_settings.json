@@ -1,9 +1,0 @@
-{
-  "mcpServers": {
-    "speicher-analyse": {
-      "command": "node",
-      "args": ["mcp-wrapper/index.js"],
-      "cwd": "c:\\apps\\vibe-coding\\speicher_analyse"
-    }
-  }
-}

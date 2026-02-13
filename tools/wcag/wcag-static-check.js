@@ -10,7 +10,7 @@
  * Exit-Code 0 = keine Probleme
  * Exit-Code 1 = Probleme gefunden
  *
- * Nutzung: node mcp-wrapper/wcag-static-check.js [--fix-suggestions]
+ * Nutzung: node tools/wcag/wcag-static-check.js [--fix-suggestions]
  */
 const fs = require('fs');
 const path = require('path');
