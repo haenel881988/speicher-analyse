@@ -149,8 +149,8 @@ export class NetworkView {
         const timeStr = this._lastRefreshTime ? this._lastRefreshTime.toLocaleTimeString('de-DE') : '';
         const devCount = this._activeScanResult?.devices?.length || this.localDevices.length;
 
-        // Toolbar nur für Verbindungen und Übersicht anzeigen
-        const showToolbar = this.activeSubTab === 'connections' || this.activeSubTab === 'overview';
+        // Suchfeld nur im Verbindungen-Tab anzeigen
+        const showToolbar = this.activeSubTab === 'connections';
 
         this.container.innerHTML = `
             <div class="network-page">
@@ -162,7 +162,7 @@ export class NetworkView {
                             <span class="network-toggle-slider"></span>
                             <span>Echtzeit</span>
                         </label>
-                        <button class="network-btn" id="network-refresh">${this.snapshotMode ? 'Snapshot' : 'Aktualisieren'}</button>
+                        <button class="network-btn" id="network-refresh" title="Netzwerkdaten neu laden">&#8635; ${this.snapshotMode ? 'Aktualisieren' : 'Aktualisieren'}</button>
                         ${timeStr ? `<span class="network-timestamp">Stand: ${timeStr}</span>` : ''}
                         ${!this.snapshotMode && this.pollInterval ? `<span class="network-recording-indicator">&#9679; Aufnahme</span>` : ''}
                     </div>
@@ -250,7 +250,16 @@ export class NetworkView {
             return '<div class="network-empty">Keine Verbindungen gefunden</div>';
         }
 
-        let groups = this.groupedData;
+        let groups = [...this.groupedData];
+
+        // Idle/TimeWait-only-Prozesse ans Ende verschieben (technisches Rauschen)
+        groups.sort((a, b) => {
+            const aIsIdle = a.processName.toLowerCase() === 'idle' || (a.states.TimeWait === a.connectionCount);
+            const bIsIdle = b.processName.toLowerCase() === 'idle' || (b.states.TimeWait === b.connectionCount);
+            if (aIsIdle !== bIsIdle) return aIsIdle ? 1 : -1;
+            return b.connectionCount - a.connectionCount;
+        });
+
         if (this.filter) {
             const q = this.filter.toLowerCase();
             groups = groups.filter(g =>
@@ -405,7 +414,13 @@ export class NetworkView {
             return `<div class="network-devices-section">
                 ${toolbar}
                 ${progressBar}
-                <div class="network-empty">Noch kein Scan durchgeführt. Klicke "Netzwerk scannen" für einen vollständigen Scan mit Port-Erkennung.</div>
+                <div class="network-empty">
+                    <p style="font-size:14px;margin-bottom:8px">Welche Geräte sind in deinem Netzwerk?</p>
+                    <p style="color:var(--text-muted);font-size:12px;margin:0">
+                        <strong>Netzwerk scannen</strong> — Findet alle Geräte mit Hersteller, offenen Ports und Betriebssystem (ca. 30-60 Sek.)<br>
+                        <strong>Schnellscan</strong> — Nur die ARP-Tabelle (sofort, aber weniger Details)
+                    </p>
+                </div>
             </div>`;
         }
 
@@ -518,11 +533,24 @@ export class NetworkView {
     _renderBandwidth() {
         if (this.bandwidth.length === 0) return '<div class="network-empty">Keine Netzwerkadapter gefunden</div>';
 
+        // Aktive Adapter zuerst, inaktive (0 Traffic) kompakter
+        const sorted = [...this.bandwidth].sort((a, b) => (b.receivedBytes + b.sentBytes) - (a.receivedBytes + a.sentBytes));
+
         return `<div class="network-bandwidth-grid">
-            ${this.bandwidth.map(b => {
+            ${sorted.map(b => {
                 const rxMB = (b.receivedBytes / (1024 * 1024)).toFixed(1);
                 const txMB = (b.sentBytes / (1024 * 1024)).toFixed(1);
-                return `<div class="network-adapter-card ${b.status === 'Up' ? '' : 'network-adapter-down'}">
+                const isInactive = b.receivedBytes === 0 && b.sentBytes === 0;
+                const isDown = b.status !== 'Up';
+
+                if (isInactive && isDown) {
+                    // Offline-Adapter: nur Name + Status, kein Platz verschwenden
+                    return `<div class="network-adapter-card network-adapter-down" style="padding:10px 14px">
+                        <div class="network-adapter-name" style="margin:0">${this._esc(b.name)} <span style="font-weight:400;font-size:11px;color:var(--text-muted)">— Offline</span></div>
+                    </div>`;
+                }
+
+                return `<div class="network-adapter-card ${isDown ? 'network-adapter-down' : ''}">
                     <div class="network-adapter-name">${this._esc(b.name)}</div>
                     <div class="network-adapter-desc">${this._esc(b.description || '')}</div>
                     <div class="network-adapter-speed">${b.linkSpeed || '-'}</div>
@@ -575,7 +603,12 @@ export class NetworkView {
                 <div class="network-devices-toolbar">
                     <button class="network-btn" id="network-save-snapshot">Aktuellen Snapshot speichern</button>
                 </div>
-                <div class="network-empty">Noch keine Snapshots gespeichert. Klicke "Aktuellen Snapshot speichern" oder nutze den Echtzeit-Modus.</div>
+                <div class="network-empty">
+                    <p style="font-size:14px;margin-bottom:8px">Netzwerk-Aktivität über die Zeit vergleichen</p>
+                    <p style="color:var(--text-muted);font-size:12px;margin:0">
+                        Speichere Snapshots um zu sehen, welche Programme wann online gehen, ob neue Tracker auftauchen oder sich die Verbindungszahlen verändern.
+                    </p>
+                </div>
             </div>`;
         }
 

@@ -231,15 +231,16 @@ async function getNetworkSummary() {
         $established = ($conns | Where-Object { $_.State -eq 'Established' }).Count
         $listening = ($conns | Where-Object { $_.State -eq 'Listen' }).Count
         $uniqueIPs = ($conns | Where-Object { $_.RemoteAddress -ne '0.0.0.0' -and $_.RemoteAddress -ne '::' -and $_.RemoteAddress -ne '::1' -and $_.RemoteAddress -ne '127.0.0.1' } | Select-Object -ExpandProperty RemoteAddress -Unique).Count
-        $pidCounts = $conns | Group-Object OwningProcess | Sort-Object Count -Descending | Select-Object -First 10
+        $allPids = $conns | Select-Object -ExpandProperty OwningProcess -Unique
         $procs = @{}
-        foreach ($p in (Get-Process -Id ($pidCounts | Select-Object -ExpandProperty Name) -ErrorAction SilentlyContinue)) {
+        foreach ($p in (Get-Process -Id $allPids -ErrorAction SilentlyContinue)) {
             $procs[$p.Id] = $p.ProcessName
         }
+        $pidCounts = $conns | Group-Object OwningProcess | Sort-Object Count -Descending | Select-Object -First 10
         $topProcesses = foreach ($g in $pidCounts) {
-            $pid = [int]$g.Name
+            $procId = [int]$g.Name
             [PSCustomObject]@{
-                name = if ($procs.ContainsKey($pid)) { $procs[$pid] } else { "PID $pid" }
+                name = if ($procs.ContainsKey($procId)) { $procs[$procId] } elseif ($procId -eq 0) { 'Idle' } else { "PID $procId" }
                 connectionCount = $g.Count
             }
         }
@@ -700,8 +701,8 @@ async function getPollingData() {
         $uniqueIPs = ($conns | Where-Object { $_.RemoteAddress -ne '0.0.0.0' -and $_.RemoteAddress -ne '::' -and $_.RemoteAddress -ne '::1' -and $_.RemoteAddress -ne '127.0.0.1' } | Select-Object -ExpandProperty RemoteAddress -Unique).Count
         $pidCounts = $conns | Group-Object OwningProcess | Sort-Object Count -Descending | Select-Object -First 10
         $topProcesses = @(foreach ($g in $pidCounts) {
-            $pid = [int]$g.Name
-            [PSCustomObject]@{ name = if ($procs.ContainsKey($pid)) { $procs[$pid].Name } else { "PID $pid" }; cc = $g.Count }
+            $procId = [int]$g.Name
+            [PSCustomObject]@{ name = if ($procs.ContainsKey($procId)) { $procs[$procId].Name } else { "PID $procId" }; cc = $g.Count }
         })
         $adapters = Get-NetAdapter -ErrorAction SilentlyContinue | Select-Object Name, InterfaceDescription, Status, LinkSpeed
         $stats = Get-NetAdapterStatistics -ErrorAction SilentlyContinue | Select-Object Name, ReceivedBytes, SentBytes, ReceivedUnicastPackets, SentUnicastPackets
