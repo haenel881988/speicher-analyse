@@ -372,6 +372,14 @@ async function init() {
         dualPanel.getActiveExplorer()?.navigateTo(folderPath);
     });
 
+    // Listen for scan trigger from API server (MCP integration)
+    window.api.onTriggerScanCommand((drive) => {
+        const selectedPath = drive || els.toolbarDriveSelect.value;
+        if (selectedPath && !state.scanning) {
+            startScan(selectedPath, state, els, loadAllViews, setStatus);
+        }
+    });
+
     // Cross-view navigation (z.B. Privacy → Netzwerk)
     document.addEventListener('navigate-to-tab', (e) => {
         if (e.detail?.tab) switchToTab(e.detail.tab);
