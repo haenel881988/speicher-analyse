@@ -21,8 +21,10 @@
     "xlsx": "^0.18.5"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.26.0",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
-    "node-pty": "^1.2.0-beta.11"
+    "node-pty": "^1.2.0-beta.11",
+    "zod": "^4.3.6"
   }
 }

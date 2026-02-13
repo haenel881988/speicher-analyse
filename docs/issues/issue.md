@@ -55,7 +55,7 @@
 | 13 | #16 | Backup-Modul (lokale/Netzwerk-Sicherung) | Geplant |
 | 14 | #17 | KI-Integration (Cloud + Lokal) | Idee |
 | 15 | #18 | Offline-Lizenzierung | Idee |
-| 16 | #19 | MCP-Server — KI kann direkt auf die App zugreifen | Idee |
+| 16 | #19 | MCP-Server — KI kann direkt auf die App zugreifen | Erste Version — wartet auf Test |
 
 ---
 
@@ -418,7 +418,27 @@ Eine Art "Waage für die Festplatte":
 - Kann in den Einstellungen ein- und ausgeschaltet werden
 - Keine Daten verlassen den Rechner
 
-**Status:** Idee — passt gut zur KI-Integration (Issue #17)
+**Was umgesetzt wurde (v1.0):**
+- MCP-Server läuft als eigenständiger Prozess (kein Internet, rein lokal)
+- 10 Werkzeuge für die KI:
+  - Laufwerke anzeigen (mit Speicherplatz)
+  - Gespeicherte Scan-Ergebnisse lesen (grösste Dateien, Dateitypen)
+  - Netzwerk-Verbindungen anzeigen (welches Programm verbindet sich wohin)
+  - Datenschutz-Einstellungen prüfen (Werbe-ID, Cortana, Telemetrie, etc.)
+  - System-Informationen (Hersteller, Modell, Prozessor, Grafikkarte, RAM)
+  - Installierte Programme auflisten
+  - Autostart-Programme anzeigen
+  - Windows-Dienste anzeigen
+  - Festplatten-Gesundheit (S.M.A.R.T.)
+  - Bereinigungsvorschläge (Temp, Cache, Downloads)
+- Konfiguration für Claude Code liegt bereit (`.mcp.json`)
+
+**Was noch fehlt (für später):**
+- Ein/Aus-Schalter in den App-Einstellungen
+- Scan direkt über die KI starten (aktuell nur Lese-Zugriff)
+- System-Score berechnen lassen
+
+**Status:** Erste Version implementiert — wartet auf Simons Test
 
 → *Simons Idee vom 12.02.2026*
 

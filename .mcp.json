@@ -1,9 +1,9 @@
 {
   "mcpServers": {
     "speicher-analyse": {
+      "type": "stdio",
       "command": "node",
-      "args": ["tools/mcp-server/index.js"],
-      "cwd": "c:\\apps\\vibe-coding\\speicher_analyse"
+      "args": ["mcp/server.mjs"]
     }
   }
 }
