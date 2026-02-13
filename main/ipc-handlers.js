@@ -23,6 +23,7 @@ const { PreferencesStore } = require('./preferences');
 
 const { Worker } = require('worker_threads');
 const log = require('./logger').createLogger('ipc');
+const { startBridge } = require('./mcp-bridge');
 
 // In-memory scan storage
 const scans = new Map();
@@ -1119,6 +1120,9 @@ function register(mainWindow) {
         return { success: true };
     });
 
+    // MCP Bridge starten (HTTP-API für MCP-Server)
+    startBridge(scans);
+
     // Cleanup on app quit: save session, then terminate workers and release memory
     app.on('before-quit', () => {
         // 1. Flush preferences (synchron, sicherstellt dass alles gespeichert ist)
@@ -1183,6 +1187,8 @@ function register(mainWindow) {
         }
         duplicateFinders.clear();
         terminal.destroyAllSessions();
+        const { stopBridge } = require('./mcp-bridge');
+        stopBridge();
         for (const [, worker] of deepSearchWorkers) {
             try { worker.terminate(); } catch {}
         }
