@@ -1041,8 +1041,17 @@ function register(mainWindow) {
         return scanLocalNetwork();
     });
 
-    // Cache für das letzte aktive Scan-Ergebnis (überlebt Page-Reloads)
+    // Persistenz für das letzte aktive Scan-Ergebnis (überlebt App-Neustarts)
+    const { app: _app } = require('electron');
+    const _networkScanPath = path.join(_app.getPath('userData'), 'last-network-scan.json');
     let _lastNetworkScanResult = null;
+
+    // Beim Start von Festplatte laden
+    try {
+        if (fs.existsSync(_networkScanPath)) {
+            _lastNetworkScanResult = JSON.parse(fs.readFileSync(_networkScanPath, 'utf-8'));
+        }
+    } catch { /* ignorieren — Datei beschädigt oder leer */ }
 
     ipcMain.handle('scan-network-active', async () => {
         const { scanNetworkActive } = require('./network-scanner');
@@ -1052,6 +1061,8 @@ function register(mainWindow) {
             }
         });
         _lastNetworkScanResult = result;
+        // Auf Festplatte speichern (überlebt App-Neustarts)
+        try { fs.writeFileSync(_networkScanPath, JSON.stringify(result), 'utf-8'); } catch { /* ignorieren */ }
         return result;
     });
 
