@@ -95,6 +95,24 @@ async function identifyDevices(devices, onProgress) {
         log.warn('WSD-Discovery fehlgeschlagen:', err.message);
     }
 
+    // --- Merge-Helper: Bestehende Identity-Daten NICHT überschreiben (WU-10) ---
+    function _mergeResult(existing, newFields) {
+        return {
+            modelName:        newFields.modelName || existing.modelName || '',
+            serialNumber:     newFields.serialNumber || existing.serialNumber || '',
+            firmwareVersion:  newFields.firmwareVersion || existing.firmwareVersion || '',
+            identifiedBy:     existing.identifiedBy
+                ? existing.identifiedBy + '+' + (newFields.source || '')
+                : (newFields.source || ''),
+            sshBanner:        newFields.sshBanner || existing.sshBanner || '',
+            // DIESE FELDER NICHT ÜBERSCHREIBEN:
+            mdnsServices:     existing.mdnsServices || [],
+            mdnsServiceTypes: existing.mdnsServiceTypes || [],
+            mdnsHostname:     existing.mdnsHostname || '',
+            wsdTypes:         existing.wsdTypes || [],
+        };
+    }
+
     // --- Phase B: HTTP + IPP + SSH parallel ---
     // HTTP jetzt auch fuer Geraete MIT Modell probieren (zusaetzliche Daten)
     const httpTargets = devices.filter(d => {
@@ -105,7 +123,7 @@ async function identifyDevices(devices, onProgress) {
 
     const ippTargets = devices.filter(d => {
         const ports = (d.openPorts || []).map(p => typeof p === 'number' ? p : p.port);
-        return ports.includes(631) || ports.includes(9100);
+        return ports.includes(631);  // WU-11: 9100 ist JetDirect (RAW), nicht IPP (HTTP)
     });
 
     const sshTargets = devices.filter(d => {
@@ -123,12 +141,7 @@ async function identifyDevices(devices, onProgress) {
                 const result = await _probeHTTP(d.ip, ports);
                 if (result && result.modelName) {
                     const existing = results.get(d.ip) || {};
-                    results.set(d.ip, {
-                        modelName: result.modelName,
-                        serialNumber: existing.serialNumber || '',
-                        firmwareVersion: existing.firmwareVersion || '',
-                        identifiedBy: existing.identifiedBy ? existing.identifiedBy + '+http' : 'http'
-                    });
+                    results.set(d.ip, _mergeResult(existing, { modelName: result.modelName, source: 'http' }));
                 }
             } catch (err) {
                 log.debug(`HTTP ${d.ip}: ${err.message}`);
@@ -145,12 +158,12 @@ async function identifyDevices(devices, onProgress) {
                 const result = await _probeIPP(d.ip);
                 if (result) {
                     const existing = results.get(d.ip) || {};
-                    results.set(d.ip, {
-                        modelName: result.modelName || existing.modelName || '',
-                        serialNumber: result.serialNumber || existing.serialNumber || '',
-                        firmwareVersion: result.firmwareVersion || existing.firmwareVersion || '',
-                        identifiedBy: existing.identifiedBy ? existing.identifiedBy + '+ipp' : 'ipp'
-                    });
+                    results.set(d.ip, _mergeResult(existing, {
+                        modelName: result.modelName,
+                        serialNumber: result.serialNumber,
+                        firmwareVersion: result.firmwareVersion,
+                        source: 'ipp',
+                    }));
                 }
             } catch (err) {
                 log.debug(`IPP ${d.ip}: ${err.message}`);
@@ -167,13 +180,7 @@ async function identifyDevices(devices, onProgress) {
                 const banner = await _grabSSHBanner(d.ip);
                 if (banner) {
                     const existing = results.get(d.ip) || {};
-                    results.set(d.ip, {
-                        modelName: existing.modelName || '',
-                        serialNumber: existing.serialNumber || '',
-                        firmwareVersion: existing.firmwareVersion || '',
-                        identifiedBy: existing.identifiedBy ? existing.identifiedBy + '+ssh' : 'ssh',
-                        sshBanner: banner,
-                    });
+                    results.set(d.ip, _mergeResult(existing, { sshBanner: banner, source: 'ssh' }));
                 }
             } catch (err) {
                 log.debug(`SSH ${d.ip}: ${err.message}`);
@@ -277,23 +284,33 @@ function _extractModelFromBanner(html, serverHeader) {
         title = title.replace(/^[:\-–_.*|~#>]+\s*/, '').replace(/\s*[:\-–_.*|~#>]+$/, '').trim();
 
         // Generische Titel filtern — Wörter die KEIN Modellname sind
-        const genericWords = /\b(welcome|home|index|login|sign\s*in|configurator|configuration|settings|setup|management|manager|interface|web.?based|web.?interface|web.?ui|dashboard|portal|admin|panel|status|startseite|loading|please\s*wait|error|not\s*found|untitled|access\s*point|firmware\s*upgrade|document)\b/i;
-        const genericStart = /^(home|index|welcome|login|startseite|webinterface|status|configuration|settings|setup|sign\s*in|error|not\s*found|untitled|loading|please\s*wait)/i;
+        // WU-9: "access point" und "document" entfernt (verwirft echte Modellnamen)
+        const genericWords = /\b(welcome|home|index|login|sign\s*in|configurator|configuration|settings|setup|management|manager|interface|web.?based|web.?interface|web.?ui|dashboard|portal|admin|panel|status|startseite|loading|please\s*wait|error|not\s*found|untitled|firmware\s*upgrade|anmeldung|willkommen|konfiguration|verwaltung|einstellungen)\b/i;
+        const genericStart = /^(home|index|welcome|login|startseite|webinterface|status|configuration|settings|setup|sign\s*in|error|not\s*found|untitled|loading|please\s*wait|anmeldung|willkommen)/i;
         if (genericStart.test(title) || genericWords.test(title)) {
             // Modellname könnte VOR dem generischen Wort stehen:
             // z.B. "ZyXEL VMG3625-T50B - Login" → "ZyXEL VMG3625-T50B"
+            // WU-9: Auch —, /, >, und reines Leerzeichen vor generischem Wort erkennen
             const beforeGeneric = title
-                .replace(/\s*[-–|:]\s*(login|configurator|configuration|settings|setup|management|dashboard|portal|admin|panel|status|interface|home|welcome|sign\s*in|startseite|webinterface)\b.*$/i, '')
+                .replace(/\s*[-–—|:\/>]\s*(login|configurator|configuration|settings|setup|management|dashboard|portal|admin|panel|status|interface|home|welcome|sign\s*in|startseite|webinterface|anmeldung|einstellungen|willkommen|konfiguration|verwaltung)\b.*$/i, '')
                 .trim();
-            if (beforeGeneric.length > 3 && beforeGeneric.length < title.length) {
+            // Re-Validierung: Extrahierter Name darf SELBST keine generischen Wörter enthalten
+            if (beforeGeneric.length > 3 && beforeGeneric.length < title.length && !genericWords.test(beforeGeneric) && !genericStart.test(beforeGeneric)) {
                 modelName = beforeGeneric;
+            }
+            // Fallback: Letztes Wort das generisch ist abschneiden (nur Leerzeichen, kein Trennzeichen)
+            if (!modelName) {
+                const spaceGeneric = title.replace(/\s+(login|configurator|configuration|settings|setup|admin|home|welcome|sign\s*in|startseite|anmeldung)\s*$/i, '').trim();
+                if (spaceGeneric.length > 3 && spaceGeneric.length < title.length && !genericWords.test(spaceGeneric) && !genericStart.test(spaceGeneric)) {
+                    modelName = spaceGeneric;
+                }
             }
             // Oder generisches Wort am Anfang: "Login - ZyXEL VMG3625"
             if (!modelName) {
                 const afterGeneric = title
-                    .replace(/^(login|configurator|configuration|settings|setup|management|dashboard|portal|admin|panel|status|interface|home|welcome|sign\s*in|startseite|webinterface)\s*[-–|:]\s*/i, '')
+                    .replace(/^(login|configurator|configuration|settings|setup|management|dashboard|portal|admin|panel|status|interface|home|welcome|sign\s*in|startseite|webinterface|anmeldung|willkommen)\s*[-–—|:\/>]\s*/i, '')
                     .trim();
-                if (afterGeneric.length > 3 && afterGeneric.length < title.length) {
+                if (afterGeneric.length > 3 && afterGeneric.length < title.length && !genericWords.test(afterGeneric) && !genericStart.test(afterGeneric)) {
                     modelName = afterGeneric;
                 }
             }
@@ -320,7 +337,9 @@ function _extractModelFromBanner(html, serverHeader) {
 
     // 3. <meta> Tags durchsuchen (description, og:title)
     if (!modelName && html) {
-        const metaMatch = html.match(/<meta\s+(?:name|property)=["'](?:description|og:title|product)["']\s+content=["']([^"']{3,80})["']/i);
+        // WU-14: Beide Attribut-Reihenfolgen erkennen (name vor content UND content vor name)
+        const metaMatch = html.match(/<meta\s+(?:name|property)=["'](?:description|og:title|product)["']\s+content=["']([^"']{3,80})["']/i)
+            || html.match(/<meta\s+content=["']([^"']{3,80})["']\s+(?:name|property)=["'](?:description|og:title|product)["']/i);
         if (metaMatch) {
             const content = metaMatch[1].trim();
             if (/[A-Za-z].*\d|\d.*[A-Za-z]/.test(content) && content.length < 60) {

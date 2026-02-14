@@ -410,17 +410,29 @@ const VENDOR_PATTERNS = [
     // --- Smart Home / IoT (spezifisch → generisch) ---
     ['Philips Lighting', 'smarthome'], ['Signify', 'smarthome'], ['Philips Hue', 'smarthome'],
     ['TP-Link Smart Home', 'smarthome'],  // vor 'TP-Link' (Offline-Fallback)
+    ['Samsung SmartThings', 'smarthome'], // vor 'Samsung' (WU-22)
     ['Google Nest', 'smarthome'],
     ['Shelly', 'smarthome'], ['Tuya', 'smarthome'], ['IKEA', 'smarthome'],
+    // --- Konsolen (VOR TV-Herstellern!) (WU-24) ---
+    ['Sony Interactive', 'console'],  // PlayStation — VOR ['Sony', 'tv']
+    ['Microsoft Xbox', 'console'],
+    ['Nintendo', 'console'],
     // --- Media ---
     ['Sonos', 'media'], ['Roku', 'media'],
+    ['Amazon', 'media'],   // Echo, Fire TV (WU-26)
+    ['Google', 'media'],   // Chromecast, Google Home (nach Google Nest) (WU-26)
     // --- TV ---
     ['LG Electronics', 'tv'], ['Sony', 'tv'],
     // --- Kameras ---
     ['Axis Communications', 'camera'],
     ['Hikvision', 'camera'], ['Dahua', 'camera'], ['Reolink', 'camera'],
-    // --- Konsolen ---
-    ['Nintendo', 'console'],
+    ['Ring', 'camera'],     // Ring (Amazon) (WU-26)
+    // --- Smartphones / Tablets (WU-22, WU-23, WU-25) ---
+    ['Samsung', 'mobile'],  // Galaxy, Tablets (generisch)
+    ['Apple', 'mobile'],    // iPhone, iPad (mDNS differenziert besser)
+    ['Huawei', 'mobile'],   // statt 'network' (WU-25)
+    ['OnePlus', 'mobile'], ['Xiaomi', 'mobile'], ['Oppo', 'mobile'],
+    ['Google Pixel', 'mobile'],
     // --- Einplatinencomputer ---
     ['Raspberry', 'sbc'],
     // --- Virtualisierung ---
@@ -433,16 +445,7 @@ const VENDOR_PATTERNS = [
     // --- Netzwerk-Hersteller (generisch, niedrigste Prio) ---
     ['TP-Link', 'network'], ['Netgear', 'network'], ['D-Link', 'network'],
     ['Linksys', 'network'], ['Edimax', 'network'], ['ZyXEL', 'network'],
-    ['Huawei', 'network'],
 ];
-
-const PORT_TYPE_HINTS = {
-    9100: 'printer', 631: 'printer', 515: 'printer',
-    5000: 'nas', 5001: 'nas',
-    8080: 'webdevice', 554: 'camera', 8554: 'camera', 37777: 'camera',
-    3389: 'pc', 135: 'pc', 5900: 'pc',
-    22: 'server', 8443: 'network', 8880: 'network', 161: 'network',
-};
 
 /**
  * Erkennt den Gerätetyp basierend auf kombinierten Daten.
@@ -460,10 +463,10 @@ const PORT_TYPE_HINTS = {
  * @returns {{ type: string, label: string, icon: string }}
  */
 function classifyDevice(device) {
-    const { vendor = '', openPorts = [], os = '', hostname = '', ttl = 0, isLocal = false, isGateway = false, identity = {} } = device;
+    const { vendor = '', openPorts = [], os = '', hostname = '', ttl = 0, isLocal = false, isGateway = false, identity = {}, mac = '' } = device;
 
     if (isLocal) {
-        return { type: 'local', label: 'Eigener PC', icon: 'monitor' };
+        return { type: 'pc', label: 'PC / Laptop', icon: 'monitor' };
     }
 
     // 0. Gateway/Default-Route = immer Router
@@ -481,13 +484,17 @@ function classifyDevice(device) {
         return _typeToResult(identityType, vendor);
     }
 
-    // 2. PORT-BASIERT — nur Drucker-exklusive Ports (9100/RAW, 515/LPD)
-    //    Port 631 (IPP) NICHT mehr allein als Drucker werten — Router haben oft IPP!
-    //    Wenn Identity vorhanden war, hat Layer 1 bereits entschieden.
-    if (ports.has(9100) && !ports.has(80)) return _typeToResult('printer', vendor); // RAW Print ohne Webserver = Drucker
-    if (ports.has(515)) return _typeToResult('printer', vendor); // LPD ist reines Druckerprotokoll
-    // NAS: Synology-Ports 5000/5001 (nur wenn keine Identity das widerlegt hat)
-    if (ports.has(5000) || ports.has(5001)) return _typeToResult('nas', vendor);
+    // 2. PORT-BASIERT — nur mit Vendor-Bestätigung oder Port-Kombination
+    //    Einzelne Ports reichen NICHT für Klassifizierung (WU-18, WU-19, WU-20)
+    // Port 9100 (RAW Print / JetDirect) = drucker-exklusiv, auch MIT Port 80
+    if (ports.has(9100)) return _typeToResult('printer', vendor);
+    // Port 515 (LPD) = drucker-exklusiv — kein anderer Gerätetyp nutzt dieses Protokoll
+    if (ports.has(515)) return _typeToResult('printer', vendor);
+    // Port 5000/5001 nur als NAS wenn NAS-Vendor ODER beide Ports offen
+    const nasVendors = /synology|qnap|buffalo|western\s*digital|seagate/i;
+    if ((ports.has(5000) || ports.has(5001)) && (nasVendors.test(vendor) || (ports.has(5000) && ports.has(5001)))) {
+        return _typeToResult('nas', vendor);
+    }
     // Kamera: RTSP, Dahua, ONVIF
     if (ports.has(554) || ports.has(8554) || ports.has(37777)) return _typeToResult('camera', vendor);
 
@@ -508,13 +515,13 @@ function classifyDevice(device) {
     if (hn.includes('sonos') || hn.includes('denon') || hn.includes('heos') || hn.includes('airplay')) {
         return _typeToResult('media', vendor);
     }
-    if (hn.includes('fritz') || hn.includes('speedport') || hn.includes('easybox') || hn.includes('gateway')) {
+    if (hn.includes('fritz') || hn.includes('speedport') || hn.includes('easybox') || /^(internet-?)?gateway/i.test(hn)) {
         return { type: 'router', label: 'Router / Gateway', icon: 'wifi' };
     }
     if (hn.includes('iphone') || hn.includes('ipad') || hn.includes('android') || hn.includes('galaxy') || hn.includes('pixel') || hn.includes('oneplus') || hn.includes('redmi') || hn.includes('huawei-')) {
         return { type: 'mobile', label: 'Mobilgerät', icon: 'smartphone' };
     }
-    if (hn.includes('switch') || hn.includes('playstation') || hn.includes('xbox')) {
+    if (/\bnintendo.?switch\b/i.test(hn) || hn.includes('playstation') || hn.includes('xbox')) {
         return { type: 'console', label: 'Spielkonsole', icon: 'gamepad' };
     }
     if (hn.includes('shelly') || hn.includes('tasmota') || hn.includes('esp-') || hn.includes('wled')) {
@@ -532,7 +539,17 @@ function classifyDevice(device) {
         }
     }
 
-    // 5. OS + Port Kombinationen
+    // 5. Lokal-administrierte MAC ohne weitere Daten = wahrscheinlich Smartphone mit MAC-Randomisierung
+    //    Bit 1 des ersten Oktetts gesetzt = locally administered (nicht IEEE-registriert)
+    //    Ohne Vendor/Ports/Hostname können wir den Typ nicht bestimmen → ehrlich "Unbekannt"
+    if (mac && !vendorLower && ports.size === 0 && !hn) {
+        const firstByte = parseInt(mac.replace(/[:\-\.]/g, '').substring(0, 2), 16);
+        if (!isNaN(firstByte) && (firstByte & 0x02) !== 0) {
+            return { type: 'unknown', label: 'Unbekanntes Gerät', icon: 'help-circle' };
+        }
+    }
+
+    // 6. OS + Port Kombinationen
     if (os === 'Windows' || ports.has(135) || ports.has(3389) || ports.has(445)) {
         if (ports.has(80) && ports.has(443) && ports.size > 4) {
             return { type: 'server', label: 'Windows Server', icon: 'server' };
@@ -553,12 +570,12 @@ function classifyDevice(device) {
         return { type: 'pc', label: 'Linux/macOS Gerät', icon: 'monitor' };
     }
 
-    // 6. Netzwerkgerät (hoher TTL)
+    // 7. Netzwerkgerät (hoher TTL)
     if (ttl > 128 || os === 'Netzwerkgerät') {
         return { type: 'router', label: 'Netzwerkgerät', icon: 'wifi' };
     }
 
-    // 7. Generischer Fallback
+    // 8. Generischer Fallback
     if (ports.has(80) || ports.has(443)) {
         return { type: 'webdevice', label: 'Gerät mit Web-Interface', icon: 'globe' };
     }
@@ -614,7 +631,7 @@ const SNMP_OID_TYPE_MAP = [
     ['1.3.6.1.4.1.41112.', 'network'],   // Ubiquiti
     ['1.3.6.1.4.1.4413.',  'router'],    // ZyXEL
     ['1.3.6.1.4.1.12356.', 'network'],   // Fortinet
-    ['1.3.6.1.4.1.11.',    'printer'],    // HP (häufig Drucker)
+    // HP OID 11 entfernt (WU-30): Umfasst auch ProLiant Server, Aruba Switches, Storage
     ['1.3.6.1.4.1.2435.',  'printer'],    // Brother
     ['1.3.6.1.4.1.1602.',  'printer'],    // Canon
     ['1.3.6.1.4.1.1248.',  'printer'],    // Epson

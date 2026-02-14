@@ -41,7 +41,7 @@ async function scanLocalNetwork() {
 async function _scanViaGetNetNeighbor() {
     const psScript = `
         $neighbors = Get-NetNeighbor -AddressFamily IPv4 -ErrorAction SilentlyContinue |
-            Where-Object { $_.State -ne 'Unreachable' -and $_.IPAddress -ne '255.255.255.255' -and $_.IPAddress -ne '224.0.0.22' } |
+            Where-Object { $_.State -ne 'Unreachable' -and $_.IPAddress -ne '255.255.255.255' -and $_.IPAddress -notlike '224.*' -and $_.IPAddress -notlike '239.*' -and $_.IPAddress -notlike '169.254.*' } |
             Select-Object IPAddress, LinkLayerAddress, State
         $results = foreach ($n in $neighbors) {
             $hostname = ''
@@ -157,7 +157,8 @@ const PORT_LABELS = {
     445: 'SMB', 515: 'LPD', 554: 'RTSP', 631: 'IPP', 1400: 'Sonos',
     993: 'IMAPS', 995: 'POP3S', 3074: 'Xbox Live', 3306: 'MySQL', 3389: 'RDP',
     5000: 'HTTP', 5001: 'HTTPS', 5432: 'PostgreSQL',
-    5900: 'VNC', 8080: 'HTTP-Alt', 8443: 'HTTPS-Alt', 9100: 'Drucker',
+    5900: 'VNC', 8080: 'HTTP-Alt', 8443: 'HTTPS-Alt', 8554: 'RTSP-Alt',
+    9100: 'Drucker', 37777: 'Dahua',
 };
 
 // ---------------------------------------------------------------------------
@@ -289,13 +290,36 @@ async function scanNetworkActive(onProgress) {
         log.warn('ARP-Tabelle konnte nicht gelesen werden:', err.message);
     }
 
+    // Phase 2.6: ARP-Geräte die NICHT im Ping Sweep sind → als zusätzliche Geräte hinzufügen (WU-1)
+    // Das findet Smartphones, IoT-Geräte und andere die ICMP blockieren
+    const pingIPs = new Set(onlineDevices.map(d => d.ip));
+    let arpOnlyCount = 0;
+    for (const [ip, mac] of macMap.entries()) {
+        if (pingIPs.has(ip)) continue;  // Bereits via Ping gefunden
+        if (ip === subnetInfo.localIP) continue;  // Eigener PC (wird separat behandelt)
+        if (ip === subnetInfo.gateway) continue;  // Gateway (bereits via Ping)
+        if (!ip.startsWith(subnetInfo.subnet + '.')) continue;  // Nur gleiches Subnetz
+        // Multicast/Broadcast/Link-Local filtern (WU-6)
+        const firstOctet = parseInt(ip.split('.')[0], 10);
+        const lastOctet = parseInt(ip.split('.')[3], 10);
+        if (lastOctet === 255 || lastOctet === 0) continue;
+        if (firstOctet >= 224) continue;  // Multicast 224.0.0.0/4
+        if (firstOctet === 169 && parseInt(ip.split('.')[1], 10) === 254) continue;  // Link-Local
+
+        onlineDevices.push({ ip, ttl: 0, rtt: -1, hostname: '' });
+        arpOnlyCount++;
+    }
+    if (arpOnlyCount > 0) {
+        log.info(`ARP-Discovery: ${arpOnlyCount} zusätzliche Geräte (nicht via Ping erreichbar)`);
+    }
+
     // Phase 3: Port Scan (NUR Ports, keine ARP-Daten mehr — die haben wir bereits)
     if (onProgress) onProgress({ phase: 'ports', current: 0, total: onlineDevices.length, message: `${onlineDevices.length} Geräte gefunden, scanne Ports...` });
 
     const ipList = onlineDevices.map(d => `'${d.ip}'`).join(',');
     const portScanScript = `
         $ips = @(${ipList})
-        $ports = @(22, 80, 135, 443, 445, 515, 554, 631, 1400, 3074, 3389, 5000, 5001, 8080, 9100)
+        $ports = @(22, 80, 135, 443, 445, 515, 554, 631, 1400, 3074, 3389, 5000, 5001, 5900, 8080, 8554, 9100, 37777)
         $results = foreach ($ip in $ips) {
             $openPorts = @()
             foreach ($port in $ports) {
@@ -315,7 +339,7 @@ async function scanNetworkActive(onProgress) {
     const portMap = new Map(); // IP → number[] (offene Ports)
     try {
         // Timeout: 13 Ports × 500ms × Anzahl Geräte + 20s Puffer
-        const portsCount = 13;
+        const portsCount = 18;  // Muss mit $ports Array übereinstimmen
         const timeout = Math.min(Math.max(90000, onlineDevices.length * portsCount * 600 + 20000), 300000);
         log.info(`Port Scan: ${onlineDevices.length} Geräte × ${portsCount} Ports, Timeout: ${Math.round(timeout / 1000)}s`);
         const { stdout } = await runPS(portScanScript, { timeout, maxBuffer: 5 * 1024 * 1024 });
@@ -422,7 +446,8 @@ async function scanNetworkActive(onProgress) {
         if (onProgress) onProgress({ phase: 'identify', current: 0, total: 0, message: 'Lokaler PC wird identifiziert...' });
         const wmiScript = `
 $cs = Get-CimInstance Win32_ComputerSystem | Select-Object Manufacturer, Model
-[PSCustomObject]@{ Manufacturer = $cs.Manufacturer; Model = $cs.Model } | ConvertTo-Json -Compress
+$adapter = Get-NetAdapter | Where-Object { $_.Status -eq 'Up' -and $_.InterfaceDescription -notlike '*Virtual*' -and $_.InterfaceDescription -notlike '*Hyper-V*' } | Select-Object -First 1
+[PSCustomObject]@{ Manufacturer = $cs.Manufacturer; Model = $cs.Model; MAC = if($adapter) { $adapter.MacAddress } else { '' } } | ConvertTo-Json -Compress
         `.trim();
         const { stdout } = await runPS(wmiScript, { timeout: 10000 });
         if (stdout && stdout.trim() && stdout.trim() !== 'null') {
@@ -434,12 +459,16 @@ $cs = Get-CimInstance Win32_ComputerSystem | Select-Object Manufacturer, Model
 
     // Ergebnis zusammenbauen (mit Gerätetyp-Klassifizierung + Modell-Identifikation)
     const devices = onlineDevices.map(d => {
-        const macDash = macMap.get(d.ip) || '';
+        const isLocal = d.ip === subnetInfo.localIP;
+        let macDash = macMap.get(d.ip) || '';
+        // Lokaler PC: MAC via WMI ergänzen wenn ARP sie nicht hat (WU-31)
+        if (!macDash && isLocal && localPCInfo && localPCInfo.MAC) {
+            macDash = localPCInfo.MAC;
+        }
         const mac = macDash.replace(/-/g, ':');
         const ports = portMap.get(d.ip) || [];
         const openPorts = ports.map(p => ({ port: p, label: PORT_LABELS[p] || `${p}` }));
         const shares = sharesMap.get(d.ip) || [];
-        const isLocal = d.ip === subnetInfo.localIP;
         const isGateway = d.ip === subnetInfo.gateway;
         const vendor = vendorMap.get(macDash) || '';
         const os = _detectOS(d.ttl);
@@ -476,49 +505,30 @@ $cs = Get-CimInstance Win32_ComputerSystem | Select-Object Manufacturer, Model
             }
         }
 
-        // Hostname-basierte Modellerkennung (Gerät benennt sich selbst via DNS/mDNS)
+        // Hostname-basierte Modellerkennung (Gerät benennt sich selbst via DNS/mDNS) (WU-15)
         if (!identity.modelName && d.hostname) {
             const hn = (d.hostname || '').replace(/\.local\.?$/, '').replace(/\.galaxus\.box$/, '');
+            const _setHostnameModel = (name) => {
+                identity.modelName = name;
+                identity.identifiedBy = (identity.identifiedBy ? identity.identifiedBy + '+hostname' : 'hostname');
+            };
             if (/^xbox/i.test(hn)) {
-                identity.modelName = 'Xbox Konsole';
-                identity.identifiedBy = (identity.identifiedBy ? identity.identifiedBy + '+hostname' : 'hostname');
+                _setHostnameModel('Xbox Konsole');
             } else if (/^playstation|^ps[45]/i.test(hn)) {
-                identity.modelName = 'PlayStation Konsole';
-                identity.identifiedBy = (identity.identifiedBy ? identity.identifiedBy + '+hostname' : 'hostname');
+                _setHostnameModel('PlayStation Konsole');
             } else if (/^(iphone|ipad|macbook|imac)/i.test(hn)) {
-                identity.modelName = hn.replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-                identity.identifiedBy = (identity.identifiedBy ? identity.identifiedBy + '+hostname' : 'hostname');
+                _setHostnameModel(hn.replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase()));
+            } else if (/galaxy[- ]?[sa]\d/i.test(hn) || /^android[- ]/i.test(hn)) {
+                _setHostnameModel(hn.replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase()));
+            } else if (/^echo[- ]/i.test(hn) || /^fire[- ]tv/i.test(hn)) {
+                _setHostnameModel(hn.replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase()));
             }
         }
 
-        // Synthetische Beschreibung als letzter Ausweg (kein statisches Mapping!)
-        // Nutzt nur Daten die das Gerät selbst liefert: Vendor, Ports, OS, SNMP sysName
-        if (!identity.modelName) {
-            const synParts = [];
-            // SNMP sysName als Modellname-Ersatz (Gerät hat sich selbst so konfiguriert)
-            if (snmpData.sysName && snmpData.sysName.length > 2) {
-                identity.modelName = snmpData.sysName;
-                identity.identifiedBy = (identity.identifiedBy ? identity.identifiedBy + '+sysname' : 'sysname');
-            } else {
-                // Port-Profil-basiert (dynamisch aus offenen Ports)
-                const portNums = ports;
-                if (portNums.includes(515) || portNums.includes(9100)) synParts.push('Netzwerkdrucker');
-                else if (portNums.includes(554) || portNums.includes(8554)) synParts.push('Kamera');
-                else if (portNums.includes(1400)) synParts.push('Mediengerät');
-                else if (portNums.includes(5000) || portNums.includes(5001)) synParts.push('NAS');
-                else if (portNums.includes(3074)) synParts.push('Spielkonsole');
-                else if (portNums.includes(3389)) synParts.push('Windows-PC');
-                else if (portNums.includes(22)) synParts.push(os || 'Gerät');
-                else if (portNums.includes(80) || portNums.includes(443)) synParts.push('Gerät mit Web-Interface');
-                else if (os) synParts.push(`${os}-Gerät`);
-                else synParts.push('Netzwerkgerät');
-
-                if (synParts.length > 0) {
-                    identity.modelName = synParts[0];
-                    identity.identifiedBy = (identity.identifiedBy ? identity.identifiedBy + '+synth' : 'synth');
-                }
-            }
-        }
+        // Deterministische Identifizierung: Nur Fakten, keine Vermutungen
+        // Kein synthetischer Fallback mehr — wenn kein Protokoll ein Modell liefert, bleibt es leer ("—")
+        // SNMP sysName bleibt in snmpData.sysName (wird separat im Frontend als Tooltip angezeigt)
+        const isConfirmed = !!(identity.modelName && identity.identifiedBy && identity.identifiedBy !== 'hostname');
 
         // Vendor-Enrichment: Lokaler PC bekommt WMI-Hersteller wenn MAC-Vendor fehlt
         const finalVendor = vendor || (isLocal && localPCInfo && localPCInfo.Manufacturer ? localPCInfo.Manufacturer : '');
@@ -526,7 +536,7 @@ $cs = Get-CimInstance Win32_ComputerSystem | Select-Object Manufacturer, Model
         // Gerätetyp-Erkennung: Identity (Verhalten) VOR Hersteller (Name)
         const deviceType = classifyDevice({
             vendor: finalVendor, openPorts, os, hostname: d.hostname || '', ttl: d.ttl || 0, isLocal, isGateway,
-            identity, // UPnP/HTTP/IPP/SNMP Ergebnisse — das Gerät sagt was es IST
+            identity, mac, // UPnP/HTTP/IPP/SNMP Ergebnisse — das Gerät sagt was es IST
         });
 
         return {
@@ -556,6 +566,7 @@ $cs = Get-CimInstance Win32_ComputerSystem | Select-Object Manufacturer, Model
             mdnsServiceTypes: identity.mdnsServiceTypes || [],
             wsdTypes: identity.wsdTypes || [],
             identifiedBy: identity.identifiedBy || '',
+            isConfirmed,
         };
     });
 

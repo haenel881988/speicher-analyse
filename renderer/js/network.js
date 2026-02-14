@@ -403,7 +403,7 @@ export class NetworkView {
         const toolbar = `<div class="network-devices-toolbar">
             <button class="network-btn" id="network-scan-active" ${this._activeScanRunning ? 'disabled' : ''}>${this._activeScanRunning ? 'Scan läuft...' : 'Netzwerk scannen'}</button>
             <button class="network-btn network-btn-secondary" id="network-scan-passive" ${this._activeScanRunning ? 'disabled' : ''} title="Schneller passiver Scan (nur ARP-Tabelle)">Schnellscan</button>
-            ${devices.length > 0 ? `<input type="text" class="network-search" id="network-device-filter" placeholder="Filtern..." value="${this._esc(this._deviceFilter || '')}" style="max-width:180px">` : ''}
+            ${devices.length > 0 ? `<input type="text" class="network-device-search" id="network-device-filter" placeholder="Filtern..." value="${this._esc(this._deviceFilter || '')}" style="max-width:180px">` : ''}
             ${hasActiveScan ? `<span class="network-timestamp">Subnetz: ${this._esc(this._activeScanResult.subnet)} | Eigene IP: ${this._esc(this._activeScanResult.localIP)}</span>` : ''}
             ${hasActiveScan ? `<button class="network-btn network-btn-secondary" id="network-export-devices">Export CSV</button>` : ''}
         </div>`;
@@ -442,7 +442,7 @@ export class NetworkView {
             // Inventar-Zusammenfassung
             const typeCounts = {};
             for (const d of filtered) {
-                const t = d.deviceLabel || 'Unbekannt';
+                const t = d.deviceLabel || 'Unbekanntes Gerät';
                 typeCounts[t] = (typeCounts[t] || 0) + 1;
             }
             const sortedTypes = Object.entries(typeCounts).sort((a, b) => b[1] - a[1]);
@@ -475,14 +475,10 @@ export class NetworkView {
                     if (b[0].startsWith('Unbekannt')) return -1;
                     return b[1].length - a[1].length;
                 });
-                // Geräte innerhalb jeder Gruppe sortieren: Vendor, dann Name
+                // Geräte innerhalb jeder Gruppe sortieren: IP numerisch (WU-32)
+                const _ipNum = (ip) => ip.split('.').reduce((acc, oct) => acc * 256 + parseInt(oct, 10), 0);
                 for (const [, devs] of sortedGroups) {
-                    devs.sort((a, b) => {
-                        const va = (a.vendor || '').toLowerCase();
-                        const vb = (b.vendor || '').toLowerCase();
-                        if (va !== vb) return va.localeCompare(vb);
-                        return (a.hostname || a.ip).localeCompare(b.hostname || b.ip);
-                    });
+                    devs.sort((a, b) => _ipNum(a.ip) - _ipNum(b.ip));
                 }
                 for (const [label, devs] of sortedGroups) {
                     const firstDev = devs[0];
@@ -589,7 +585,7 @@ export class NetworkView {
             modelParts.push(`<span class="netinv-mdns-badge" title="mDNS: ${this._esc(d.mdnsServices.join(', '))}">${d.mdnsServices.length} Service${d.mdnsServices.length > 1 ? 's' : ''}</span>`);
         }
         if (d.identifiedBy) {
-            modelParts.push(`<span class="netinv-source-badge" title="Erkannt via: ${this._esc(d.identifiedBy)}">${this._esc(d.identifiedBy)}</span>`);
+            modelParts.push(`<span class="netinv-source-badge" title="Erkannt via: ${this._esc(d.identifiedBy)}">&#9432;</span>`);
         }
         const modelHtml = modelParts.length > 0
             ? modelParts.join('')
@@ -602,8 +598,8 @@ export class NetworkView {
             <td class="netinv-col-vendor">${this._esc(d.vendor) || '<span style="color:var(--text-muted)">\u2014</span>'}</td>
             <td class="netinv-col-model">${modelHtml}</td>
             <td class="netinv-col-mac" style="font-family:monospace;font-size:11px">${this._esc(d.mac) || '\u2014'}</td>
-            <td class="netinv-col-ports">${portBadges}${morePortsHint}</td>
-            <td class="netinv-col-rtt"><span class="${rttClass}">${d.rtt || 0} ms</span></td>
+            <td class="netinv-col-ports">${portBadges || morePortsHint || '\u2014'}</td>
+            <td class="netinv-col-rtt"><span class="${rttClass}">${d.rtt > 0 ? d.rtt + ' ms' : '\u2014'}</span></td>
         </tr>`;
     }
 
@@ -921,20 +917,6 @@ export class NetworkView {
                 this.render();
             };
         }
-
-        // Device row toggle (expand/collapse)
-        this.container.querySelectorAll('[data-device-toggle]').forEach(row => {
-            row.onclick = (e) => {
-                if (e.target.closest('button')) return;
-                const ip = row.dataset.deviceToggle;
-                if (this._expandedDevices.has(ip)) {
-                    this._expandedDevices.delete(ip);
-                } else {
-                    this._expandedDevices.add(ip);
-                }
-                this.render();
-            };
-        });
 
         // Detail: Port-Scan für einzelnes Gerät
         this.container.querySelectorAll('[data-detail-ports]').forEach(btn => {

@@ -102,6 +102,13 @@ node launch.js  # oder: npm start
 | Explorer | `renderer/js/explorer.js` + `explorer-tabs.js` + `explorer-dual-panel.js` |
 | UI | `renderer/js/app.js` (Haupt-Controller), `renderer/css/style.css` (Dark/Light Theme) |
 
+## Visuelle Verifikation (ABSOLUT)
+
+- **Screenshots sind Single Source of Truth.** DOM-Daten (Runtime.evaluate, textContent, getComputedStyle) sind NICHT aussagekräftig. Nur was auf dem Screenshot sichtbar ist, zählt als Beweis.
+- **"Timeout" ist KEINE Ausrede.** Wenn Screenshots fehlschlagen, muss die Wurzelursache gefunden und behoben werden (z.B. Fenster minimiert → Win32 ShowWindow, CDP-Pfadfehler, etc.).
+- **Electron-Fenster im Tray:** `Target.activateTarget` via CDP reicht NICHT, um ein minimiertes Electron-Fenster wiederherzustellen. Lösung: PowerShell + Win32 `ShowWindow(hWnd, SW_RESTORE)` + `SetForegroundWindow(hWnd)` (siehe `tools/wcag/restore-window.ps1`).
+- **Ablauf:** 1) Fenster sichtbar machen → 2) Screenshot → 3) Screenshot anschauen → 4) Jeden sichtbaren Text beschreiben → 5) Erst dann Urteil fällen.
+
 ## Technische Regeln
 
 - **Sprache:** Alle UI-Texte auf Deutsch mit korrekten Umlauten (ä/ö/ü, nicht ae/oe/ue)
