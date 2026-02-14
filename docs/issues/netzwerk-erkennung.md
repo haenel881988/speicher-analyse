@@ -459,6 +459,64 @@ Keine Ports → leere Zelle statt "—". Alle anderen Spalten zeigen "—" bei f
 
 ---
 
+## Designprinzipien
+
+### Deterministische Identifizierung
+
+**Keine Wahrscheinlichkeiten. Nur Fakten.**
+
+Ein Gerät wird NUR dann als "identifiziert" markiert, wenn ein Protokoll eine **explizite, maschinenlesbare Antwort** liefert:
+- UPnP: `<modelName>ZyXEL VMG3625</modelName>` → **Fakt**
+- mDNS: `_printer._tcp.local` Service → **Fakt**
+- HTTP: `<title>FRITZ!Box 7590</title>` → **Fakt**
+- SNMP: sysDescr enthält "HP LaserJet Pro MFP M428fdn" → **Fakt**
+
+Was KEIN Fakt ist:
+- Port 5000 offen → "wahrscheinlich NAS" → **VERBOTEN** (genau das war "synth")
+- Port 515 offen → "wahrscheinlich Drucker" → **VERBOTEN** (genau das war Visionscape)
+- TTL 64 → "wahrscheinlich Linux" → **NUR als Hinweis**, nie als Modellname
+
+Dieses Prinzip verhindert, dass ZUKÜNFTIG wieder jemand Port-basiertes Raten einbaut.
+
+### Zwei-Stufen-Erkennung (Level 1 / Level 2)
+
+**Level 1 — Passive Erkennung (automatisch, ohne Authentifizierung)**
+
+Läuft bei jedem Scan automatisch. Nutzt nur offene/öffentliche Protokolle:
+- Ping Sweep + ARP-Tabelle (Discovery)
+- Port-Scan (Dienste erkennen)
+- UPnP/SSDP (Gerätebeschreibungen)
+- mDNS/Bonjour (Service-Typen)
+- WSD (Windows-Geräte/Drucker)
+- HTTP-Banner (Web-Interfaces)
+- SNMP public (Geräteinformationen)
+- SSH-Banner (OS/Firmware-Hinweise)
+
+**Das ist der aktuelle Stand.** Alle 8 Phasen des Aktionsplans betreffen Level 1.
+
+**Level 2 — Authentifizierte Tiefenanalyse (optional, on-demand)**
+
+Nur auf expliziten Wunsch des Users. Braucht Zugangsdaten:
+- **WinRM/WMI** für Windows-PCs: Installierte Software, Dienste, Hardware-Details
+- **SSH-Login** für Linux/NAS: Filesystem, Dienste, Konfiguration
+- **SNMP v3** (mit Auth): Detaillierte Netzwerkgeräte-Daten
+
+Level 2 ist **KEIN Bestandteil** dieses Issues. Es ist eine **zukünftige Erweiterung** (v8+). Für Simons aktuelle 7 Probleme reicht Level 1 vollständig aus.
+
+### Datenmodell-Erweiterung: `isConfirmed`
+
+Jedes Gerät erhält ein neues Feld `isConfirmed`:
+- `true` = Ein Protokoll hat den Modellnamen/Typ **explizit bestätigt** (UPnP, mDNS, HTTP-Title, SNMP sysDescr, IPP)
+- `false` = Nur Vendor (aus MAC) und/oder Portliste bekannt, kein konkretes Modell
+
+Im Frontend:
+- `isConfirmed: true` → Modellname wird normal angezeigt
+- `isConfirmed: false` → Modellspalte zeigt "—" (ehrlich) statt eines geratenen Namens
+
+Das `identifiedBy`-Feld bleibt erhalten als Tooltip (zeigt WELCHES Protokoll das Gerät identifiziert hat), wird aber nicht mehr als sichtbarer Badge-Text angezeigt (Phase 1 fix).
+
+---
+
 ## Scope-Management
 
 **40 Wurzelursachen auf einmal ist zu viel.** Deshalb: 3 Prioritätsstufen.
@@ -511,11 +569,23 @@ modelParts.push(`<span class="netinv-source-badge" title="...">${this._esc(d.ide
 modelParts.push(`<span class="netinv-source-badge" title="Erkannt via: ${this._esc(d.identifiedBy)}">&#9432;</span>`);
 ```
 
+#### Code-Änderung C: `isConfirmed`-Feld setzen
+
+`main/network-scanner.js` in der Ergebnis-Assembly (nach Entfernung des synth-Blocks):
+
+```javascript
+// Deterministische Identifizierung: Nur Fakten, keine Vermutungen
+const isConfirmed = !!(identity.modelName && identity.identifiedBy && identity.identifiedBy !== 'hostname');
+```
+
+Im Geräteobjekt: `isConfirmed` als Feld mitsenden. Im Frontend kann das später genutzt werden um bestätigte vs. unbestätigte Geräte visuell zu unterscheiden.
+
 #### Was das löst
 - "NAS synth" beim Zyxel Router → verschwindet (Feld wird "—")
 - "Linux/macOS-Gerät synth" → verschwindet (Feld wird "—")
 - "Netzwerkdrucker synth" bei Visionscape → verschwindet (Feld wird "—")
 - "synth" Badge → verschwindet komplett
+- Neues `isConfirmed`-Feld erlaubt zukünftig visuelle Unterscheidung (z.B. grüner Haken bei bestätigten Geräten)
 
 #### Was das NICHT löst
 - **Die Modell-Spalte zeigt MEHR leere Felder ("—").** Geräte die vorher einen falschen Modellnamen hatten, haben jetzt gar keinen. Das ist ehrlicher, aber nicht schöner.
@@ -1013,3 +1083,4 @@ Simon startet einen Scan und prüft:
 - Geräte ohne Web-Interface, SNMP, UPnP, mDNS → Modell bleibt "—" (ehrlich, nicht falsch)
 - ARP-Geräte haben rtt = -1 (kein Ping möglich) → "— ms" statt "X ms"
 - Samsung TV vs. Samsung Handy → beide "Smartphone" (korrekter Fix braucht UPnP/mDNS)
+- Detaillierte Software-/Konfigurations-Analyse → braucht Level 2 (WinRM/SSH mit Auth) → separate Erweiterung (v8+)
