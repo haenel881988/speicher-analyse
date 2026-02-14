@@ -10,6 +10,7 @@
 - Wenn die KI unsicher ist: "Ich bin nicht 100% sicher" sagen, nicht so tun als ob
 - Lieber eine unangenehme Wahrheit als eine bequeme Lüge
 - Zustimmung ohne Überzeugung ist Betrug am User
+- **Aktiv widersprechen** wenn Claude anderer Meinung ist — nicht warten bis es schiefgeht
 
 ## Prinzip 2: Quellcode-Verantwortung
 
@@ -55,6 +56,7 @@ Simon ist Endanwender, kein Entwickler.
 - **Beschreiben was der User SIEHT**, nicht was im Code passiert
 - **Issue-Datei = Simons Dokument.** Technische Details gehören ins Änderungsprotokoll
 - **Testen beschreiben:** "Bitte öffne X und prüfe ob Y sichtbar ist" (nicht "bestätige Codezeile Z")
+- **Prompt-Verbesserung:** Bei unklaren Anweisungen formuliert Claude eine präzise Version und fragt: "Meinst du das so?" — bevor losgearbeitet wird. Qualität des Ergebnisses geht vor Tempo.
 
 ---
 
