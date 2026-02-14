@@ -394,57 +394,43 @@ const OFFLINE_FALLBACK = new Map([
 // Gerätetyp-Erkennung (kombiniert Hersteller, offene Ports, TTL, Hostname)
 // ---------------------------------------------------------------------------
 
-// Muster-basierte Hersteller→Typ Zuordnung.
-// WICHTIG: Längere/spezifischere Muster ZUERST (Reihenfolge = Priorität).
-// Matching: case-insensitive substring (vendor.includes(pattern)).
-// Damit funktionieren sowohl kurze Offline-Fallback-Namen ("Brother")
-// als auch volle IEEE-API-Namen ("Brother Industries, Ltd.").
+// Hersteller→Typ Zuordnung: NUR Hersteller die AUSSCHLIESSLICH eine Gerätekategorie
+// im Netzwerk haben. Multi-Produkt-Hersteller (Canon, Samsung, Apple, Sony, Amazon,
+// Google, LG, Huawei, Cisco, TP-Link, etc.) sind VERBOTEN — deren Gerätetyp muss
+// durch Identity, Ports oder Hostname bestimmt werden, nicht durch den Herstellernamen.
+// Regel: Statische Listen NIEMALS als Erkennungsgrundlage (CLAUDE.md).
+// Geräte von Multi-Produkt-Herstellern ohne Identity/Ports/Hostname → "Unbekanntes Gerät".
 const VENDOR_PATTERNS = [
-    // --- Drucker ---
+    // --- Drucker (reine Druckerhersteller — bauen NUR Drucker im Netzwerk) ---
     ['Konica Minolta', 'printer'],
-    ['Brother', 'printer'], ['Canon', 'printer'], ['Epson', 'printer'],
-    ['Kyocera', 'printer'], ['Lexmark', 'printer'],
-    // --- NAS / Speicher ---
-    ['Western Digital', 'nas'],
-    ['Synology', 'nas'], ['QNAP', 'nas'], ['Buffalo', 'nas'], ['Seagate', 'nas'],
-    // --- Smart Home / IoT (spezifisch → generisch) ---
+    ['Brother', 'printer'], ['Kyocera', 'printer'], ['Lexmark', 'printer'],
+    // --- NAS (reine NAS-Hersteller) ---
+    ['Synology', 'nas'], ['QNAP', 'nas'],
+    // --- Smart Home / IoT (reine IoT-Hersteller oder spezifische Produktlinien) ---
     ['Philips Lighting', 'smarthome'], ['Signify', 'smarthome'], ['Philips Hue', 'smarthome'],
-    ['TP-Link Smart Home', 'smarthome'],  // vor 'TP-Link' (Offline-Fallback)
-    ['Samsung SmartThings', 'smarthome'], // vor 'Samsung' (WU-22)
-    ['Google Nest', 'smarthome'],
+    ['Samsung SmartThings', 'smarthome'],  // spezifische Produktlinie (nicht generisch Samsung!)
+    ['Google Nest', 'smarthome'],          // spezifische Produktlinie (nicht generisch Google!)
+    ['TP-Link Smart Home', 'smarthome'],   // spezifische Produktlinie (nicht generisch TP-Link!)
     ['Shelly', 'smarthome'], ['Tuya', 'smarthome'], ['IKEA', 'smarthome'],
-    // --- Konsolen (VOR TV-Herstellern!) (WU-24) ---
-    ['Sony Interactive', 'console'],  // PlayStation — VOR ['Sony', 'tv']
-    ['Microsoft Xbox', 'console'],
+    // --- Konsolen (spezifische Produktlinien) ---
+    ['Sony Interactive', 'console'],  // PlayStation (nicht generisch Sony!)
+    ['Microsoft Xbox', 'console'],    // Xbox (nicht generisch Microsoft!)
     ['Nintendo', 'console'],
-    // --- Media ---
+    // --- Media (reine Audio/Streaming-Hersteller) ---
     ['Sonos', 'media'], ['Roku', 'media'],
-    ['Amazon', 'media'],   // Echo, Fire TV (WU-26)
-    ['Google', 'media'],   // Chromecast, Google Home (nach Google Nest) (WU-26)
-    // --- TV ---
-    ['LG Electronics', 'tv'], ['Sony', 'tv'],
-    // --- Kameras ---
+    // --- Kameras (reine Überwachungs-Hersteller) ---
     ['Axis Communications', 'camera'],
     ['Hikvision', 'camera'], ['Dahua', 'camera'], ['Reolink', 'camera'],
-    ['Ring', 'camera'],     // Ring (Amazon) (WU-26)
-    // --- Smartphones / Tablets (WU-22, WU-23, WU-25) ---
-    ['Samsung', 'mobile'],  // Galaxy, Tablets (generisch)
-    ['Apple', 'mobile'],    // iPhone, iPad (mDNS differenziert besser)
-    ['Huawei', 'mobile'],   // statt 'network' (WU-25)
-    ['OnePlus', 'mobile'], ['Xiaomi', 'mobile'], ['Oppo', 'mobile'],
-    ['Google Pixel', 'mobile'],
+    // --- Smartphones (reine Smartphone-Hersteller) ---
+    ['OnePlus', 'mobile'], ['Oppo', 'mobile'],
     // --- Einplatinencomputer ---
     ['Raspberry', 'sbc'],
     // --- Virtualisierung ---
     ['VMware', 'vm'], ['Hyper-V', 'vm'], ['QEMU', 'vm'], ['VirtualBox', 'vm'],
-    // --- Router / Gateway ---
+    // --- Router (reine Router-Hersteller) ---
     ['Fritz!Box', 'router'], ['AVM', 'router'], ['MikroTik', 'router'],
-    // --- Netzwerk (spezifisch → generisch) ---
-    ['Cisco Meraki', 'network'],
-    ['Ubiquiti', 'network'], ['Aruba', 'network'], ['Cisco', 'network'],
-    // --- Netzwerk-Hersteller (generisch, niedrigste Prio) ---
-    ['TP-Link', 'network'], ['Netgear', 'network'], ['D-Link', 'network'],
-    ['Linksys', 'network'], ['Edimax', 'network'], ['ZyXEL', 'network'],
+    // --- Netzwerk (reine Netzwerk-Infrastruktur) ---
+    ['Cisco Meraki', 'network'], ['Aruba', 'network'], ['Linksys', 'network'],
 ];
 
 /**
@@ -495,8 +481,9 @@ function classifyDevice(device) {
     }
     // Port 515 (LPD) = NICHT drucker-exklusiv! Wird auch von IoT/Embedded/Industriegeräten verwendet.
     // Nur als Drucker werten wenn zusätzlich ein Drucker-Vendor erkannt wurde (Abschnitt 4 → VENDOR_PATTERNS)
-    // Port 5000/5001 nur als NAS wenn NAS-Vendor ODER beide Ports offen
-    const nasVendors = /synology|qnap|buffalo|western\s*digital|seagate/i;
+    // Port 5000/5001 nur als NAS wenn reiner NAS-Vendor ODER beide Ports offen
+    // Nur Synology + QNAP (reine NAS-Hersteller). Buffalo/WD/Seagate = Multi-Produkt → entfernt.
+    const nasVendors = /synology|qnap/i;
     if ((ports.has(5000) || ports.has(5001)) && (nasVendors.test(vendor) || (ports.has(5000) && ports.has(5001)))) {
         return _typeToResult('nas', vendor);
     }
@@ -571,9 +558,8 @@ function classifyDevice(device) {
         if (ports.has(22) && ports.has(80)) {
             return { type: 'server', label: 'Linux Server', icon: 'server' };
         }
-        if (vendor && vendor.toLowerCase().includes('apple')) {
-            return { type: 'pc', label: 'Apple Gerät', icon: 'monitor' };
-        }
+        // KEIN vendor-basiertes "Apple Gerät" — Apple baut iPhones, MacBooks, Apple TV,
+        // HomePod — alles TTL 64. Typ muss über Identity/Hostname/mDNS bestimmt werden.
         if (ports.has(80) || ports.has(443)) {
             return { type: 'webdevice', label: 'Gerät mit Web-Interface', icon: 'globe' };
         }
