@@ -459,114 +459,521 @@ Keine Ports → leere Zelle statt "—". Alle anderen Spalten zeigen "—" bei f
 
 ---
 
-## Aktionsplan (priorisiert)
+## Scope-Management
 
-### Phase 1: Synthetische Modellnamen abschaffen (WU-7, WU-8, WU-35)
+**40 Wurzelursachen auf einmal ist zu viel.** Deshalb: 3 Prioritätsstufen.
 
+### MUSS (Simons 7 Probleme direkt lösen)
+Phasen 1-4 beheben die 7 gemeldeten Symptome. **Das ist der Kern.**
+
+### SOLL (Qualität verbessern, neue Fehler verhindern)
+Phasen 5-6 verbessern die Erkennungsrate für ZUKÜNFTIGE Scans.
+
+### KANN (Wartung, Kosmetik, Architektur)
+Phasen 7-8 fixen echte Bugs, sind aber für Simon nicht direkt sichtbar.
+
+**Empfehlung:** Phase 1-4 implementieren → Simon testet → dann entscheiden ob Phase 5-8 nötig sind.
+
+---
+
+## Aktionsplan (mit konkretem Code)
+
+### Phase 1: Falsche Modellnamen beseitigen (WU-7, WU-8, WU-35)
+
+**Löst Simons Probleme:** #1 (NAS synth), #6 (Linux/macOS-Gerät synth)
 **Skill:** `/fix-bug`
-**Aufwand:** Klein
-**Dateien:** `main/network-scanner.js`
+**Dateien:** `main/network-scanner.js`, `renderer/js/network.js`
 
-1. Synthetischen Fallback-Code (Zeile 494-521) **komplett entfernen**
-2. SNMP sysName NICHT als modelName verwenden — nur als Tooltip/Info-Feld
-3. Wenn kein Modellname erkannt → Feld **leer lassen** (Frontend zeigt "—")
-4. `identifiedBy`-Badge im Frontend nur als Tooltip, nicht als sichtbarer Text
+#### Code-Änderung A: Synthetischen Fallback entfernen
+
+`main/network-scanner.js` Zeile 494-521 — der gesamte Block `if (!identity.modelName) { ... }` wird entfernt. SNMP sysName wird als eigenes Feld gespeichert, NICHT als modelName:
+
+```javascript
+// VORHER (Zeile 496-520): Synthetischer Fallback → KOMPLETT LÖSCHEN
+if (!identity.modelName) {
+    if (snmpData.sysName && ...) { identity.modelName = snmpData.sysName; }
+    else { /* Port-basierte Modellnamen */ }
+}
+
+// NACHHER: Nur sysName als separates Info-Feld (kein modelName-Fallback)
+// (nichts — Block komplett weg, sysName bleibt in snmpData.sysName)
+```
+
+#### Code-Änderung B: identifiedBy nur als Tooltip
+
+`renderer/js/network.js` Zeile 591-592:
+
+```javascript
+// VORHER:
+modelParts.push(`<span class="netinv-source-badge" title="...">${this._esc(d.identifiedBy)}</span>`);
+
+// NACHHER: Nur Tooltip-Icon, kein sichtbarer Text
+modelParts.push(`<span class="netinv-source-badge" title="Erkannt via: ${this._esc(d.identifiedBy)}">&#9432;</span>`);
+```
+
+#### Was das löst
+- "NAS synth" beim Zyxel Router → verschwindet (Feld wird "—")
+- "Linux/macOS-Gerät synth" → verschwindet (Feld wird "—")
+- "Netzwerkdrucker synth" bei Visionscape → verschwindet (Feld wird "—")
+- "synth" Badge → verschwindet komplett
+
+#### Was das NICHT löst
+- **Die Modell-Spalte zeigt MEHR leere Felder ("—").** Geräte die vorher einen falschen Modellnamen hatten, haben jetzt gar keinen. Das ist ehrlicher, aber nicht schöner.
+- Das Zyxel-Modell wird erst durch Phase 5 (HTTP-Banner-Parsing) erkannt.
+- Die Visionscape bleibt "—" weil sie fast keine Probes beantwortet (nur LPD).
+
+#### Verifizierung
+Code-Review: Suche nach `synth` in network-scanner.js → 0 Treffer. Suche nach `identifiedBy` als sichtbarer Text in network.js → nur noch Tooltip.
+
+---
 
 ### Phase 2: Port-basierte Klassifizierung reparieren (WU-18, WU-19, WU-20, WU-2)
 
+**Löst Simons Problem:** #2 (Visionscape als Drucker)
 **Skill:** `/fix-bug`
-**Aufwand:** Klein
 **Dateien:** `main/oui-database.js`, `main/network-scanner.js`
 
-1. **Port 515 allein ≠ Drucker.** Nur in Kombination: 515 + Drucker-Vendor ODER 515 + 9100 ODER 515 + 631
-2. **Port 5000/5001 allein ≠ NAS.** Nur wenn Vendor = Synology/QNAP ODER beide Ports offen
-3. **Port 9100: `!ports.has(80)` entfernen.** 9100 ist drucker-exklusiv, auch mit Port 80
-4. **portsCount korrigieren:** 13 → 15
+#### Code-Änderung A: Port 515 absichern
 
-### Phase 3: VENDOR_PATTERNS vervollständigen (WU-22 bis WU-26)
+`main/oui-database.js` Zeile 487-490:
 
+```javascript
+// VORHER:
+if (ports.has(9100) && !ports.has(80)) return _typeToResult('printer', vendor);
+if (ports.has(515)) return _typeToResult('printer', vendor);
+if (ports.has(5000) || ports.has(5001)) return _typeToResult('nas', vendor);
+
+// NACHHER:
+// Port 9100 (RAW Print) ist drucker-exklusiv — kein anderer Gerätetyp nutzt diesen Port
+if (ports.has(9100)) return _typeToResult('printer', vendor);
+// Port 515 (LPD) nur als Drucker wenn Drucker-Vendor ODER Port 9100/631 bestätigt
+const printerVendors = /hp|brother|canon|epson|lexmark|kyocera|konica|ricoh|xerox|oki|sharp/i;
+if (ports.has(515) && (printerVendors.test(vendor) || ports.has(631))) {
+    return _typeToResult('printer', vendor);
+}
+// Port 5000/5001 nur als NAS wenn Vendor Synology/QNAP ODER beide Ports offen
+const nasVendors = /synology|qnap|buffalo|western\s*digital|seagate/i;
+if ((ports.has(5000) || ports.has(5001)) && (nasVendors.test(vendor) || (ports.has(5000) && ports.has(5001)))) {
+    return _typeToResult('nas', vendor);
+}
+```
+
+#### Code-Änderung B: portsCount korrigieren
+
+`main/network-scanner.js` Zeile 318:
+
+```javascript
+// VORHER:
+const portsCount = 13;
+
+// NACHHER:
+const portsCount = 15;  // Muss mit $ports Array (Zeile 298) übereinstimmen
+```
+
+#### Was das löst
+- Visionscape (Port 515, Vendor "Visionscape Co.") → wird NICHT als Drucker erkannt
+- HP Drucker (Port 9100 + 80) → wird weiterhin korrekt als Drucker erkannt
+- Zyxel Router (Port 5000, Vendor "Zyxel") → wird NICHT als NAS erkannt
+- Port-Scan-Timeout wird korrekt berechnet → weniger Datenverlust
+
+#### Was das NICHT löst
+- Geräte mit Port 515 und unbekanntem Vendor → werden nicht als Drucker erkannt (lieber falsch-negativ als falsch-positiv)
+- Visionscape bleibt "Unbekanntes Gerät" (kein besserer Typ möglich ohne mehr Daten)
+
+#### Verifizierung
+Manueller Test: Gerät mit IP 192.168.1.132, Ports [515], Vendor "Visionscape Co." → classifyDevice() muss etwas ANDERES als "printer" zurückgeben. Gerät mit Ports [9100, 80], Vendor "HP" → muss "printer" bleiben.
+
+---
+
+### Phase 3: Gruppenbezeichnung + MAC + Sortierung + Frontend-Fixes (WU-21, WU-31, WU-32, WU-33, WU-36, WU-37, WU-40)
+
+**Löst Simons Probleme:** #4 (Eigener PC), #5 (MAC fehlt), #7 (Sortierung)
 **Skill:** `/fix-bug`
-**Aufwand:** Mittel
-**Dateien:** `main/oui-database.js`
+**Dateien:** `main/oui-database.js`, `main/network-scanner.js`, `renderer/js/network.js`, `renderer/css/style.css`
 
-Fehlende Einträge in VENDOR_PATTERNS:
+#### Code-Änderung A: isLocal → type 'pc'
+
+`main/oui-database.js` Zeile 465-466:
+
+```javascript
+// VORHER:
+if (isLocal) return { type: 'local', label: 'Eigener PC', icon: 'monitor' };
+
+// NACHHER:
+if (isLocal) return { type: 'pc', label: 'PC / Laptop', icon: 'monitor' };
 ```
-['Samsung SmartThings', 'smarthome'],
-['Samsung', 'mobile'],
-['Apple', 'mobile'],          // Fallback, spezifischer via mDNS/Hostname
-['Sony Interactive', 'console'],  // VOR ['Sony', 'tv']
-['Amazon', 'media'],          // Echo, Fire TV
-['Ring', 'camera'],
-['Google', 'media'],          // Chromecast, Google Home (nach Google Nest)
-['Huawei', 'mobile'],         // statt 'network'
+
+#### Code-Änderung B: MAC via WMI holen
+
+`main/network-scanner.js` Zeile 423-425 (WMI-Script erweitern):
+
+```powershell
+# VORHER:
+$cs = Get-CimInstance Win32_ComputerSystem | Select-Object Manufacturer, Model
+[PSCustomObject]@{ Manufacturer = $cs.Manufacturer; Model = $cs.Model } | ConvertTo-Json
+
+# NACHHER:
+$cs = Get-CimInstance Win32_ComputerSystem | Select-Object Manufacturer, Model
+$adapter = Get-NetAdapter | Where-Object { $_.Status -eq 'Up' -and $_.InterfaceDescription -notlike '*Virtual*' -and $_.InterfaceDescription -notlike '*Hyper-V*' } | Select-Object -First 1
+[PSCustomObject]@{ Manufacturer = $cs.Manufacturer; Model = $cs.Model; MAC = if($adapter) { $adapter.MacAddress } else { '' } } | ConvertTo-Json
 ```
 
-Zusätzlich Hostname-Erkennung "switch" → `/\bnintendo.?switch/i` und "gateway" einschränken.
+Und in der Ergebnis-Assembly (Zeile 437):
 
-### Phase 4: Smartphone-Erkennung (WU-1)
+```javascript
+// NACHHER: Lokale MAC aus WMI einsetzen wenn ARP sie nicht hat
+let macDash = macMap.get(d.ip) || '';
+if (!macDash && isLocal && localPCInfo && localPCInfo.MAC) {
+    macDash = localPCInfo.MAC;
+}
+```
 
-**Skill:** `/web-research` → `/fix-bug`
-**Aufwand:** Gross
+#### Code-Änderung C: IP numerisch sortieren
+
+`renderer/js/network.js` Zeile 480-484:
+
+```javascript
+// VORHER:
+return (a.hostname || a.ip).localeCompare(b.hostname || b.ip);
+
+// NACHHER: IP numerisch sortieren
+const ipNum = (ip) => ip.split('.').reduce((acc, oct) => acc * 256 + parseInt(oct, 10), 0);
+return ipNum(a.ip) - ipNum(b.ip);
+```
+
+#### Code-Änderung D: "Unbekannt" vereinheitlichen
+
+`renderer/js/network.js` Zeile 445:
+
+```javascript
+// VORHER:
+const t = d.deviceLabel || 'Unbekannt';
+
+// NACHHER:
+const t = d.deviceLabel || 'Unbekanntes Gerät';  // Gleich wie Zeile 468
+```
+
+#### Code-Änderung E: CSS + Frontend-Kleinkram
+
+```css
+/* style.css: NAS-Icon-Style hinzufügen */
+.netinv-type-nas { background: rgba(255, 165, 0, 0.15); color: #ffa500; }
+```
+
+```javascript
+// network.js Zeile 605: Leere Ports → "—"
+// VORHER:
+<td class="netinv-col-ports">${portBadges}${morePortsHint}</td>
+// NACHHER:
+<td class="netinv-col-ports">${portBadges || morePortsHint || '\u2014'}</td>
+
+// network.js: Geräte-Filter OHNE .network-search Klasse (WU-37)
+// Die ID network-device-filter reicht für den Event-Handler
+```
+
+#### Was das löst
+- "Eigener PC" → wird zu "PC / Laptop" (zusammen mit anderen PCs gruppiert)
+- MAC-Adresse des eigenen PCs → wird angezeigt
+- IP-Sortierung → numerisch korrekt
+- Badge-Klick "Unbekannt" → scrollt korrekt
+- NAS → hat farbigen Icon-Hintergrund
+- Filter → kein Double-Render mehr
+
+#### Was das NICHT löst
+- Der eigene PC zeigt den WMI-Modellnamen (z.B. "Z790 AORUS ELITE AX"). Das ist technisch korrekt, aber für Simon möglicherweise überraschend wenn er "Simon-PC" erwartet.
+
+#### Verifizierung
+Code-Review: `'local'` und `'Eigener PC'` dürfen nirgends mehr vorkommen. `portsCount` muss 15 sein. `.netinv-type-nas` muss in style.css existieren.
+
+---
+
+### Phase 4: Smartphones finden (WU-1)
+
+**Löst Simons Problem:** #3 (Handy fehlt)
+**Skill:** `/fix-bug`
 **Dateien:** `main/network-scanner.js`
 
-ARP-Tabellen-Einträge als eigenständige Geräte-Quelle nutzen:
-1. Nach dem Ping Sweep: ARP-Tabelle lesen
-2. Jede ARP-IP die NICHT in `onlineDevices` ist → als neues Gerät hinzufügen
-3. Vorher: `/web-research` für beste Discovery-Methode (ARP-Scan vs. TCP SYN vs. mDNS)
+#### Strategie (KEIN Platzhalter)
 
-### Phase 5: HTTP-Banner-Parsing verbessern (WU-9, WU-14)
+Die ARP-Tabelle wird BEREITS gelesen (Zeile 265-290). Sie enthält alle Geräte die kürzlich im Netzwerk kommuniziert haben — auch Smartphones die nicht auf Ping antworten. Der Fix ist simpel: ARP-Einträge die NICHT im Ping-Sweep gefunden wurden, als zusätzliche Geräte hinzufügen.
 
+**Warum das funktioniert:** Smartphones kommunizieren ständig mit dem Router (DHCP, DNS, Push-Notifications). Ihre MAC+IP sind in der ARP-Tabelle. Sie antworten nur nicht auf ICMP Ping.
+
+**Warum KEINE Web-Research nötig ist:** Die ARP-Tabelle ist bereits da. Der einzige Fehler ist, dass sie nur für MAC-Lookup genutzt wird, nicht für Discovery.
+
+#### Code-Änderung
+
+`main/network-scanner.js` nach Zeile 290 (nach dem ARP-Tabelle-Block):
+
+```javascript
+// Phase 2.6: ARP-Geräte die NICHT im Ping Sweep sind → als zusätzliche Geräte hinzufügen
+// Das findet Smartphones, IoT-Geräte und andere die ICMP blockieren
+const pingIPs = new Set(onlineDevices.map(d => d.ip));
+let arpOnlyCount = 0;
+for (const [ip, mac] of macMap.entries()) {
+    if (pingIPs.has(ip)) continue;  // Bereits via Ping gefunden
+    if (ip === subnetInfo.localIP) continue;  // Eigener PC (wird separat behandelt)
+    if (ip === subnetInfo.gateway) continue;  // Gateway (bereits via Ping)
+    if (!ip.startsWith(subnetInfo.subnet + '.')) continue;  // Nur gleiches Subnetz
+    // Multicast/Broadcast filtern
+    const lastOctet = parseInt(ip.split('.')[3], 10);
+    if (lastOctet === 255 || lastOctet === 0) continue;
+
+    onlineDevices.push({ ip, ttl: 0, rtt: -1, hostname: '' });
+    arpOnlyCount++;
+}
+if (arpOnlyCount > 0) {
+    log.info(`ARP-Discovery: ${arpOnlyCount} zusätzliche Geräte (nicht via Ping erreichbar)`);
+}
+```
+
+Und für die Hostname-Auflösung der ARP-only-Geräte (optional, nach Zeile 262):
+
+```javascript
+// DNS-Lookup für ARP-only-Geräte (die haben keinen Hostnamen vom Ping)
+// Wird NACH dem Hinzufügen gemacht, nicht inline (Performance)
+```
+
+#### Was das löst
+- Simons Handy: Wenn es im WLAN aktiv ist (was es ist, sonst wäre es nicht im WLAN), hat es einen ARP-Eintrag → wird gefunden
+- Andere ICMP-blockierende Geräte (IoT, Smart Home im Schlafmodus)
+
+#### Was das NICHT löst
+- Geräte die seit dem letzten Neustart des PCs NICHT kommuniziert haben → kein ARP-Eintrag
+- Die ARP-Tabelle kann "stale" Einträge haben (Geräte die offline sind aber deren ARP-Eintrag noch lebt, typisch 2-10 Minuten). Diese erscheinen als "online" obwohl sie es nicht mehr sind.
+- Smartphones im **Gast-WLAN** (separates Subnetz) → nicht im ARP
+- rtt wird -1 sein (kein Ping möglich) → im Frontend als "—" statt "X ms" anzeigen
+
+#### Risiko: Stale ARP-Einträge
+ARP-Einträge leben typisch 30-120 Sekunden. Windows hält sie standardmässig 2 Minuten. Das bedeutet: Geräte die VOR 2+ Minuten das WLAN verlassen haben, können noch im Scan auftauchen. Das ist ein akzeptabler Trade-off — lieber ein Gerät zu viel als eines das fehlt.
+
+#### Verifizierung
+Simon scannt und prüft ob sein Handy auftaucht. rtt-Wert des Handys sollte -1 oder 0 sein (kein Ping).
+
+---
+
+### Phase 5: HTTP-Banner-Parsing verbessern (WU-9, WU-14) — SOLL
+
+**Verbessert:** Erkennungsrate für Geräte mit Web-Interface (Router, NAS, etc.)
 **Skill:** `/fix-bug`
-**Aufwand:** Mittel
 **Dateien:** `main/device-identify.js`
 
-1. `beforeGeneric`-Regex: Trennzeichen erweitern um `—`, `/`, `>`, reines Leerzeichen
-2. Deutsche generische Wörter hinzufügen: `anmeldung`, `einstellungen`, `willkommen`, `konfiguration`
-3. `<meta>`-Tag-Regex: Attribut-Reihenfolge flexibel machen
-4. "access point" und "document" aus genericWords entfernen (enthalten oft Modellnamen)
-5. SSH-Banner parsen für OS/Hersteller-Erkennung
+#### Code-Änderung A: Trennzeichen erweitern
 
-### Phase 6: Gruppenbezeichnung + MAC + Sortierung (WU-21, WU-31, WU-32, WU-33)
+`main/device-identify.js` Zeile 285-286:
 
+```javascript
+// VORHER:
+.replace(/\s*[-–|:]\s*(login|configurator|...)\b.*$/i, '')
+
+// NACHHER: Auch —, /, >, und reines Leerzeichen VOR generischem Wort
+.replace(/\s*[-–—|:/>]\s*(login|configurator|configuration|settings|setup|management|dashboard|portal|admin|panel|status|interface|home|welcome|sign\s*in|startseite|webinterface|anmeldung|einstellungen|willkommen|konfiguration|verwaltung)\b.*$/i, '')
+```
+
+Und für den Fall "Modellname Login" (nur Leerzeichen, kein Trennzeichen):
+
+```javascript
+// Fallback: Letztes Wort das generisch ist abschneiden
+if (!modelName) {
+    const spaceGeneric = title.replace(/\s+(login|configurator|configuration|settings|setup|admin|home|welcome|sign\s*in|startseite|anmeldung)\s*$/i, '').trim();
+    if (spaceGeneric.length > 3 && spaceGeneric.length < title.length) {
+        modelName = spaceGeneric;
+    }
+}
+```
+
+#### Code-Änderung B: Problematische genericWords entfernen
+
+```javascript
+// "access point" und "document" aus genericWords entfernen
+// DAFÜR "anmeldung", "willkommen", "konfiguration", "verwaltung" hinzufügen
+```
+
+#### Code-Änderung C: Meta-Tag flexibler
+
+```javascript
+// VORHER: Feste Attribut-Reihenfolge
+/<meta\s+(?:name|property)=["']...\s+content=["']([^"']{3,80})["']/i
+
+// NACHHER: Beide Reihenfolgen
+/<meta\s+(?:(?:name|property)=["'](?:description|og:title|product)["']\s+content=["']([^"']{3,80})["']|content=["']([^"']{3,80})["']\s+(?:name|property)=["'](?:description|og:title|product)["'])/i
+```
+
+#### Was das löst
+- Zyxel Router: "ZyXEL VMG3625 - Login" → Modell "ZyXEL VMG3625" statt "—"
+- FRITZ!Box: "FRITZ!Box 7590 > Login" → Modell "FRITZ!Box 7590"
+- Deutsche Router-UIs: "Anmeldung" wird gefiltert
+
+#### Was das NICHT löst
+- Geräte ohne Web-Interface (z.B. Visionscape, Linux-Gerät 192.168.1.124)
+- Geräte deren Title kein Modellname enthält (z.B. "Login" ohne Hersteller)
+- Geräte die auf HTTP nicht antworten (Firewall, kein Webserver)
+
+---
+
+### Phase 6: VENDOR_PATTERNS + Hostname-Erkennung (WU-22-28) — SOLL
+
+**Verbessert:** Korrekte Gruppierung für Samsung, Apple, Sony, Amazon, Huawei, Google
 **Skill:** `/fix-bug`
-**Aufwand:** Klein
-**Dateien:** `main/oui-database.js`, `main/network-scanner.js`, `renderer/js/network.js`
+**Dateien:** `main/oui-database.js`
 
-1. `isLocal`: type `'pc'` statt `'local'`, label `'PC / Laptop'`
-2. WMI-Phase: MAC-Adresse via `Get-NetAdapter` holen
-3. IP-Sortierung: numerisch (Oktette als Zahlen vergleichen)
-4. "Unbekannt" vs. "Unbekanntes Gerät": vereinheitlichen
+#### Code-Änderung: VENDOR_PATTERNS erweitern
 
-### Phase 7: Daten-Merge reparieren (WU-10)
+Neue Einträge in der richtigen Reihenfolge (spezifisch vor generisch):
 
+```javascript
+// --- Konsolen (VOR TV-Herstellern) ---
+['Sony Interactive', 'console'],  // PlayStation — VOR ['Sony', 'tv']
+['Microsoft Xbox', 'console'],    // Xbox
+// --- Smartphones / Tablets ---
+['Samsung SmartThings', 'smarthome'],
+['Samsung', 'mobile'],            // Galaxy, Tablets (generisch)
+['Apple', 'mobile'],              // iPhone, iPad (generisch, mDNS differenziert besser)
+['Huawei', 'mobile'],             // statt 'network'
+['OnePlus', 'mobile'], ['Xiaomi', 'mobile'], ['Oppo', 'mobile'],
+// --- Media (nach Smart Home) ---
+['Amazon', 'media'],              // Echo, Fire TV
+['Google', 'media'],              // Chromecast, Google Home (nach Google Nest)
+// --- Kameras ---
+['Ring', 'camera'],               // Ring (Amazon)
+```
+
+Hostname-Fix: "switch" spezifischer machen:
+
+```javascript
+// VORHER:
+if (hn.includes('switch') || hn.includes('playstation') || hn.includes('xbox'))
+
+// NACHHER:
+if (/\bnintendo.?switch\b/i.test(hn) || hn.includes('playstation') || hn.includes('xbox'))
+```
+
+#### Was das löst
+- Samsung Galaxy → "Smartphone" statt "Unbekanntes Gerät"
+- Apple iPhone → "Smartphone" statt "Apple Gerät (PC)"
+- PlayStation → "Spielkonsole" statt "Smart TV"
+- Huawei-Handys → "Smartphone" statt "Netzwerkgerät"
+- Amazon Echo → "Medien-Gerät" statt "Unbekannt"
+- HP-Switch-01 → NICHT mehr "Spielkonsole"
+
+#### Was das NICHT löst
+- **Samsung Smart TV vs. Samsung Galaxy:** Beide haben Vendor "Samsung" → beide werden als "mobile" klassifiziert. Die Identity-Erkennung (Layer 1, UPnP/mDNS) erkennt TVs korrekt, aber nur wenn der TV UPnP beantwortet.
+- **Apple TV vs. iPhone:** Gleiches Problem. mDNS differenziert, aber nur wenn das Gerät gefunden wird.
+- Diese Vendor-Zuordnung ist ein FALLBACK. Die korrekte Lösung wäre eine bessere Identity-Erkennung (Layer 1/2). Aber als schneller Fix ist "mobile" besser als "Unbekannt".
+
+---
+
+### Phase 7: Daten-Merge reparieren (WU-10, WU-11) — KANN
+
+**Verbessert:** mDNS/WSD-Daten bleiben erhalten wenn HTTP ein Ergebnis liefert
 **Skill:** `/fix-bug`
-**Aufwand:** Klein
 **Dateien:** `main/device-identify.js`
 
-`_mergeResult(existing, newData)` Helper erstellen der ALLE bestehenden Felder erhält und nur neue/bessere übernimmt. Verwendung in HTTP-Merge (Zeile 126), IPP-Merge (Zeile 149), SSH-Merge (Zeile 170).
+#### Code-Änderung
 
-### Phase 8: Frontend-Bugs fixen (WU-34, WU-36, WU-37, WU-40)
+Einen `_mergeResult()` Helper erstellen:
+
+```javascript
+function _mergeResult(existing, newFields) {
+    return {
+        modelName:        newFields.modelName || existing.modelName || '',
+        serialNumber:     newFields.serialNumber || existing.serialNumber || '',
+        firmwareVersion:  newFields.firmwareVersion || existing.firmwareVersion || '',
+        identifiedBy:     existing.identifiedBy ? existing.identifiedBy + '+' + (newFields.source || '') : (newFields.source || ''),
+        sshBanner:        newFields.sshBanner || existing.sshBanner || '',
+        // DIESE FELDER NICHT ÜBERSCHREIBEN:
+        mdnsServices:     existing.mdnsServices || [],
+        mdnsServiceTypes: existing.mdnsServiceTypes || [],
+        mdnsHostname:     existing.mdnsHostname || '',
+        wsdTypes:         existing.wsdTypes || [],
+    };
+}
+```
+
+Verwendung in Zeile 126, 149, 170 (HTTP/IPP/SSH-Merge):
+
+```javascript
+// VORHER (Zeile 126):
+results.set(d.ip, {
+    modelName: result.modelName,
+    serialNumber: existing.serialNumber || '',
+    ...
+});
+
+// NACHHER:
+results.set(d.ip, _mergeResult(existing, { modelName: result.modelName, source: 'http' }));
+```
+
+Und Port 9100 aus IPP-Targets entfernen (Zeile 108):
+
+```javascript
+// VORHER:
+return ports.includes(631) || ports.includes(9100);
+
+// NACHHER: 9100 ist JetDirect (RAW), nicht IPP (HTTP)
+return ports.includes(631);
+```
+
+#### Was das löst
+- mDNS-Services bleiben erhalten → bessere Klassifizierung
+- WSD-Typen bleiben erhalten → Drucker-Erkennung zuverlässiger
+- Port 9100 → kein sinnloser IPP-Request mehr (weniger Timeouts)
+
+---
+
+### Phase 8: Toten Code + Kleinkram aufräumen (WU-29, WU-34) — KANN
 
 **Skill:** `/fix-bug`
-**Aufwand:** Klein
-**Dateien:** `renderer/js/network.js`, `renderer/css/style.css`
+**Dateien:** `main/oui-database.js`, `renderer/js/network.js`
 
-1. Toten Event-Handler entfernen oder `data-device-toggle` Attribut in `_renderDeviceRow()` hinzufügen
-2. CSS `.netinv-type-nas` hinzufügen
-3. Double-Render: Geräte-Filter-Input NICHT mit Klasse `.network-search` versehen
-4. Leere Ports-Zelle: "—" anzeigen statt leer
+1. `PORT_TYPE_HINTS` entfernen (toter Code, Zeile 439-445)
+2. Toten Event-Handler für `data-device-toggle` entfernen (Zeile 926-937) ODER `_renderDeviceRow()` erweitern um die Detail-Ansicht zu ermöglichen (Feature-Entscheidung)
+
+---
+
+## Testkonzept
+
+### Problem: Kein automatisierter Test möglich
+
+Der Netzwerk-Scan dauert 60-120 Sekunden und braucht ein echtes Netzwerk. Puppeteer/Playwright können den Scan nicht sinnvoll testen, weil die Ergebnisse vom Netzwerk abhängen.
+
+### Lösung: 3-stufige Verifikation
+
+**Stufe 1: Code-Review (nach jeder Phase)**
+- Grep nach entfernten/geänderten Patterns (z.B. `synth` darf nicht mehr in network-scanner.js vorkommen)
+- Manuelle Prüfung der geänderten Zeilen
+
+**Stufe 2: Statische Simulation (nach Phase 2)**
+- Die `classifyDevice()`-Funktion kann mit simulierten Daten getestet werden:
+```javascript
+// Test: Visionscape-Fall
+classifyDevice({ vendor: 'Visionscape Co.', openPorts: [{ port: 515 }], ... })
+// Erwartung: NICHT 'printer'
+
+// Test: HP-Drucker-Fall
+classifyDevice({ vendor: 'HP Inc.', openPorts: [{ port: 9100 }, { port: 80 }], ... })
+// Erwartung: 'printer'
+```
+- Das ist kein Unit-Test-Framework, aber ein manuelles Node.js-Script das die Funktion direkt aufruft.
+
+**Stufe 3: Simons Scan (nach Phase 1-4)**
+Simon macht einen frischen Scan und schickt einen Screenshot. Das ist die einzige echte Verifikation. Jede Phase vorher ist nur Vorbereitung darauf.
+
+### Ehrliche Einschätzung
+
+Ohne Simons Screenshot können wir NICHT wissen ob die Fixes funktionieren. Code-Reviews und Simulationen fangen logische Fehler ab, aber nicht Netzwerk-spezifische Probleme (Timeouts, unerwartete Antworten, Geräte die sich anders verhalten als erwartet).
 
 ---
 
 ## Betroffene Dateien
 
-| Datei | Wurzelursachen | Schwerpunkt |
-|-------|---------------|-------------|
-| `main/network-scanner.js` | WU-1,2,3,4,5,6,7,8,15,31 | Discovery + Synthese + WMI |
-| `main/device-identify.js` | WU-9,10,11,12,13,14,17 | Identification Probes |
-| `main/oui-database.js` | WU-18,19,20,21,22-28,29,30 | Klassifizierung |
-| `renderer/js/network.js` | WU-32,33,34,35,37,38,39,40 | Darstellung |
-| `renderer/css/style.css` | WU-36 | NAS-Icon Style |
+| Datei | Phasen | Wurzelursachen |
+|-------|--------|---------------|
+| `main/network-scanner.js` | 1, 2, 3, 4 | WU-1,2,7,8,31 |
+| `main/oui-database.js` | 2, 3, 6, 8 | WU-18,19,20,21,22-28,29 |
+| `main/device-identify.js` | 5, 7 | WU-9,10,11,14 |
+| `renderer/js/network.js` | 1, 3, 8 | WU-32,33,35,37,40 |
+| `renderer/css/style.css` | 3 | WU-36 |
 
 ---
 
@@ -574,10 +981,11 @@ ARP-Tabellen-Einträge als eigenständige Geräte-Quelle nutzen:
 
 | Skill | Zweck | Phasen |
 |-------|-------|--------|
-| `/fix-bug` | Jede Wurzelursache einzeln beheben | 1-3, 5-8 |
-| `/web-research` | Smartphone-Erkennung recherchieren | 4 |
-| `/visual-verify` | Nach jedem Fix visuell prüfen | alle |
-| `/changelog` | Änderungen dokumentieren | alle |
+| `/fix-bug` | Jede Phase implementieren | 1-8 |
+| `/visual-verify` | Nach Phase 1-4 visuell prüfen (wenn App läuft) | nach Phase 4 |
+| `/changelog` | Änderungen dokumentieren | nach jeder Phase |
+
+**`/web-research` ist NICHT mehr nötig** — die Smartphone-Erkennung via ARP ist eine konkrete Lösung, keine offene Frage.
 
 ---
 
@@ -585,14 +993,23 @@ ARP-Tabellen-Einträge als eigenständige Geräte-Quelle nutzen:
 
 Simon startet einen Scan und prüft:
 
-- [ ] Zyxel Router: Zeigt KEIN "NAS" mehr, sondern echtes Modell oder leeres Feld
-- [ ] Visionscape: Wird NICHT als "Drucker" angezeigt (nur der HP ist ein Drucker)
+**MUSS (Phase 1-4):**
+- [ ] Kein Gerät zeigt "synth" oder "sysname" als sichtbaren Badge-Text
+- [ ] Zyxel Router: Zeigt KEIN "NAS" mehr (Modell ist "—" oder echter Name)
+- [ ] Visionscape: Wird NICHT als "Drucker" angezeigt
 - [ ] HP Drucker: Wird weiterhin korrekt als Drucker erkannt (auch mit Port 80!)
 - [ ] Simons Handy: Erscheint in der Geräteliste
 - [ ] Eigener PC: Gruppiert unter "PC / Laptop" (nicht "Eigener PC")
 - [ ] Eigener PC: MAC-Adresse wird angezeigt
-- [ ] Kein Gerät zeigt "synth" als Erkennungsquelle
 - [ ] Geräte innerhalb der Gruppen sinnvoll sortiert (IP numerisch)
 - [ ] Klick auf "Unbekannt"-Badge scrollt zur richtigen Gruppe
-- [ ] Sonos, Samsung, Apple-Geräte korrekt klassifiziert
+
+**SOLL (Phase 5-6):**
+- [ ] Zyxel Router: Zeigt echtes Modell (z.B. "VMG3625-T50B") statt "—"
+- [ ] Samsung/Apple/Sony-Geräte korrekt klassifiziert
 - [ ] NAS-Geräte haben einen farbigen Icon-Hintergrund
+
+**Bekannte Einschränkungen (KEIN Fehler):**
+- Geräte ohne Web-Interface, SNMP, UPnP, mDNS → Modell bleibt "—" (ehrlich, nicht falsch)
+- ARP-Geräte haben rtt = -1 (kein Ping möglich) → "— ms" statt "X ms"
+- Samsung TV vs. Samsung Handy → beide "Smartphone" (korrekter Fix braucht UPnP/mDNS)
