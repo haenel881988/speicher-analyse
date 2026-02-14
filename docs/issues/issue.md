@@ -48,14 +48,15 @@
 | 6 | #4 | Privacy Dashboard anwenderfreundlicher | Überarbeitung — wartet auf Test |
 | 7 | #5 | PDF Vollansicht + Bearbeitung | Offen |
 | 8 | #11 | Netzwerk-Paketaufzeichnung (Deep Packet Inspection) | Idee |
-| 9 | #12 | WCAG-Kontrast vollständig WCAG 2.2 konform | Teilweise umgesetzt |
-| 10 | #13 | Fenster-Bereiche frei verschiebbar/skalierbar | Offen |
-| 11 | #14 | Echte Terminal-Emulation (Farben, Cursor, interaktive Tools) | Teilweise |
-| 12 | #15 | Vertrauens-System: Undo-Log mit Wiederherstellung | Teilweise |
-| 13 | #16 | Backup-Modul (lokale/Netzwerk-Sicherung) | Geplant |
-| 14 | #17 | KI-Integration (Cloud + Lokal) | Idee |
-| 15 | #18 | Offline-Lizenzierung | Idee |
-| 16 | #19 | MCP-Server — KI kann direkt auf die App zugreifen | Erste Version — wartet auf Test |
+| 9 | #20 | Netzwerk-Geräte werden falsch erkannt (z.B. Router als Drucker) | Root Cause gefunden |
+| 10 | #12 | WCAG-Kontrast vollständig WCAG 2.2 konform | Teilweise umgesetzt |
+| 11 | #13 | Fenster-Bereiche frei verschiebbar/skalierbar | Offen |
+| 12 | #14 | Echte Terminal-Emulation (Farben, Cursor, interaktive Tools) | Teilweise |
+| 13 | #15 | Vertrauens-System: Undo-Log mit Wiederherstellung | Teilweise |
+| 14 | #16 | Backup-Modul (lokale/Netzwerk-Sicherung) | Geplant |
+| 15 | #17 | KI-Integration (Cloud + Lokal) | Idee |
+| 16 | #18 | Offline-Lizenzierung | Idee |
+| 17 | #19 | MCP-Server — KI kann direkt auf die App zugreifen | Pausiert (Server-Code entfernt, Neuaufbau bei Bedarf) |
 
 ---
 
@@ -289,6 +290,43 @@ Eine Art "Waage für die Festplatte":
 2. Externe Bibliothek: npcap + raw sockets (professioneller, aufwändiger)
 
 **Status:** Idee — für spätere Version
+
+---
+
+## 20. Netzwerk-Geräte werden falsch erkannt
+
+**Problem:** Im Netzwerk-Monitor werden Geräte falsch zugewiesen. Zum Beispiel wird ein Router als Drucker angezeigt, oder eine Kamera als TV.
+
+**Wurzelursache (gefunden am 14.02.2026):**
+
+Die Geräte-Erkennung arbeitet mit einer festen Liste: "Dieser Hersteller = dieser Gerätetyp." Das Problem: Hersteller bauen verschiedene Geräte.
+- Canon baut Drucker UND Kameras → eine Canon-Kamera wird als Drucker angezeigt
+- Sony baut TVs UND Kameras UND Spielkonsolen → alles wird als "TV" angezeigt
+- Buffalo baut Speichergeräte UND Router → ein Buffalo-Router wird als Speichergerät angezeigt
+
+Zusätzlich: Die App fragt Geräte bereits intelligent ab (z.B. "Was bist du?"), aber diese Antworten werden bei der Zuordnung **ignoriert**. Sie werden erst nachträglich angehängt — zu spät, die falsche Entscheidung ist schon gefallen.
+
+Ausserdem: Manche Router haben einen eingebauten Druckdienst. Die App sieht diesen Dienst und denkt: "Muss ein Drucker sein."
+
+**Dieses Problem hat ein Muster — es betrifft nicht nur die Geräte-Erkennung:**
+
+| Bereich | Gleiches Problem | Auswirkung |
+|---------|-----------------|------------|
+| Bloatware-Erkennung | Feste Liste mit 44 Namen. Umbenannte Schadsoftware wird nicht erkannt | Sicherheitsrisiko |
+| Software-Kategorisierung | 150+ Programmnamen fest eingetragen. Neue Programme = "Sonstige" | Wird mit der Zeit nutzlos |
+| Optimierer | Energieplan-Erkennung nur für deutsch/englisches Windows | Fehler bei anderssprachigem Windows |
+| Bereinigung | Feste Ordnerpfade für temporäre Dateien | Benutzerdefinierte Pfade werden übersehen |
+| Dateitypen | Feste Dateiendungen → Kategorie. Neue Formate (.heic, .avif) fehlen | Falsche Statistiken |
+
+**Grundsatz für die Lösung:** Erst prüfen was ein Gerät/Programm **TUT**, dann als Notlösung schauen was es **HEISST**.
+
+**Geplante Lösung (Netzwerk-Geräte):**
+1. Die intelligenten Abfragen (UPnP, HTTP-Banner, Druckerabfrage) ZUERST auswerten
+2. Wenn ein Gerät auf die Frage "Was bist du?" antwortet → diese Antwort verwenden
+3. Nur wenn keine Antwort kommt → Herstellername + offene Dienste als Backup
+4. Der Herstellername allein reicht NIE mehr für die Zuordnung
+
+**Status:** Root Cause gefunden, Lösung geplant
 
 ---
 
