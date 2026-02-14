@@ -483,6 +483,7 @@ async function scanNetworkActive(onProgress) {
             snmpSysDescr: snmpData.sysDescr || '',
             mdnsServices: identity.mdnsServices || [],
             mdnsServiceTypes: identity.mdnsServiceTypes || [],
+            wsdTypes: identity.wsdTypes || [],
             identifiedBy: identity.identifiedBy || '',
         };
     });

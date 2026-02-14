@@ -2075,10 +2075,6 @@ textarea::placeholder {
 
 /* ===== Responsive ===== */
 @media (max-width: 900px) {
-    #sidebar {
-        width: 240px;
-        min-width: 240px;
-    }
     .charts-layout {
         grid-template-columns: 1fr;
     }
@@ -4660,12 +4656,12 @@ textarea::placeholder {
 }
 
 /* Kompakte Geräte-Tabelle */
-.netinv-table { width: 100%; }
-.netinv-table th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-secondary); padding: 6px 8px; }
-.netinv-table td { padding: 6px 8px; font-size: 12px; vertical-align: middle; }
+.netinv-table { width: 100%; table-layout: fixed; }
+.netinv-table th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-secondary); padding: 6px 8px; overflow: hidden; text-overflow: ellipsis; }
+.netinv-table td { padding: 6px 8px; font-size: 12px; vertical-align: middle; overflow: hidden; text-overflow: ellipsis; }
 .netinv-table tbody tr { cursor: pointer; transition: background 0.1s; }
 .netinv-table tbody tr:hover { background: var(--bg-secondary); }
-.netinv-col-icon { width: 32px; text-align: center; }
+.netinv-col-icon { width: 36px; text-align: center; }
 .netinv-type-dot { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 6px; }
 .netinv-type-dot svg { width: 16px; height: 16px; }
 .netinv-type-pc, .netinv-type-local { background: rgba(108, 92, 231, 0.12); color: var(--accent-text, #c4b5fd); }
@@ -4684,11 +4680,11 @@ textarea::placeholder {
 .netinv-type-network { background: rgba(52, 73, 94, 0.2); color: #7f8c8d; }
 .netinv-type-webdevice { background: rgba(52, 152, 219, 0.12); color: #3498db; }
 .netinv-type-unknown { background: var(--bg-tertiary); color: var(--text-secondary); }
-.netinv-device-name { font-weight: 600; color: var(--text-primary); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
+.netinv-device-name { font-weight: 600; color: var(--text-primary); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .netinv-device-ip { font-size: 11px; color: var(--text-secondary); font-family: monospace; }
 .netinv-col-type { white-space: nowrap; color: var(--text-secondary); }
-.netinv-col-vendor { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.netinv-col-model { max-width: 420px; white-space: normal; line-height: 1.5; }
+.netinv-col-vendor { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.netinv-col-model { white-space: normal; line-height: 1.4; word-break: break-word; }
 .netinv-model-name { color: var(--text-primary); font-size: 12px; }
 .netinv-serial, .netinv-fw-badge, .netinv-ssh-badge, .netinv-mdns-badge, .netinv-source-badge {
     display: inline-block; font-size: 9px; font-weight: 700; letter-spacing: 0.5px;
@@ -4712,8 +4708,8 @@ textarea::placeholder {
 .netinv-snmp-name {
     display: inline-block; font-size: 10px; color: var(--text-secondary); margin-left: 4px; cursor: help;
 }
-.netinv-col-mac { white-space: nowrap; }
-.netinv-col-ports { max-width: 220px; }
+.netinv-col-mac { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.netinv-col-ports { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .netinv-col-rtt { text-align: right; white-space: nowrap; font-weight: 500; }
 
 /* Network Monitor: Header Controls */

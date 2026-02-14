@@ -29,15 +29,21 @@
 - Einmal melden reicht — Simon darf dasselbe Problem nie zweimal melden müssen
 - Issue-Tracking: `docs/issues/issue.md` — nur Simon darf Issues als erledigt markieren
 
-## Prinzip 4: Skill-First
+## Prinzip 4: Skill-Pflicht (KEINE Ausnahme)
 
-Vor jeder Aufgabe prüfen ob ein Skill in `.claude/skills/` passt. Wenn ja: verwenden.
+**ALLE Arbeiten MÜSSEN über Skills abgewickelt werden.** Kein Code schreiben ohne passenden Skill.
+
+- **Vor jeder Aufgabe:** Prüfen ob ein Skill in `.claude/skills/` passt
+- **Skill vorhanden → verwenden.** Keine manuelle Arbeit wenn ein Skill existiert
+- **Kein passender Skill vorhanden → ERST Skill erstellen, DANN verwenden.** Niemals ohne Skill arbeiten
+- **Nach jeder Arbeit:** `/visual-verify` (PFLICHT bei UI-Änderungen), `/changelog` (PFLICHT bei Code-Änderungen)
+- **Keine Ausreden:** "Geht nicht", "Keine Admin-Rechte", "Gerät im Standby" sind keine akzeptablen Gründe. Lösung finden statt Ausrede liefern
 
 | Skill | Anwendungsfall |
 |-------|----------------|
 | `/fix-bug` | Jeder Bug-Fix |
 | `/deep-analyze` | Problemanalyse vor dem Fix |
-| `/visual-verify` | Visuelle Prüfung via Puppeteer (PFLICHT bei UI-Aussagen) |
+| `/visual-verify` | Visuelle Prüfung via Puppeteer (PFLICHT bei JEDER UI-Aussage) |
 | `/test-issue` | Issue testen mit Beweis |
 | `/wcag-check` | WCAG-Kontrastprüfung bei CSS-Änderungen |
 | `/audit-code` | Codequalitäts-Audit |

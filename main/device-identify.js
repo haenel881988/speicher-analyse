@@ -6,6 +6,7 @@ const https = require('https');
 const dgram = require('dgram');
 const log = require('./logger').createLogger('device-identify');
 const { discoverServices } = require('./mdns-scanner');
+const { discoverWSDFull } = require('./wsd-scanner');
 
 // Timeouts — genug Zeit für langsame Embedded-Geräte (Sonos, Hue, etc.)
 const HTTP_TIMEOUT = 4000;
@@ -68,7 +69,34 @@ async function identifyDevices(devices, onProgress) {
         log.warn('mDNS-Discovery fehlgeschlagen:', err.message);
     }
 
-    // --- Phase B: HTTP + IPP parallel ---
+    // --- Phase A.6: WSD (Web Services Discovery — Drucker, Windows-Geraete) ---
+    // Unicast-Antworten = funktioniert OHNE Firewall-Aenderungen
+    log.info('Geräte-Identifikation: WSD-Discovery...');
+    try {
+        const wsdResults = await discoverWSDFull(onlineIPs);
+        for (const [ip, info] of wsdResults) {
+            if (!onlineIPs.has(ip)) continue;
+            const existing = results.get(ip) || {};
+            results.set(ip, {
+                modelName: existing.modelName || info.modelName || '',
+                serialNumber: existing.serialNumber || info.serialNumber || '',
+                firmwareVersion: existing.firmwareVersion || info.firmwareVersion || '',
+                identifiedBy: existing.identifiedBy
+                    ? existing.identifiedBy + '+wsd'
+                    : 'wsd',
+                mdnsServices: existing.mdnsServices || [],
+                mdnsServiceTypes: existing.mdnsServiceTypes || [],
+                mdnsHostname: existing.mdnsHostname || '',
+                wsdTypes: info.types || [],
+            });
+        }
+        log.info(`WSD: ${wsdResults.size} Geräte entdeckt`);
+    } catch (err) {
+        log.warn('WSD-Discovery fehlgeschlagen:', err.message);
+    }
+
+    // --- Phase B: HTTP + IPP + SSH parallel ---
+    // HTTP jetzt auch fuer Geraete MIT Modell probieren (zusaetzliche Daten)
     const httpTargets = devices.filter(d => {
         if (results.has(d.ip) && results.get(d.ip).modelName) return false;
         const ports = (d.openPorts || []).map(p => typeof p === 'number' ? p : p.port);
@@ -263,12 +291,23 @@ function _extractModelFromBanner(html, serverHeader) {
 
     // 2. Server-Header als Fallback (z.B. "HP-ChaiSOE/1.0" → HP Drucker)
     if (!modelName && serverHeader) {
-        // Manche Server-Header enthalten Modellnamen
         const serverPatterns = [
             /^(Brother[\w\s-]+)/i,
             /^(Canon[\w\s-]+)/i,
             /^(Epson[\w\s-]+)/i,
             /^(FRITZ!Box[\w\s.]+)/i,
+            /^(HP[\w\s-]+)/i,
+            /^(Lexmark[\w\s-]+)/i,
+            /^(Synology[\w\s/]+)/i,
+            /^(QNAP[\w\s/]+)/i,
+            /^(ZyXEL[\w\s-]+)/i,
+            /^(Zyxel[\w\s-]+)/i,
+            /^(TP-LINK[\w\s-]+)/i,
+            /^(Netgear[\w\s-]+)/i,
+            /^(ASUS[\w\s-]+)/i,
+            /^(MikroTik[\w\s/]+)/i,
+            /^(Ubiquiti[\w\s-]+)/i,
+            /^(UniFi[\w\s-]+)/i,
         ];
         for (const pat of serverPatterns) {
             const m = serverHeader.match(pat);

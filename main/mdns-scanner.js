@@ -68,6 +68,9 @@ const KNOWN_LABELS = {
  * @returns {Promise<Map<string, Object>>} Map: IP → { services[], hostname, txt, modelName, serialNumber }
  */
 async function discoverServices(timeout = MDNS_TIMEOUT) {
+    // Best-Effort: mDNS funktioniert nur wenn die Windows-Firewall UDP 5353
+    // eingehend erlaubt (z.B. Bonjour installiert, oder Firewall-Regel vorhanden).
+    // Wir versuchen es still — 0 Ergebnisse ist OK, kein Fehler, kein Eingriff.
     return new Promise((resolve) => {
         const results = new Map();
         let m;

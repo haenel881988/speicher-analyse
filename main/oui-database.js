@@ -659,7 +659,7 @@ const MDNS_SERVICE_TYPE_MAP = {
  */
 function _classifyFromIdentity(identity) {
     if (!identity) return null;
-    const { modelName = '', identifiedBy = '', deviceType = '', snmpObjectID = '', mdnsServiceTypes = [], mdnsServices = [] } = identity;
+    const { modelName = '', identifiedBy = '', deviceType = '', snmpObjectID = '', mdnsServiceTypes = [], mdnsServices = [], wsdTypes = [] } = identity;
 
     // A. UPnP deviceType URN — zuverlässigste Quelle (Gerät deklariert seinen Typ)
     //    Format: "urn:schemas-upnp-org:device:MediaRenderer:1"
@@ -696,6 +696,16 @@ function _classifyFromIdentity(identity) {
         for (const svc of svcTypes) {
             const type = MDNS_SERVICE_TYPE_MAP[svc];
             if (type) return type;
+        }
+    }
+
+    // F. WSD Types → Gerätetyp (z.B. "wprt:PrintDeviceType", "wscn:ScanDeviceType")
+    if (wsdTypes && wsdTypes.length > 0) {
+        for (const wt of wsdTypes) {
+            const wtLower = wt.toLowerCase();
+            if (wtLower.includes('print')) return 'printer';
+            if (wtLower.includes('scan')) return 'printer'; // Scanner = meist Multifunktionsdrucker
+            if (wtLower.includes('camera') || wtLower.includes('imaging')) return 'camera';
         }
     }
 

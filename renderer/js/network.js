@@ -510,14 +510,14 @@ export class NetworkView {
                 ${summary}
                 <table class="network-table netinv-table">
                     <thead><tr>
-                        <th style="width:32px"></th>
-                        <th>Name</th>
-                        <th>Typ</th>
-                        <th>Hersteller</th>
+                        <th style="width:36px"></th>
+                        <th style="width:16%">Name</th>
+                        <th style="width:9%">Typ</th>
+                        <th style="width:13%">Hersteller</th>
                         <th>Modell</th>
-                        <th>MAC-Adresse</th>
-                        <th>Ports</th>
-                        <th style="width:60px">Ping</th>
+                        <th style="width:12%">MAC-Adresse</th>
+                        <th style="width:11%">Ports</th>
+                        <th style="width:50px">Ping</th>
                     </tr></thead>
                     <tbody>${rows}</tbody>
                 </table>
