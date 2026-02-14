@@ -488,15 +488,23 @@ function classifyDevice(device) {
     //    Einzelne Ports reichen NICHT für Klassifizierung (WU-18, WU-19, WU-20)
     // Port 9100 (RAW Print / JetDirect) = drucker-exklusiv, auch MIT Port 80
     if (ports.has(9100)) return _typeToResult('printer', vendor);
-    // Port 515 (LPD) = drucker-exklusiv — kein anderer Gerätetyp nutzt dieses Protokoll
-    if (ports.has(515)) return _typeToResult('printer', vendor);
+    // Port 631 (IPP) — fast immer Drucker, ABER: CUPS auf Linux-Servern hat auch 631 offen.
+    // Nur als Drucker werten wenn keine Server-Ports (SSH, HTTP, SMB) gleichzeitig offen sind.
+    if (ports.has(631) && !ports.has(22) && !(ports.has(80) && ports.has(445))) {
+        return _typeToResult('printer', vendor);
+    }
+    // Port 515 (LPD) = NICHT drucker-exklusiv! Wird auch von IoT/Embedded/Industriegeräten verwendet.
+    // Nur als Drucker werten wenn zusätzlich ein Drucker-Vendor erkannt wurde (Abschnitt 4 → VENDOR_PATTERNS)
     // Port 5000/5001 nur als NAS wenn NAS-Vendor ODER beide Ports offen
     const nasVendors = /synology|qnap|buffalo|western\s*digital|seagate/i;
     if ((ports.has(5000) || ports.has(5001)) && (nasVendors.test(vendor) || (ports.has(5000) && ports.has(5001)))) {
         return _typeToResult('nas', vendor);
     }
-    // Kamera: RTSP, Dahua, ONVIF
-    if (ports.has(554) || ports.has(8554) || ports.has(37777)) return _typeToResult('camera', vendor);
+    // Kamera: Nur port-exklusive Protokolle oder Port + Vendor-Bestätigung.
+    // Port 554 (RTSP) ist NICHT kamera-exklusiv — Smart TVs, VLC, Media Streamer nutzen RTSP ebenfalls.
+    if (ports.has(37777)) return _typeToResult('camera', vendor); // Dahua-exklusiv
+    const cameraVendors = /hikvision|dahua|reolink|axis\s+communication|amcrest|foscam|eufy|annke|lorex/i;
+    if ((ports.has(554) || ports.has(8554)) && cameraVendors.test(vendor)) return _typeToResult('camera', vendor);
 
     // 3. HOSTNAME-BASIERT (VOR Vendor und OS — Hostnamen sind oft aussagekräftiger)
     const hn = hostname.toLowerCase();
@@ -506,7 +514,9 @@ function classifyDevice(device) {
     if (hn.includes('nas') || hn.includes('diskstation') || hn.includes('qnap') || hn.includes('synology')) {
         return _typeToResult('nas', vendor);
     }
-    if (hn.includes('cam') || hn.includes('ipcam') || hn.includes('nvr') || hn.includes('dvr') || hn.includes('hikvision') || hn.includes('dahua')) {
+    // Kamera-Hostnamen: NICHT 'cam' als Substring (matched "cambridge", "cameron")!
+    // Nur spezifische Kamera-Begriffe oder 'cam' als eigenständiges Wort/Präfix/Suffix.
+    if (hn.includes('ipcam') || hn.includes('ip-cam') || hn.includes('netcam') || /\bcam\d/i.test(hn) || /[-_.]cam$/i.test(hn) || hn.includes('nvr') || hn.includes('dvr') || hn.includes('hikvision') || hn.includes('dahua')) {
         return _typeToResult('camera', vendor);
     }
     if (hn.includes('smarttv') || hn.includes('lgwebos') || hn.includes('bravia') || hn.includes('chromecast')) {
@@ -567,7 +577,12 @@ function classifyDevice(device) {
         if (ports.has(80) || ports.has(443)) {
             return { type: 'webdevice', label: 'Gerät mit Web-Interface', icon: 'globe' };
         }
-        return { type: 'pc', label: 'Linux/macOS Gerät', icon: 'monitor' };
+        // Fallback: TTL 64 allein macht KEIN "Linux/macOS Gerät" — viele IoT-Geräte haben Linux-Firmware.
+        // Nur als PC bezeichnen wenn SSH offen (typisch für echte Linux-Rechner)
+        if (ports.has(22)) {
+            return { type: 'pc', label: 'Linux/macOS Gerät', icon: 'monitor' };
+        }
+        return { type: 'unknown', label: 'Unbekanntes Gerät', icon: 'help-circle' };
     }
 
     // 7. Netzwerkgerät (hoher TTL)
@@ -662,11 +677,11 @@ const MDNS_SERVICE_TYPE_MAP = {
     '_coap._udp':            'smarthome',
     '_ssh._tcp':             'server',
     '_sftp-ssh._tcp':        'server',
-    '_smb._tcp':             'nas',
-    '_afpovertcp._tcp':      'nas',
-    '_nfs._tcp':             'nas',
-    '_rdp._tcp':             'computer',
-    '_vnc._tcp':             'computer',
+    // NICHT '_smb._tcp' → nas! JEDER Windows-PC mit Dateifreigabe hat SMB.
+    '_afpovertcp._tcp':      'nas',     // AFP = Apple Filing Protocol, typisch für NAS
+    '_nfs._tcp':             'nas',     // NFS = typisch für NAS/Server
+    '_rdp._tcp':             'pc',      // RDP = Windows Remote Desktop
+    '_vnc._tcp':             'pc',      // VNC = Remote Desktop
 };
 
 /**
