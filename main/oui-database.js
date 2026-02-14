@@ -446,11 +446,21 @@ const PORT_TYPE_HINTS = {
 
 /**
  * Erkennt den Gerätetyp basierend auf kombinierten Daten.
- * @param {Object} device - { vendor, openPorts: [{port}], os, hostname, ttl, isLocal, isGateway }
+ * PRINZIP: Verhalten (Identity) vor Name (Vendor). Feste Listen nur als Fallback.
+ *
+ * Prioritätsreihenfolge:
+ *   0. Eigener PC / Gateway
+ *   1. Identity-basiert (UPnP deviceType, IPP-Antwort, Modellname) ← das Gerät SAGT was es ist
+ *   2. Port-basiert (nur Drucker-exklusive Ports, und nur wenn Identity fehlt)
+ *   3. Hostname-basiert
+ *   4. Vendor-Patterns (NUR als Fallback — Hersteller bauen verschiedene Gerätetypen!)
+ *   5. OS + Ports, TTL, generischer Fallback
+ *
+ * @param {Object} device - { vendor, openPorts, os, hostname, ttl, isLocal, isGateway, identity }
  * @returns {{ type: string, label: string, icon: string }}
  */
 function classifyDevice(device) {
-    const { vendor = '', openPorts = [], os = '', hostname = '', ttl = 0, isLocal = false, isGateway = false } = device;
+    const { vendor = '', openPorts = [], os = '', hostname = '', ttl = 0, isLocal = false, isGateway = false, identity = {} } = device;
 
     if (isLocal) {
         return { type: 'local', label: 'Eigener PC', icon: 'monitor' };
@@ -463,33 +473,27 @@ function classifyDevice(device) {
 
     const ports = new Set(openPorts.map(p => typeof p === 'object' ? p.port : p));
 
-    // 1. Hersteller-basierte Erkennung (höchste Priorität für spezifische Hersteller)
-    //    Substring-Matching: funktioniert mit kurzen Offline-Namen UND vollen IEEE-API-Namen
-    const vendorLower = vendor.toLowerCase();
-    if (vendorLower) {
-        for (const [pattern, type] of VENDOR_PATTERNS) {
-            if (vendorLower.includes(pattern.toLowerCase())) {
-                return _typeToResult(type, vendor);
-            }
-        }
+    // 1. IDENTITY-BASIERT — das Gerät hat auf eine Anfrage geantwortet
+    //    UPnP deviceType, IPP-Antwort, oder Modellname sind die zuverlässigsten Quellen,
+    //    weil das Gerät uns SELBST sagt was es ist.
+    const identityType = _classifyFromIdentity(identity);
+    if (identityType) {
+        return _typeToResult(identityType, vendor);
     }
 
-    // 2. Port-basierte Erkennung (spezifische Geräte-Ports)
-    //    Drucker: 9100 (RAW Print) = sehr stark. 631 (IPP) + 515 (LPD) = stark.
-    //    515 (LPD) allein = stark (LPD ist ein reines Druckerprotokoll, keine PCs nutzen es).
-    if (ports.has(9100)) return _typeToResult('printer', vendor);
-    if (ports.has(631) && ports.has(515)) return _typeToResult('printer', vendor);
-    if (ports.has(631) && !ports.has(80)) return _typeToResult('printer', vendor);
-    if (ports.has(515)) return _typeToResult('printer', vendor);
-    // NAS: Synology-Ports 5000/5001
+    // 2. PORT-BASIERT — nur Drucker-exklusive Ports (9100/RAW, 515/LPD)
+    //    Port 631 (IPP) NICHT mehr allein als Drucker werten — Router haben oft IPP!
+    //    Wenn Identity vorhanden war, hat Layer 1 bereits entschieden.
+    if (ports.has(9100) && !ports.has(80)) return _typeToResult('printer', vendor); // RAW Print ohne Webserver = Drucker
+    if (ports.has(515)) return _typeToResult('printer', vendor); // LPD ist reines Druckerprotokoll
+    // NAS: Synology-Ports 5000/5001 (nur wenn keine Identity das widerlegt hat)
     if (ports.has(5000) || ports.has(5001)) return _typeToResult('nas', vendor);
     // Kamera: RTSP, Dahua, ONVIF
     if (ports.has(554) || ports.has(8554) || ports.has(37777)) return _typeToResult('camera', vendor);
 
-    // 3. Hostname-basierte Heuristik (VOR OS-Fallback — sonst erkennt "Linux/macOS" alles als PC!)
+    // 3. HOSTNAME-BASIERT (VOR Vendor und OS — Hostnamen sind oft aussagekräftiger)
     const hn = hostname.toLowerCase();
-    // Drucker: HP-Drucker haben Hostnamen wie "HPF94506", "HP507E38", "HPXXXXXX"
-    if (/^hp[0-9a-f]{6}/i.test(hostname) || hn.includes('printer') || hn.includes('drucker') || hn.includes('brn') || hn.includes('canon') || hn.includes('epson') || hn.includes('laserjet') || hn.includes('officejet') || hn.includes('deskjet')) {
+    if (/^hp[0-9a-f]{6}/i.test(hostname) || hn.includes('printer') || hn.includes('drucker') || hn.includes('brn') || hn.includes('laserjet') || hn.includes('officejet') || hn.includes('deskjet')) {
         return _typeToResult('printer', vendor);
     }
     if (hn.includes('nas') || hn.includes('diskstation') || hn.includes('qnap') || hn.includes('synology')) {
@@ -498,7 +502,7 @@ function classifyDevice(device) {
     if (hn.includes('cam') || hn.includes('ipcam') || hn.includes('nvr') || hn.includes('dvr') || hn.includes('hikvision') || hn.includes('dahua')) {
         return _typeToResult('camera', vendor);
     }
-    if (hn.includes('tv') || hn.includes('smarttv') || hn.includes('lgwebos') || hn.includes('bravia') || hn.includes('chromecast')) {
+    if (hn.includes('smarttv') || hn.includes('lgwebos') || hn.includes('bravia') || hn.includes('chromecast')) {
         return _typeToResult('tv', vendor);
     }
     if (hn.includes('sonos') || hn.includes('denon') || hn.includes('heos') || hn.includes('airplay')) {
@@ -517,7 +521,18 @@ function classifyDevice(device) {
         return _typeToResult('smarthome', vendor);
     }
 
-    // 4. OS + Port Kombinationen (Fallback wenn weder Vendor noch Hostname matchen)
+    // 4. VENDOR-PATTERNS — NUR als Fallback wenn weder Identity noch Hostname helfen
+    //    ACHTUNG: Hersteller bauen verschiedene Gerätetypen! Canon = Drucker UND Kameras.
+    const vendorLower = vendor.toLowerCase();
+    if (vendorLower) {
+        for (const [pattern, type] of VENDOR_PATTERNS) {
+            if (vendorLower.includes(pattern.toLowerCase())) {
+                return _typeToResult(type, vendor);
+            }
+        }
+    }
+
+    // 5. OS + Port Kombinationen
     if (os === 'Windows' || ports.has(135) || ports.has(3389) || ports.has(445)) {
         if (ports.has(80) && ports.has(443) && ports.size > 4) {
             return { type: 'server', label: 'Windows Server', icon: 'server' };
@@ -532,24 +547,96 @@ function classifyDevice(device) {
         if (vendor && vendor.toLowerCase().includes('apple')) {
             return { type: 'pc', label: 'Apple Gerät', icon: 'monitor' };
         }
-        // Nicht sofort als "Linux/macOS" einstufen — erst noch Web-Interface prüfen
         if (ports.has(80) || ports.has(443)) {
             return { type: 'webdevice', label: 'Gerät mit Web-Interface', icon: 'globe' };
         }
         return { type: 'pc', label: 'Linux/macOS Gerät', icon: 'monitor' };
     }
 
-    // 5. Netzwerkgerät (hoher TTL)
+    // 6. Netzwerkgerät (hoher TTL)
     if (ttl > 128 || os === 'Netzwerkgerät') {
         return { type: 'router', label: 'Netzwerkgerät', icon: 'wifi' };
     }
 
-    // 6. Fallback
+    // 7. Generischer Fallback
     if (ports.has(80) || ports.has(443)) {
         return { type: 'webdevice', label: 'Gerät mit Web-Interface', icon: 'globe' };
     }
 
     return { type: 'unknown', label: 'Unbekanntes Gerät', icon: 'help-circle' };
+}
+
+// ---------------------------------------------------------------------------
+// Identity-basierte Klassifizierung: Das Gerät hat uns geantwortet
+// ---------------------------------------------------------------------------
+
+// UPnP deviceType URN → interner Gerätetyp
+const UPNP_TYPE_MAP = {
+    'internetgatewaydevice': 'router',
+    'wandevice':             'router',
+    'wanconnectiondevice':   'router',
+    'mediarenderer':         'media',
+    'mediaserver':           'media',
+    'printer':               'printer',
+    'scanner':               'printer',  // Scanner sind meist Multifunktionsdrucker
+    'lightingcontrols':      'smarthome',
+    'dimmablelight':         'smarthome',
+    'binarylight':           'smarthome',
+};
+
+// Modellname-Muster → Gerätetyp (dynamisch erkannte Modellnamen, NICHT Herstellernamen)
+const MODEL_PATTERNS = [
+    // Router / Gateways
+    [/fritz.?box/i, 'router'], [/speedport/i, 'router'], [/easybox/i, 'router'],
+    [/archer/i, 'router'], [/nighthawk/i, 'router'], [/livebox/i, 'router'],
+    // Drucker (Modellreihen, nicht Herstellernamen)
+    [/laserjet/i, 'printer'], [/officejet/i, 'printer'], [/deskjet/i, 'printer'],
+    [/pixma/i, 'printer'], [/ecotank/i, 'printer'], [/workforce/i, 'printer'],
+    [/hl-[a-z]/i, 'printer'], [/mfc-/i, 'printer'], [/dcp-/i, 'printer'],
+    // Media
+    [/sonos/i, 'media'], [/denon/i, 'media'], [/heos/i, 'media'],
+    // Smart Home
+    [/hue\s*(bridge|hub)/i, 'smarthome'], [/shelly/i, 'smarthome'],
+    // TV
+    [/bravia/i, 'tv'], [/webos/i, 'tv'], [/tizen/i, 'tv'],
+    // NAS
+    [/diskstation/i, 'nas'], [/readynas/i, 'nas'],
+    // Kamera
+    [/ipcam/i, 'camera'], [/reolink/i, 'camera'],
+];
+
+/**
+ * Klassifiziert ein Gerät basierend auf Identity-Daten (UPnP, HTTP, IPP).
+ * @param {Object} identity - { modelName, identifiedBy, deviceType, ... }
+ * @returns {string|null} - Gerätetyp oder null wenn keine Erkennung möglich
+ */
+function _classifyFromIdentity(identity) {
+    if (!identity) return null;
+    const { modelName = '', identifiedBy = '', deviceType = '' } = identity;
+
+    // A. UPnP deviceType URN — zuverlässigste Quelle (Gerät deklariert seinen Typ)
+    //    Format: "urn:schemas-upnp-org:device:MediaRenderer:1"
+    if (deviceType) {
+        const dtLower = deviceType.toLowerCase();
+        for (const [urnPart, type] of Object.entries(UPNP_TYPE_MAP)) {
+            if (dtLower.includes(urnPart)) return type;
+        }
+    }
+
+    // B. IPP-Antwort = definitiv ein Drucker (nur Drucker sprechen IPP)
+    if (identifiedBy && identifiedBy.includes('ipp')) {
+        return 'printer';
+    }
+
+    // C. Modellname gegen bekannte Muster prüfen
+    //    Anders als VENDOR_PATTERNS: hier werden MODELLREIHEN erkannt, nicht Herstellernamen
+    if (modelName) {
+        for (const [pattern, type] of MODEL_PATTERNS) {
+            if (pattern.test(modelName)) return type;
+        }
+    }
+
+    return null;
 }
 
 function _typeToResult(type, vendor) {

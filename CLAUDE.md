@@ -102,6 +102,7 @@ node launch.js  # oder: npm start
 - **Single-Instance:** `app.requestSingleInstanceLock()` aktiv
 - **GPU Cache:** `--disable-gpu-shader-disk-cache` aktiv
 - **Security:** BLOCKED_PATHS in `registry.js` beachten
+- **Keine statischen Zuordnungen für dynamische Daten.** Wenn etwas klassifiziert wird (Gerätetyp, Software-Kategorie, Dateityp), IMMER erst das Verhalten prüfen, dann den Namen als Fallback. Feste Listen veralten, Verhalten nicht.
 
 ## Dateimanagement (docs/)
 

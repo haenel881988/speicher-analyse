@@ -351,6 +351,7 @@ function _parseDeviceXML(xml) {
     const modelNumber = tag('modelNumber');
     const friendlyName = tag('friendlyName');
     const manufacturer = tag('manufacturer');
+    const deviceType = tag('deviceType'); // UPnP device type URN (z.B. "urn:schemas-upnp-org:device:MediaRenderer:1")
     const serialNumber = tag('serialNumber') || tag('UDN')?.replace(/^uuid:/i, '') || '';
     const firmwareVersion = tag('firmwareVersion') || tag('softwareVersion') || '';
 
@@ -385,6 +386,7 @@ function _parseDeviceXML(xml) {
         serialNumber: serialNumber.length > 30 ? '' : serialNumber, // UUIDs als S/N filtern
         firmwareVersion,
         manufacturer,
+        deviceType, // UPnP device type URN — das Gerät sagt uns was es IST
     };
 }
 

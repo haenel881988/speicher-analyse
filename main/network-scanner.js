@@ -412,9 +412,10 @@ async function scanNetworkActive(onProgress) {
         const os = _detectOS(d.ttl);
         const identity = identityMap.get(d.ip) || {};
 
-        // Gerätetyp-Erkennung (kombiniert Hersteller + Ports + OS + Hostname + TTL)
+        // Gerätetyp-Erkennung: Identity (Verhalten) VOR Hersteller (Name)
         const deviceType = classifyDevice({
             vendor, openPorts, os, hostname: d.hostname || '', ttl: d.ttl || 0, isLocal, isGateway,
+            identity, // UPnP/HTTP/IPP Ergebnisse — das Gerät sagt was es IST
         });
 
         return {
