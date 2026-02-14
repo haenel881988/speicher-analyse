@@ -19,7 +19,29 @@
 
  - Erweiterung vom Sicherheitscheck - oder unterregister mit einem GPO Scan. Dabei soll der Scan die GPOs scannen ob es potenziell problematische Einstellungen gibt, die zu Fehlern, bluescreens etc. führen, gerade kombiniert mit der Registry können so sehr subtile Probleme sichtbar gemacht werden, damit dann schritt für schritt das Problem behoben werden kann / evtl. auch welche übergeordnete GPO die Problematik verursacht.
 
+
+
+
+- Integration eines Webbrowser, damit z.B.: im netzwerk direkt das jeweilige Netzwerkgerät über die IP Adresse aufgerufen werden kann.
+
+# Explorer:
+  1. Kontextmenü fehlt, wie bei Windows 11.
+  2. Keine extraktion möglich im Kontextmenü wie bei Windows bei z.B.: zip-Dateien.
+  3. Es fehlen die erweiterten Eigenschaften wie bei Windows --> Rechte Maustaste --> Eigenschaften.
+
+Weitere Funktionen fehlen bei entsprechenden Dateitypen, bei Bildern z.B.: die Anzeige / Vorschau Funktion.
+
+ - z.B.: Exe Dateien können nicht als admin ausgeführt werden.
+ - PDF, exe Dateien etc. haben eigene Favicons - im Explorer sehen alle Dateien exakt gleich aus - es fehlen die Icons.
+
  
+
+# Terminal Funktionen
+
+- Terminal Funktion: Evtl. direkt als Admin aufrufbar? separate Funktion, damit nicht die ganze App als Admin gestartet werden muss?
+ - Terminal Pfad ändert sich je nach dem im welchem Verzeichnis man sich befindet. Diese Funktion soll die Möglichkeit besitzen, deaktiviert zu werden, für menschen die das gar nicht mögen.
+ - Terminal: Evtl. weitere Terminals einbauen, z.B.: ubuntu shell?
+ - 
 
 
 

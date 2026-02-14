@@ -380,7 +380,7 @@ export class NetworkView {
         const p = this._activeScanProgress;
         const spinner = '<span class="network-scan-spinner"></span>';
         if (!p) return `${spinner}<span>Scan wird vorbereitet...</span><div class="network-progress-bar network-progress-indeterminate"><div class="network-progress-fill"></div></div>`;
-        const phaseLabels = { init: 'Vorbereitung', ping: 'Ping Sweep', arp: 'MAC-Adressen', ports: 'Port-Scan', shares: 'SMB-Freigaben', vendor: 'Hersteller-Erkennung (IEEE)', identify: 'Gerätemodell-Erkennung', done: 'Abgeschlossen' };
+        const phaseLabels = { init: 'Vorbereitung', ping: 'Ping Sweep', arp: 'MAC-Adressen', ports: 'Port-Scan', shares: 'SMB-Freigaben', snmp: 'SNMP-Erkennung', vendor: 'Hersteller-Erkennung (IEEE)', identify: 'Gerätemodell-Erkennung', mdns: 'mDNS-Erkennung', done: 'Abgeschlossen' };
         const label = phaseLabels[p.phase] || p.phase;
         if (p.total > 0) {
             const pct = Math.round((p.current / p.total) * 100);
@@ -465,8 +465,31 @@ export class NetworkView {
                 const typeIcon = this._deviceIcon(d.deviceIcon || 'help-circle');
                 const name = d.hostname || d.ip;
 
-                const modelHtml = d.modelName
-                    ? `<span class="netinv-model-name">${this._esc(d.modelName)}</span>${d.serialNumber ? `<span class="netinv-serial" title="S/N: ${this._esc(d.serialNumber)}${d.firmwareVersion ? ' | FW: ' + this._esc(d.firmwareVersion) : ''}">S/N</span>` : ''}`
+                // Modell + Zusatzinfos aufbauen
+                const modelParts = [];
+                if (d.modelName) {
+                    modelParts.push(`<span class="netinv-model-name">${this._esc(d.modelName)}</span>`);
+                }
+                if (d.firmwareVersion) {
+                    modelParts.push(`<span class="netinv-fw-badge" title="Firmware: ${this._esc(d.firmwareVersion)}">FW ${this._esc(d.firmwareVersion)}</span>`);
+                }
+                if (d.serialNumber) {
+                    modelParts.push(`<span class="netinv-serial" title="Seriennummer: ${this._esc(d.serialNumber)}">S/N ${this._esc(d.serialNumber.length > 12 ? d.serialNumber.substring(0, 12) + '...' : d.serialNumber)}</span>`);
+                }
+                if (d.sshBanner) {
+                    modelParts.push(`<span class="netinv-ssh-badge" title="${this._esc(d.sshBanner)}">SSH</span>`);
+                }
+                if (d.snmpSysName) {
+                    modelParts.push(`<span class="netinv-snmp-name" title="SNMP-Gerätename: ${this._esc(d.snmpSysName)}${d.snmpLocation ? ' | Standort: ' + this._esc(d.snmpLocation) : ''}">${this._esc(d.snmpSysName)}</span>`);
+                }
+                if (d.mdnsServices && d.mdnsServices.length > 0) {
+                    modelParts.push(`<span class="netinv-mdns-badge" title="mDNS: ${this._esc(d.mdnsServices.join(', '))}">${d.mdnsServices.length} Service${d.mdnsServices.length > 1 ? 's' : ''}</span>`);
+                }
+                if (d.identifiedBy) {
+                    modelParts.push(`<span class="netinv-source-badge" title="Erkannt via: ${this._esc(d.identifiedBy)}">${this._esc(d.identifiedBy)}</span>`);
+                }
+                const modelHtml = modelParts.length > 0
+                    ? modelParts.join('')
                     : '<span style="color:var(--text-muted)">—</span>';
 
                 return `<tr class="network-device-row">
@@ -868,10 +891,12 @@ export class NetworkView {
         if (exportDevicesBtn && this._activeScanResult) {
             exportDevicesBtn.onclick = () => {
                 const devices = this._activeScanResult.devices || [];
-                const header = 'IP;Hostname;MAC;Hersteller;Modell;Seriennummer;Firmware;Gerätetyp;Betriebssystem;Ports;Ping (ms);Freigaben';
+                const header = 'IP;Hostname;MAC;Hersteller;Modell;Seriennummer;Firmware;Gerätetyp;Betriebssystem;SSH;SNMP-Name;SNMP-Standort;mDNS-Services;Erkannt via;Ports;Ping (ms);Freigaben';
                 const rows = devices.map(d => [
                     d.ip, d.hostname, d.mac, d.vendor, d.modelName || '', d.serialNumber || '', d.firmwareVersion || '',
-                    d.deviceLabel || '', d.os, (d.openPorts || []).map(p => `${p.port}/${p.label}`).join(' '),
+                    d.deviceLabel || '', d.os, d.sshBanner || '', d.snmpSysName || '', d.snmpLocation || '',
+                    (d.mdnsServices || []).join(' '), d.identifiedBy || '',
+                    (d.openPorts || []).map(p => `${p.port}/${p.label}`).join(' '),
                     d.rtt, (d.shares || []).join(' '),
                 ].join(';'));
                 const csv = header + '\n' + rows.join('\n');

@@ -4,6 +4,7 @@ const { runPS } = require('./cmd-utils');
 const log = require('./logger').createLogger('network-scanner');
 const { lookupVendorsBatch, classifyDevice } = require('./oui-database');
 const { identifyDevices } = require('./device-identify');
+const { querySNMPBatch } = require('./snmp-scanner');
 
 const PS_TIMEOUT = 30000;
 
@@ -371,6 +372,22 @@ async function scanNetworkActive(onProgress) {
         }
     }
 
+    // Phase 5: SNMP-Erkennung (alle Online-Geräte, die nicht der eigene PC sind)
+    if (onProgress) onProgress({ phase: 'snmp', current: 0, total: 0, message: 'SNMP-Abfragen (Modell, Firmware)...' });
+
+    const snmpTargets = onlineDevices
+        .filter(d => d.ip !== subnetInfo.localIP)
+        .map(d => d.ip);
+
+    let snmpMap = new Map();
+    try {
+        snmpMap = await querySNMPBatch(snmpTargets, (current, total) => {
+            if (onProgress) onProgress({ phase: 'snmp', current, total, message: `SNMP ${current}/${total} abgefragt...` });
+        });
+    } catch (err) {
+        log.warn('SNMP-Scan fehlgeschlagen:', err.message);
+    }
+
     // Live OUI-Lookup für alle gefundenen MAC-Adressen (IEEE-Datenbank via API)
     const allMacs = onlineDevices
         .map(d => macMap.get(d.ip) || '')
@@ -411,11 +428,34 @@ async function scanNetworkActive(onProgress) {
         const vendor = vendorMap.get(macDash) || '';
         const os = _detectOS(d.ttl);
         const identity = identityMap.get(d.ip) || {};
+        const snmpData = snmpMap.get(d.ip) || {};
+
+        // SNMP-Daten in Identity mergen (Identity hat Vorrang, SNMP ergänzt fehlende Felder)
+        if (snmpData.modelName && !identity.modelName) {
+            identity.modelName = snmpData.modelName;
+        }
+        if (snmpData.firmwareVersion && !identity.firmwareVersion) {
+            identity.firmwareVersion = snmpData.firmwareVersion;
+        }
+        if (snmpData.sysObjectID) {
+            identity.snmpObjectID = snmpData.sysObjectID;
+        }
+        if (snmpData.sysDescr) {
+            identity.snmpSysDescr = snmpData.sysDescr;
+            identity.identifiedBy = identity.identifiedBy
+                ? identity.identifiedBy + '+snmp'
+                : 'snmp';
+        }
+
+        // mDNS-Daten sind bereits in identity (aus device-identify.js), aber Hostname ergänzen
+        if (identity.mdnsHostname && !d.hostname) {
+            d.hostname = identity.mdnsHostname;
+        }
 
         // Gerätetyp-Erkennung: Identity (Verhalten) VOR Hersteller (Name)
         const deviceType = classifyDevice({
             vendor, openPorts, os, hostname: d.hostname || '', ttl: d.ttl || 0, isLocal, isGateway,
-            identity, // UPnP/HTTP/IPP Ergebnisse — das Gerät sagt was es IST
+            identity, // UPnP/HTTP/IPP/SNMP Ergebnisse — das Gerät sagt was es IST
         });
 
         return {
@@ -437,6 +477,13 @@ async function scanNetworkActive(onProgress) {
             modelName: identity.modelName || '',
             serialNumber: identity.serialNumber || '',
             firmwareVersion: identity.firmwareVersion || '',
+            sshBanner: identity.sshBanner || '',
+            snmpSysName: snmpData.sysName || '',
+            snmpLocation: snmpData.sysLocation || '',
+            snmpSysDescr: snmpData.sysDescr || '',
+            mdnsServices: identity.mdnsServices || [],
+            mdnsServiceTypes: identity.mdnsServiceTypes || [],
+            identifiedBy: identity.identifiedBy || '',
         };
     });
 

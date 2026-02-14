@@ -605,14 +605,61 @@ const MODEL_PATTERNS = [
     [/ipcam/i, 'camera'], [/reolink/i, 'camera'],
 ];
 
+// SNMP Enterprise OID-Prefixe → Gerätetyp
+// Format: "1.3.6.1.4.1.<enterprise>" — ISO.identified.dod.internet.private.enterprises
+const SNMP_OID_TYPE_MAP = [
+    ['1.3.6.1.4.1.9.',     'network'],   // Cisco
+    ['1.3.6.1.4.1.2636.',  'network'],   // Juniper
+    ['1.3.6.1.4.1.14988.', 'router'],    // MikroTik
+    ['1.3.6.1.4.1.41112.', 'network'],   // Ubiquiti
+    ['1.3.6.1.4.1.4413.',  'router'],    // ZyXEL
+    ['1.3.6.1.4.1.12356.', 'network'],   // Fortinet
+    ['1.3.6.1.4.1.11.',    'printer'],    // HP (häufig Drucker)
+    ['1.3.6.1.4.1.2435.',  'printer'],    // Brother
+    ['1.3.6.1.4.1.1602.',  'printer'],    // Canon
+    ['1.3.6.1.4.1.1248.',  'printer'],    // Epson
+    ['1.3.6.1.4.1.18334.', 'printer'],    // Konica Minolta
+    ['1.3.6.1.4.1.6574.',  'nas'],        // Synology
+    ['1.3.6.1.4.1.24681.', 'nas'],        // QNAP
+];
+
+// mDNS Roh-Service-Type → Gerätetyp (wird NACH dynamischer Erkennung angewendet)
+const MDNS_SERVICE_TYPE_MAP = {
+    '_printer._tcp':         'printer',
+    '_ipp._tcp':             'printer',
+    '_ipps._tcp':            'printer',
+    '_pdl-datastream._tcp':  'printer',
+    '_airprint._tcp':        'printer',
+    '_scanner._tcp':         'printer',
+    '_airplay._tcp':         'media',
+    '_raop._tcp':            'media',
+    '_spotify-connect._tcp': 'media',
+    '_sonos._tcp':           'media',
+    '_daap._tcp':            'media',
+    '_googlecast._tcp':      'tv',
+    '_hap._tcp':             'smarthome',
+    '_hue._tcp':             'smarthome',
+    '_homeassistant._tcp':   'smarthome',
+    '_esphomelib._tcp':      'smarthome',
+    '_mqtt._tcp':            'smarthome',
+    '_coap._udp':            'smarthome',
+    '_ssh._tcp':             'server',
+    '_sftp-ssh._tcp':        'server',
+    '_smb._tcp':             'nas',
+    '_afpovertcp._tcp':      'nas',
+    '_nfs._tcp':             'nas',
+    '_rdp._tcp':             'computer',
+    '_vnc._tcp':             'computer',
+};
+
 /**
- * Klassifiziert ein Gerät basierend auf Identity-Daten (UPnP, HTTP, IPP).
- * @param {Object} identity - { modelName, identifiedBy, deviceType, ... }
+ * Klassifiziert ein Gerät basierend auf Identity-Daten (UPnP, HTTP, IPP, SNMP, mDNS).
+ * @param {Object} identity - { modelName, identifiedBy, deviceType, snmpObjectID, mdnsServices, ... }
  * @returns {string|null} - Gerätetyp oder null wenn keine Erkennung möglich
  */
 function _classifyFromIdentity(identity) {
     if (!identity) return null;
-    const { modelName = '', identifiedBy = '', deviceType = '' } = identity;
+    const { modelName = '', identifiedBy = '', deviceType = '', snmpObjectID = '', mdnsServiceTypes = [], mdnsServices = [] } = identity;
 
     // A. UPnP deviceType URN — zuverlässigste Quelle (Gerät deklariert seinen Typ)
     //    Format: "urn:schemas-upnp-org:device:MediaRenderer:1"
@@ -633,6 +680,22 @@ function _classifyFromIdentity(identity) {
     if (modelName) {
         for (const [pattern, type] of MODEL_PATTERNS) {
             if (pattern.test(modelName)) return type;
+        }
+    }
+
+    // D. SNMP sysObjectID → Enterprise OID-Prefix matchen
+    if (snmpObjectID) {
+        for (const [prefix, type] of SNMP_OID_TYPE_MAP) {
+            if (snmpObjectID.startsWith(prefix)) return type;
+        }
+    }
+
+    // E. mDNS Service-Type → Gerätetyp (Roh-Typen wie _printer._tcp)
+    const svcTypes = mdnsServiceTypes.length > 0 ? mdnsServiceTypes : mdnsServices;
+    if (svcTypes && svcTypes.length > 0) {
+        for (const svc of svcTypes) {
+            const type = MDNS_SERVICE_TYPE_MAP[svc];
+            if (type) return type;
         }
     }
 

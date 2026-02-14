@@ -60,9 +60,11 @@ Simon ist Endanwender, kein Entwickler.
 
 ---
 
+
+
 ## Git Workflow
 
-Nach jeder Änderung: `git add . && git commit -m "type: Beschreibung" && git push`
+Nach jeder Änderung: `git add .; git commit -m "type: Beschreibung"; git push`
 
 ## Tech Stack
 
@@ -102,7 +104,8 @@ node launch.js  # oder: npm start
 - **Single-Instance:** `app.requestSingleInstanceLock()` aktiv
 - **GPU Cache:** `--disable-gpu-shader-disk-cache` aktiv
 - **Security:** BLOCKED_PATHS in `registry.js` beachten
-- **Keine statischen Zuordnungen für dynamische Daten.** Wenn etwas klassifiziert wird (Gerätetyp, Software-Kategorie, Dateityp), IMMER erst das Verhalten prüfen, dann den Namen als Fallback. Feste Listen veralten, Verhalten nicht.
+- **VERBOTEN: Statische Listen für Erkennung/Discovery.** Die App muss in der Realität funktionieren, nicht nur in Simons Netzwerk. Statische Listen haben NICHTS mit der Realität zu tun — sie funktionieren nur für den Entwickler, nicht für andere Nutzer. IMMER dynamisch erkennen (Protokoll-Queries, Broadcast, OS-APIs), NIEMALS eine feste Liste von "bekannten" Einträgen als Erkennungsgrundlage. Feste Listen sind NUR erlaubt als Fallback-Label/Anzeige NACH einer dynamischen Erkennung — nie als Filter davor.
+- **Realitätsprinzip:** Code muss auf JEDEM Rechner funktionieren, nicht nur auf dem Entwickler-PC. Jede Annahme über die Umgebung (welche Geräte, welche Software, welche Services existieren) ist ein Bug.
 
 ## Dateimanagement (docs/)
 

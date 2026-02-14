@@ -1,9 +1,11 @@
 'use strict';
 
+const net = require('net');
 const http = require('http');
 const https = require('https');
 const dgram = require('dgram');
 const log = require('./logger').createLogger('device-identify');
+const { discoverServices } = require('./mdns-scanner');
 
 // Timeouts — genug Zeit für langsame Embedded-Geräte (Sonos, Hue, etc.)
 const HTTP_TIMEOUT = 4000;
@@ -42,6 +44,30 @@ async function identifyDevices(devices, onProgress) {
         log.warn('UPnP-Discovery fehlgeschlagen:', err.message);
     }
 
+    // --- Phase A.5: mDNS/Bonjour (1x Broadcast — ähnlich wie UPnP) ---
+    log.info('Geräte-Identifikation: mDNS-Discovery...');
+    try {
+        const mdnsResults = await discoverServices();
+        for (const [ip, info] of mdnsResults) {
+            if (!onlineIPs.has(ip)) continue;
+            const existing = results.get(ip) || {};
+            results.set(ip, {
+                modelName: existing.modelName || info.modelName || '',
+                serialNumber: existing.serialNumber || info.serialNumber || '',
+                firmwareVersion: existing.firmwareVersion || '',
+                identifiedBy: existing.identifiedBy
+                    ? existing.identifiedBy + '+mdns'
+                    : 'mdns',
+                mdnsServices: info.services || [],
+                mdnsServiceTypes: info.serviceTypes || [],
+                mdnsHostname: info.hostname || '',
+            });
+        }
+        log.info(`mDNS: ${mdnsResults.size} Geräte mit Services entdeckt`);
+    } catch (err) {
+        log.warn('mDNS-Discovery fehlgeschlagen:', err.message);
+    }
+
     // --- Phase B: HTTP + IPP parallel ---
     const httpTargets = devices.filter(d => {
         if (results.has(d.ip) && results.get(d.ip).modelName) return false;
@@ -54,7 +80,12 @@ async function identifyDevices(devices, onProgress) {
         return ports.includes(631) || ports.includes(9100);
     });
 
-    const totalProbes = httpTargets.length + ippTargets.length;
+    const sshTargets = devices.filter(d => {
+        const ports = (d.openPorts || []).map(p => typeof p === 'number' ? p : p.port);
+        return ports.includes(22);
+    });
+
+    const totalProbes = httpTargets.length + ippTargets.length + sshTargets.length;
     log.info(`HTTP: ${httpTargets.length} Geräte, IPP: ${ippTargets.length} Drucker`);
 
     const httpPromises = _parallelLimit(
@@ -102,7 +133,30 @@ async function identifyDevices(devices, onProgress) {
         5
     );
 
-    await Promise.all([httpPromises, ippPromises]);
+    const sshPromises = _parallelLimit(
+        sshTargets.map(d => async () => {
+            try {
+                const banner = await _grabSSHBanner(d.ip);
+                if (banner) {
+                    const existing = results.get(d.ip) || {};
+                    results.set(d.ip, {
+                        modelName: existing.modelName || '',
+                        serialNumber: existing.serialNumber || '',
+                        firmwareVersion: existing.firmwareVersion || '',
+                        identifiedBy: existing.identifiedBy ? existing.identifiedBy + '+ssh' : 'ssh',
+                        sshBanner: banner,
+                    });
+                }
+            } catch (err) {
+                log.debug(`SSH ${d.ip}: ${err.message}`);
+            }
+            completed++;
+            if (onProgress && totalProbes > 0) onProgress(completed, totalProbes);
+        }),
+        10
+    );
+
+    await Promise.all([httpPromises, ippPromises, sshPromises]);
 
     log.info(`Geräte-Identifikation: ${results.size}/${devices.length} identifiziert`);
     return results;
@@ -578,6 +632,52 @@ async function _parallelLimit(taskFactories, limit) {
         () => worker()
     );
     await Promise.all(workers);
+}
+
+// ---------------------------------------------------------------------------
+//  SSH Banner Grabbing — TCP-Connect auf Port 22, erste Zeile lesen
+// ---------------------------------------------------------------------------
+
+const SSH_TIMEOUT = 3000;
+
+/**
+ * Liest das SSH-Banner eines Geräts (z.B. "SSH-2.0-OpenSSH_8.9p1 Ubuntu-3ubuntu0.1").
+ * @param {string} ip - IPv4-Adresse
+ * @returns {Promise<string|null>} Banner-String oder null
+ */
+function _grabSSHBanner(ip) {
+    return new Promise((resolve) => {
+        const socket = new net.Socket();
+        let banner = '';
+
+        const timer = setTimeout(() => {
+            socket.destroy();
+            resolve(null);
+        }, SSH_TIMEOUT);
+
+        socket.on('data', (data) => {
+            banner += data.toString();
+            if (banner.includes('\n') || banner.length > 256) {
+                clearTimeout(timer);
+                socket.destroy();
+                resolve(banner.trim().substring(0, 256));
+            }
+        });
+
+        socket.on('error', () => {
+            clearTimeout(timer);
+            socket.destroy();
+            resolve(null);
+        });
+
+        socket.on('close', () => {
+            clearTimeout(timer);
+            if (banner) resolve(banner.trim().substring(0, 256));
+            else resolve(null);
+        });
+
+        socket.connect(22, ip);
+    });
 }
 
 module.exports = { identifyDevices };
