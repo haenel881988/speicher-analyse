@@ -28,6 +28,8 @@ export class NetworkView {
         this._activeScanRunning = false;
         this._expandedDevices = new Set();
         this._deviceFilter = '';
+        this._groupByType = true;          // Default: gruppierte Ansicht
+        this._collapsedGroups = new Set();  // Eingeklappte Gerätetyp-Gruppen
         this._setupScanProgressListener();
     }
 
@@ -443,66 +445,69 @@ export class NetworkView {
                 const t = d.deviceLabel || 'Unbekannt';
                 typeCounts[t] = (typeCounts[t] || 0) + 1;
             }
-            const summaryBadges = Object.entries(typeCounts)
-                .sort((a, b) => b[1] - a[1])
-                .map(([label, count]) => `<span class="netinv-type-badge">${count}x ${this._esc(label)}</span>`)
+            const sortedTypes = Object.entries(typeCounts).sort((a, b) => b[1] - a[1]);
+            const summaryBadges = sortedTypes
+                .map(([label, count]) => `<span class="netinv-type-badge netinv-type-badge-clickable" data-scroll-group="${this._esc(label)}">${count}x ${this._esc(label)}</span>`)
                 .join('');
 
+            const toggleLabel = this._groupByType ? 'Liste' : 'Gruppiert';
+            const toggleIcon = this._groupByType ? '\u2630' : '\u25A4';
+            const groupToggle = filtered.length > 0 ? `<button class="network-btn network-btn-secondary" id="network-group-toggle" title="Zwischen gruppierter und flacher Ansicht wechseln">${toggleIcon} ${toggleLabel}</button>` : '';
+
             const summary = `<div class="netinv-summary">
-                <div class="netinv-summary-count">${filtered.length} Gerät${filtered.length !== 1 ? 'e' : ''} im Netzwerk</div>
+                <div class="netinv-summary-count">${filtered.length} Gerät${filtered.length !== 1 ? 'e' : ''} im Netzwerk ${groupToggle}</div>
                 <div class="netinv-summary-types">${summaryBadges}</div>
             </div>`;
 
-            // Kompakte Tabelle (statt Kacheln)
-            const rows = filtered.map(d => {
-                const portBadges = (d.openPorts || []).slice(0, 4).map(p =>
-                    `<span class="network-port-badge">${p.port} <small>${this._esc(p.label)}</small></span>`
-                ).join(' ');
-                const morePortsHint = (d.openPorts || []).length > 4 ? `<span class="network-port-badge">+${d.openPorts.length - 4}</span>` : '';
-                const localBadge = d.isLocal ? ' <span class="network-local-badge">Du</span>' : '';
-                const rttClass = d.rtt < 5 ? 'network-rtt-fast' : d.rtt < 50 ? 'network-rtt-medium' : 'network-rtt-slow';
-                const typeLabel = d.deviceLabel || 'Unbekannt';
-                const typeIcon = this._deviceIcon(d.deviceIcon || 'help-circle');
-                const name = d.hostname || d.ip;
-
-                // Modell + Zusatzinfos aufbauen
-                const modelParts = [];
-                if (d.modelName) {
-                    modelParts.push(`<span class="netinv-model-name">${this._esc(d.modelName)}</span>`);
+            // Tabellen-Inhalt: gruppiert oder flach
+            let tableContent = '';
+            if (this._groupByType && filtered.length > 0) {
+                // Gruppiert nach Gerätetyp
+                const groups = new Map();
+                for (const d of filtered) {
+                    const key = d.deviceLabel || 'Unbekanntes Gerät';
+                    if (!groups.has(key)) groups.set(key, []);
+                    groups.get(key).push(d);
                 }
-                if (d.firmwareVersion) {
-                    modelParts.push(`<span class="netinv-fw-badge" title="Firmware: ${this._esc(d.firmwareVersion)}">FW ${this._esc(d.firmwareVersion)}</span>`);
+                // Sortieren: Meiste zuerst, "Unbekannt" zuletzt
+                const sortedGroups = [...groups.entries()].sort((a, b) => {
+                    if (a[0].startsWith('Unbekannt')) return 1;
+                    if (b[0].startsWith('Unbekannt')) return -1;
+                    return b[1].length - a[1].length;
+                });
+                // Geräte innerhalb jeder Gruppe sortieren: Vendor, dann Name
+                for (const [, devs] of sortedGroups) {
+                    devs.sort((a, b) => {
+                        const va = (a.vendor || '').toLowerCase();
+                        const vb = (b.vendor || '').toLowerCase();
+                        if (va !== vb) return va.localeCompare(vb);
+                        return (a.hostname || a.ip).localeCompare(b.hostname || b.ip);
+                    });
                 }
-                if (d.serialNumber) {
-                    modelParts.push(`<span class="netinv-serial" title="Seriennummer: ${this._esc(d.serialNumber)}">S/N ${this._esc(d.serialNumber.length > 12 ? d.serialNumber.substring(0, 12) + '...' : d.serialNumber)}</span>`);
+                for (const [label, devs] of sortedGroups) {
+                    const firstDev = devs[0];
+                    const typeIcon = this._deviceIcon(firstDev?.deviceIcon || 'help-circle');
+                    const typeClass = firstDev?.deviceType || 'unknown';
+                    const isExpanded = !this._collapsedGroups.has(label);
+                    const arrow = isExpanded ? '\u25BC' : '\u25B6';
+                    tableContent += `<tr class="netinv-group-header" data-group-toggle="${this._esc(label)}">
+                        <td colspan="8"><div class="netinv-group-header-inner">
+                            <span class="netinv-group-arrow">${arrow}</span>
+                            <span class="netinv-type-dot netinv-type-${this._esc(typeClass)}">${typeIcon}</span>
+                            <strong class="netinv-group-label">${this._esc(label)}</strong>
+                            <span class="netinv-group-count">${devs.length}</span>
+                        </div></td>
+                    </tr>`;
+                    if (isExpanded) {
+                        for (const d of devs) {
+                            tableContent += this._renderDeviceRow(d);
+                        }
+                    }
                 }
-                if (d.sshBanner) {
-                    modelParts.push(`<span class="netinv-ssh-badge" title="${this._esc(d.sshBanner)}">SSH</span>`);
-                }
-                if (d.snmpSysName) {
-                    modelParts.push(`<span class="netinv-snmp-name" title="SNMP-Gerätename: ${this._esc(d.snmpSysName)}${d.snmpLocation ? ' | Standort: ' + this._esc(d.snmpLocation) : ''}">${this._esc(d.snmpSysName)}</span>`);
-                }
-                if (d.mdnsServices && d.mdnsServices.length > 0) {
-                    modelParts.push(`<span class="netinv-mdns-badge" title="mDNS: ${this._esc(d.mdnsServices.join(', '))}">${d.mdnsServices.length} Service${d.mdnsServices.length > 1 ? 's' : ''}</span>`);
-                }
-                if (d.identifiedBy) {
-                    modelParts.push(`<span class="netinv-source-badge" title="Erkannt via: ${this._esc(d.identifiedBy)}">${this._esc(d.identifiedBy)}</span>`);
-                }
-                const modelHtml = modelParts.length > 0
-                    ? modelParts.join('')
-                    : '<span style="color:var(--text-muted)">—</span>';
-
-                return `<tr class="network-device-row">
-                    <td class="netinv-col-icon"><span class="netinv-type-dot netinv-type-${this._esc(d.deviceType || 'unknown')}">${typeIcon}</span></td>
-                    <td class="netinv-col-name"><span class="netinv-device-name">${this._esc(name)}${localBadge}</span>${d.hostname ? `<span class="netinv-device-ip">${this._esc(d.ip)}</span>` : ''}</td>
-                    <td class="netinv-col-type">${this._esc(typeLabel)}</td>
-                    <td class="netinv-col-vendor">${this._esc(d.vendor) || '<span style="color:var(--text-muted)">—</span>'}</td>
-                    <td class="netinv-col-model">${modelHtml}</td>
-                    <td class="netinv-col-mac" style="font-family:monospace;font-size:11px">${this._esc(d.mac) || '—'}</td>
-                    <td class="netinv-col-ports">${portBadges}${morePortsHint}</td>
-                    <td class="netinv-col-rtt"><span class="${rttClass}">${d.rtt || 0} ms</span></td>
-                </tr>`;
-            }).join('');
+            } else {
+                // Flache Liste (Originalverhalten)
+                tableContent = filtered.map(d => this._renderDeviceRow(d)).join('');
+            }
 
             return `<div class="network-devices-section">
                 ${toolbar}
@@ -519,7 +524,7 @@ export class NetworkView {
                         <th style="width:11%">Ports</th>
                         <th style="width:50px">Ping</th>
                     </tr></thead>
-                    <tbody>${rows}</tbody>
+                    <tbody>${tableContent}</tbody>
                 </table>
             </div>`;
         }
@@ -551,6 +556,55 @@ export class NetworkView {
                 <tbody>${rows}</tbody>
             </table>
         </div>`;
+    }
+
+    _renderDeviceRow(d) {
+        const portBadges = (d.openPorts || []).slice(0, 4).map(p =>
+            `<span class="network-port-badge">${p.port} <small>${this._esc(p.label)}</small></span>`
+        ).join(' ');
+        const morePortsHint = (d.openPorts || []).length > 4 ? `<span class="network-port-badge">+${d.openPorts.length - 4}</span>` : '';
+        const localBadge = d.isLocal ? ' <span class="network-local-badge">Du</span>' : '';
+        const rttClass = d.rtt < 5 ? 'network-rtt-fast' : d.rtt < 50 ? 'network-rtt-medium' : 'network-rtt-slow';
+        const typeLabel = d.deviceLabel || 'Unbekannt';
+        const typeIcon = this._deviceIcon(d.deviceIcon || 'help-circle');
+        const name = d.hostname || d.ip;
+
+        const modelParts = [];
+        if (d.modelName) {
+            modelParts.push(`<span class="netinv-model-name">${this._esc(d.modelName)}</span>`);
+        }
+        if (d.firmwareVersion) {
+            modelParts.push(`<span class="netinv-fw-badge" title="Firmware: ${this._esc(d.firmwareVersion)}">FW ${this._esc(d.firmwareVersion)}</span>`);
+        }
+        if (d.serialNumber) {
+            modelParts.push(`<span class="netinv-serial" title="Seriennummer: ${this._esc(d.serialNumber)}">S/N ${this._esc(d.serialNumber.length > 12 ? d.serialNumber.substring(0, 12) + '...' : d.serialNumber)}</span>`);
+        }
+        if (d.sshBanner) {
+            modelParts.push(`<span class="netinv-ssh-badge" title="${this._esc(d.sshBanner)}">SSH</span>`);
+        }
+        if (d.snmpSysName) {
+            modelParts.push(`<span class="netinv-snmp-name" title="SNMP-Gerätename: ${this._esc(d.snmpSysName)}${d.snmpLocation ? ' | Standort: ' + this._esc(d.snmpLocation) : ''}">${this._esc(d.snmpSysName)}</span>`);
+        }
+        if (d.mdnsServices && d.mdnsServices.length > 0) {
+            modelParts.push(`<span class="netinv-mdns-badge" title="mDNS: ${this._esc(d.mdnsServices.join(', '))}">${d.mdnsServices.length} Service${d.mdnsServices.length > 1 ? 's' : ''}</span>`);
+        }
+        if (d.identifiedBy) {
+            modelParts.push(`<span class="netinv-source-badge" title="Erkannt via: ${this._esc(d.identifiedBy)}">${this._esc(d.identifiedBy)}</span>`);
+        }
+        const modelHtml = modelParts.length > 0
+            ? modelParts.join('')
+            : '<span style="color:var(--text-muted)">\u2014</span>';
+
+        return `<tr class="network-device-row">
+            <td class="netinv-col-icon"><span class="netinv-type-dot netinv-type-${this._esc(d.deviceType || 'unknown')}">${typeIcon}</span></td>
+            <td class="netinv-col-name"><span class="netinv-device-name">${this._esc(name)}${localBadge}</span>${d.hostname ? `<span class="netinv-device-ip">${this._esc(d.ip)}</span>` : ''}</td>
+            <td class="netinv-col-type">${this._esc(typeLabel)}</td>
+            <td class="netinv-col-vendor">${this._esc(d.vendor) || '<span style="color:var(--text-muted)">\u2014</span>'}</td>
+            <td class="netinv-col-model">${modelHtml}</td>
+            <td class="netinv-col-mac" style="font-family:monospace;font-size:11px">${this._esc(d.mac) || '\u2014'}</td>
+            <td class="netinv-col-ports">${portBadges}${morePortsHint}</td>
+            <td class="netinv-col-rtt"><span class="${rttClass}">${d.rtt || 0} ms</span></td>
+        </tr>`;
     }
 
     _renderBandwidth() {
@@ -780,6 +834,42 @@ export class NetworkView {
                     this._expandedGroups.add(processName);
                 }
                 this.render();
+            };
+        });
+
+        // Gruppierung: Toggle gruppiert/flach
+        const groupToggleBtn = this.container.querySelector('#network-group-toggle');
+        if (groupToggleBtn) {
+            groupToggleBtn.onclick = () => {
+                this._groupByType = !this._groupByType;
+                this.render();
+            };
+        }
+
+        // Gruppierung: Gruppen ein-/ausklappen
+        this.container.querySelectorAll('[data-group-toggle]').forEach(row => {
+            row.onclick = () => {
+                const groupLabel = row.dataset.groupToggle;
+                if (this._collapsedGroups.has(groupLabel)) {
+                    this._collapsedGroups.delete(groupLabel);
+                } else {
+                    this._collapsedGroups.add(groupLabel);
+                }
+                this.render();
+            };
+        });
+
+        // Summary-Badge-Klick: Zur Gruppe scrollen + aufklappen
+        this.container.querySelectorAll('[data-scroll-group]').forEach(badge => {
+            badge.onclick = () => {
+                const groupLabel = badge.dataset.scrollGroup;
+                this._groupByType = true;
+                this._collapsedGroups.delete(groupLabel);
+                this.render();
+                setTimeout(() => {
+                    const header = this.container.querySelector(`[data-group-toggle="${groupLabel}"]`);
+                    if (header) header.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }, 50);
             };
         });
 

@@ -280,7 +280,23 @@ function _extractModelFromBanner(html, serverHeader) {
         const genericWords = /\b(welcome|home|index|login|sign\s*in|configurator|configuration|settings|setup|management|manager|interface|web.?based|web.?interface|web.?ui|dashboard|portal|admin|panel|status|startseite|loading|please\s*wait|error|not\s*found|untitled|access\s*point|firmware\s*upgrade|document)\b/i;
         const genericStart = /^(home|index|welcome|login|startseite|webinterface|status|configuration|settings|setup|sign\s*in|error|not\s*found|untitled|loading|please\s*wait)/i;
         if (genericStart.test(title) || genericWords.test(title)) {
-            // NICHT als Modellname verwenden
+            // Modellname könnte VOR dem generischen Wort stehen:
+            // z.B. "ZyXEL VMG3625-T50B - Login" → "ZyXEL VMG3625-T50B"
+            const beforeGeneric = title
+                .replace(/\s*[-–|:]\s*(login|configurator|configuration|settings|setup|management|dashboard|portal|admin|panel|status|interface|home|welcome|sign\s*in|startseite|webinterface)\b.*$/i, '')
+                .trim();
+            if (beforeGeneric.length > 3 && beforeGeneric.length < title.length) {
+                modelName = beforeGeneric;
+            }
+            // Oder generisches Wort am Anfang: "Login - ZyXEL VMG3625"
+            if (!modelName) {
+                const afterGeneric = title
+                    .replace(/^(login|configurator|configuration|settings|setup|management|dashboard|portal|admin|panel|status|interface|home|welcome|sign\s*in|startseite|webinterface)\s*[-–|:]\s*/i, '')
+                    .trim();
+                if (afterGeneric.length > 3 && afterGeneric.length < title.length) {
+                    modelName = afterGeneric;
+                }
+            }
         } else if (title.length > 2 && title.length < 80) {
             // Wrappers entfernen: "Startseite - FRITZ!Box 7590" → "FRITZ!Box 7590"
             title = title.replace(/^(startseite|home|web\s*interface|status)\s*[-–|:]\s*/i, '');
@@ -289,7 +305,31 @@ function _extractModelFromBanner(html, serverHeader) {
         }
     }
 
-    // 2. Server-Header als Fallback (z.B. "HP-ChaiSOE/1.0" → HP Drucker)
+    // 2. <h1>/<h2> als Fallback (oft Produktname auf Login-Seiten)
+    if (!modelName && html) {
+        const hMatch = html.match(/<h1[^>]*>([^<]{3,80})<\/h1>/i)
+                     || html.match(/<h2[^>]*>([^<]{3,80})<\/h2>/i);
+        if (hMatch) {
+            const heading = hMatch[1].trim();
+            // Nur verwenden wenn es nach Produktname aussieht (Buchstaben+Zahlen)
+            if (/[A-Za-z].*\d|\d.*[A-Za-z]/.test(heading) && heading.length < 60) {
+                modelName = heading;
+            }
+        }
+    }
+
+    // 3. <meta> Tags durchsuchen (description, og:title)
+    if (!modelName && html) {
+        const metaMatch = html.match(/<meta\s+(?:name|property)=["'](?:description|og:title|product)["']\s+content=["']([^"']{3,80})["']/i);
+        if (metaMatch) {
+            const content = metaMatch[1].trim();
+            if (/[A-Za-z].*\d|\d.*[A-Za-z]/.test(content) && content.length < 60) {
+                modelName = content;
+            }
+        }
+    }
+
+    // 4. Server-Header als Fallback (z.B. "HP-ChaiSOE/1.0" → HP Drucker)
     if (!modelName && serverHeader) {
         const serverPatterns = [
             /^(Brother[\w\s-]+)/i,

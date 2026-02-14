@@ -4712,6 +4712,51 @@ textarea::placeholder {
 .netinv-col-ports { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .netinv-col-rtt { text-align: right; white-space: nowrap; font-weight: 500; }
 
+/* Geräte-Gruppierung */
+.netinv-group-header {
+    cursor: pointer;
+    background: var(--bg-secondary);
+    border-bottom: 2px solid var(--border-color);
+    user-select: none;
+    transition: background 0.15s;
+}
+.netinv-group-header:hover { background: var(--bg-tertiary); }
+.netinv-group-header td { padding: 0 !important; }
+.netinv-group-header-inner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+}
+.netinv-group-arrow {
+    font-size: 10px;
+    color: var(--text-muted);
+    width: 14px;
+    display: inline-block;
+    text-align: center;
+    flex-shrink: 0;
+}
+.netinv-group-label {
+    color: var(--text-primary);
+    font-size: 13px;
+}
+.netinv-group-count {
+    display: inline-block;
+    font-size: 10px;
+    padding: 0 6px;
+    min-width: 18px;
+    text-align: center;
+    border-radius: 9px;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    font-weight: 600;
+}
+.netinv-type-badge-clickable { cursor: pointer; transition: background 0.15s, border-color 0.15s; }
+.netinv-type-badge-clickable:hover {
+    background: var(--accent-light, rgba(108, 92, 231, 0.2));
+    border-color: var(--accent, #6c5ce7);
+}
+
 /* Network Monitor: Header Controls */
 .network-header-controls { display: flex; align-items: center; gap: 12px; }
 

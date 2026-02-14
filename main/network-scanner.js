@@ -155,7 +155,7 @@ const PORT_LABELS = {
     21: 'FTP', 22: 'SSH', 23: 'Telnet', 25: 'SMTP', 53: 'DNS', 80: 'HTTP',
     110: 'POP3', 135: 'RPC', 139: 'NetBIOS', 143: 'IMAP', 443: 'HTTPS',
     445: 'SMB', 515: 'LPD', 554: 'RTSP', 631: 'IPP', 1400: 'Sonos',
-    993: 'IMAPS', 995: 'POP3S', 3306: 'MySQL', 3389: 'RDP',
+    993: 'IMAPS', 995: 'POP3S', 3074: 'Xbox Live', 3306: 'MySQL', 3389: 'RDP',
     5000: 'HTTP', 5001: 'HTTPS', 5432: 'PostgreSQL',
     5900: 'VNC', 8080: 'HTTP-Alt', 8443: 'HTTPS-Alt', 9100: 'Drucker',
 };
@@ -295,7 +295,7 @@ async function scanNetworkActive(onProgress) {
     const ipList = onlineDevices.map(d => `'${d.ip}'`).join(',');
     const portScanScript = `
         $ips = @(${ipList})
-        $ports = @(22, 80, 135, 443, 445, 515, 554, 631, 1400, 3389, 5000, 5001, 8080, 9100)
+        $ports = @(22, 80, 135, 443, 445, 515, 554, 631, 1400, 3074, 3389, 5000, 5001, 8080, 9100)
         $results = foreach ($ip in $ips) {
             $openPorts = @()
             foreach ($port in $ports) {
@@ -416,6 +416,22 @@ async function scanNetworkActive(onProgress) {
         log.warn('Geräte-Identifikation fehlgeschlagen:', err.message);
     }
 
+    // Phase 5.6: Lokaler PC — WMI (Hersteller + Modell dynamisch auslesen)
+    let localPCInfo = null;
+    try {
+        if (onProgress) onProgress({ phase: 'identify', current: 0, total: 0, message: 'Lokaler PC wird identifiziert...' });
+        const wmiScript = `
+$cs = Get-CimInstance Win32_ComputerSystem | Select-Object Manufacturer, Model
+[PSCustomObject]@{ Manufacturer = $cs.Manufacturer; Model = $cs.Model } | ConvertTo-Json -Compress
+        `.trim();
+        const { stdout } = await runPS(wmiScript, { timeout: 10000 });
+        if (stdout && stdout.trim() && stdout.trim() !== 'null') {
+            localPCInfo = JSON.parse(stdout.trim());
+        }
+    } catch (err) {
+        log.warn('WMI-Abfrage für lokalen PC fehlgeschlagen:', err.message);
+    }
+
     // Ergebnis zusammenbauen (mit Gerätetyp-Klassifizierung + Modell-Identifikation)
     const devices = onlineDevices.map(d => {
         const macDash = macMap.get(d.ip) || '';
@@ -452,9 +468,64 @@ async function scanNetworkActive(onProgress) {
             d.hostname = identity.mdnsHostname;
         }
 
+        // WMI-Daten für lokalen PC einfügen (dynamisch aus Hardware)
+        if (isLocal && localPCInfo) {
+            if (!identity.modelName && localPCInfo.Model) {
+                identity.modelName = localPCInfo.Model;
+                identity.identifiedBy = (identity.identifiedBy ? identity.identifiedBy + '+wmi' : 'wmi');
+            }
+        }
+
+        // Hostname-basierte Modellerkennung (Gerät benennt sich selbst via DNS/mDNS)
+        if (!identity.modelName && d.hostname) {
+            const hn = (d.hostname || '').replace(/\.local\.?$/, '').replace(/\.galaxus\.box$/, '');
+            if (/^xbox/i.test(hn)) {
+                identity.modelName = 'Xbox Konsole';
+                identity.identifiedBy = (identity.identifiedBy ? identity.identifiedBy + '+hostname' : 'hostname');
+            } else if (/^playstation|^ps[45]/i.test(hn)) {
+                identity.modelName = 'PlayStation Konsole';
+                identity.identifiedBy = (identity.identifiedBy ? identity.identifiedBy + '+hostname' : 'hostname');
+            } else if (/^(iphone|ipad|macbook|imac)/i.test(hn)) {
+                identity.modelName = hn.replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                identity.identifiedBy = (identity.identifiedBy ? identity.identifiedBy + '+hostname' : 'hostname');
+            }
+        }
+
+        // Synthetische Beschreibung als letzter Ausweg (kein statisches Mapping!)
+        // Nutzt nur Daten die das Gerät selbst liefert: Vendor, Ports, OS, SNMP sysName
+        if (!identity.modelName) {
+            const synParts = [];
+            // SNMP sysName als Modellname-Ersatz (Gerät hat sich selbst so konfiguriert)
+            if (snmpData.sysName && snmpData.sysName.length > 2) {
+                identity.modelName = snmpData.sysName;
+                identity.identifiedBy = (identity.identifiedBy ? identity.identifiedBy + '+sysname' : 'sysname');
+            } else {
+                // Port-Profil-basiert (dynamisch aus offenen Ports)
+                const portNums = ports;
+                if (portNums.includes(515) || portNums.includes(9100)) synParts.push('Netzwerkdrucker');
+                else if (portNums.includes(554) || portNums.includes(8554)) synParts.push('Kamera');
+                else if (portNums.includes(1400)) synParts.push('Mediengerät');
+                else if (portNums.includes(5000) || portNums.includes(5001)) synParts.push('NAS');
+                else if (portNums.includes(3074)) synParts.push('Spielkonsole');
+                else if (portNums.includes(3389)) synParts.push('Windows-PC');
+                else if (portNums.includes(22)) synParts.push(os || 'Gerät');
+                else if (portNums.includes(80) || portNums.includes(443)) synParts.push('Gerät mit Web-Interface');
+                else if (os) synParts.push(`${os}-Gerät`);
+                else synParts.push('Netzwerkgerät');
+
+                if (synParts.length > 0) {
+                    identity.modelName = synParts[0];
+                    identity.identifiedBy = (identity.identifiedBy ? identity.identifiedBy + '+synth' : 'synth');
+                }
+            }
+        }
+
+        // Vendor-Enrichment: Lokaler PC bekommt WMI-Hersteller wenn MAC-Vendor fehlt
+        const finalVendor = vendor || (isLocal && localPCInfo && localPCInfo.Manufacturer ? localPCInfo.Manufacturer : '');
+
         // Gerätetyp-Erkennung: Identity (Verhalten) VOR Hersteller (Name)
         const deviceType = classifyDevice({
-            vendor, openPorts, os, hostname: d.hostname || '', ttl: d.ttl || 0, isLocal, isGateway,
+            vendor: finalVendor, openPorts, os, hostname: d.hostname || '', ttl: d.ttl || 0, isLocal, isGateway,
             identity, // UPnP/HTTP/IPP/SNMP Ergebnisse — das Gerät sagt was es IST
         });
 
@@ -462,7 +533,7 @@ async function scanNetworkActive(onProgress) {
             ip: d.ip,
             hostname: d.hostname || '',
             mac,
-            vendor,
+            vendor: finalVendor,
             os,
             ttl: d.ttl || 0,
             rtt: d.rtt || 0,
