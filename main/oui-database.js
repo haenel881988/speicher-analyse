@@ -480,7 +480,11 @@ function classifyDevice(device) {
         return _typeToResult('printer', vendor);
     }
     // Port 515 (LPD) = NICHT drucker-exklusiv! Wird auch von IoT/Embedded/Industriegeräten verwendet.
-    // Nur als Drucker werten wenn zusätzlich ein Drucker-Vendor erkannt wurde (Abschnitt 4 → VENDOR_PATTERNS)
+    // Nur als Drucker werten wenn ZUSÄTZLICH ein reiner Drucker-Vendor erkannt wurde.
+    const printerVendors = /brother|kyocera|lexmark|konica\s*minolta|ricoh|xerox|hp\b|hewlett/i;
+    if (ports.has(515) && printerVendors.test(vendor)) {
+        return _typeToResult('printer', vendor);
+    }
     // Port 5000/5001 nur als NAS wenn reiner NAS-Vendor ODER beide Ports offen
     // Nur Synology + QNAP (reine NAS-Hersteller). Buffalo/WD/Seagate = Multi-Produkt → entfernt.
     const nasVendors = /synology|qnap/i;
@@ -495,10 +499,14 @@ function classifyDevice(device) {
 
     // 3. HOSTNAME-BASIERT (VOR Vendor und OS — Hostnamen sind oft aussagekräftiger)
     const hn = hostname.toLowerCase();
-    if (/^hp[0-9a-f]{6}/i.test(hostname) || hn.includes('printer') || hn.includes('drucker') || hn.includes('brn') || hn.includes('laserjet') || hn.includes('officejet') || hn.includes('deskjet')) {
+    // Drucker-Hostnamen: "brn" = Brother Network Printer Prefix (BRN + MAC).
+    // Wortgrenze bei 'brn' damit "auburn-pc" nicht matcht. "printer"/"drucker" sind eindeutig genug.
+    if (/^hp[0-9a-f]{6}/i.test(hostname) || hn.includes('printer') || hn.includes('drucker') || /^brn[0-9a-f]/i.test(hostname) || hn.includes('laserjet') || hn.includes('officejet') || hn.includes('deskjet')) {
         return _typeToResult('printer', vendor);
     }
-    if (hn.includes('nas') || hn.includes('diskstation') || hn.includes('qnap') || hn.includes('synology')) {
+    // NAS-Hostnamen: Wortgrenze bei 'nas' damit "gymnasium", "nasty-pc", "dynasty" nicht matchen.
+    // "diskstation", "qnap", "synology" sind spezifisch genug für includes().
+    if (/\bnas\b/i.test(hn) || /[-_.]nas$/i.test(hn) || /^nas[-_.]/i.test(hn) || hn.includes('diskstation') || hn.includes('qnap') || hn.includes('synology')) {
         return _typeToResult('nas', vendor);
     }
     // Kamera-Hostnamen: NICHT 'cam' als Substring (matched "cambridge", "cameron")!
@@ -547,7 +555,13 @@ function classifyDevice(device) {
     }
 
     // 6. OS + Port Kombinationen
-    if (os === 'Windows' || ports.has(135) || ports.has(3389) || ports.has(445)) {
+    // Windows-Erkennung: Port 135 (RPC) und 3389 (RDP) sind Windows-exklusiv.
+    // Port 445 (SMB) ist NICHT Windows-exklusiv — NAS-Geräte (Buffalo, WD, Samba) haben auch SMB.
+    // Daher: Port 445 nur als Windows werten wenn ZUSÄTZLICH Port 135 oder 3389 offen ist.
+    // Port 135 (RPC) und 3389 (RDP) sind Windows-exklusiv → sicheres Signal.
+    // Port 445 (SMB) allein reicht NICHT → NAS/Samba-Geräte haben auch SMB.
+    const isWindows = os === 'Windows' || ports.has(135) || ports.has(3389);
+    if (isWindows) {
         if (ports.has(80) && ports.has(443) && ports.size > 4) {
             return { type: 'server', label: 'Windows Server', icon: 'server' };
         }
