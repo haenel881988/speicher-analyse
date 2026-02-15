@@ -43,7 +43,7 @@ export class NetworkView {
         this._dnsExpanded = false;          // DNS-Cache aufgeklappt?
         this._dnsCache = [];                // DNS-Cache-Daten
         this._wifiInfo = null;              // WiFi-Infos
-        this._detailLevel = 'erweitert';    // Drei-Stufen: basis | erweitert | experte
+        this._detailLevel = 'normal';        // Zwei-Stufen: normal | experte
         this._loadDetailLevel();
         this._setupScanProgressListener();
     }
@@ -53,8 +53,11 @@ export class NetworkView {
             if (window.api.getPreferences) {
                 const prefs = await window.api.getPreferences();
                 const level = prefs?.networkDetailLevel;
-                if (level && ['basis', 'erweitert', 'experte'].includes(level)) {
-                    this._detailLevel = level;
+                // Migration: alte Werte 'basis'/'erweitert' → 'normal'
+                if (level === 'experte') {
+                    this._detailLevel = 'experte';
+                } else {
+                    this._detailLevel = 'normal';
                 }
             }
         } catch { /* Default beibehalten */ }
@@ -222,9 +225,8 @@ export class NetworkView {
                     <h2>Netzwerk-Monitor</h2>
                     <div class="network-header-controls">
                         <div class="network-tier-toggle">
-                            <button class="network-tier-btn ${this._detailLevel === 'basis' ? 'active' : ''}" data-tier-level="basis" title="Einfache Übersicht">Basis</button>
-                            <button class="network-tier-btn ${this._detailLevel === 'erweitert' ? 'active' : ''}" data-tier-level="erweitert" title="Standard-Ansicht">Erweitert</button>
-                            <button class="network-tier-btn ${this._detailLevel === 'experte' ? 'active' : ''}" data-tier-level="experte" title="Alle Details">Experte</button>
+                            <button class="network-tier-btn ${this._detailLevel === 'normal' ? 'active' : ''}" data-tier-level="normal" title="Standard-Ansicht">Normal</button>
+                            <button class="network-tier-btn ${this._detailLevel === 'experte' ? 'active' : ''}" data-tier-level="experte" title="Alle Details inkl. UDP, DNS, Firewall">Experte</button>
                         </div>
                         <button class="network-btn" id="network-refresh" title="Netzwerkdaten neu laden">&#8635; Aktualisieren</button>
                         ${timeStr ? `<span class="network-timestamp">Stand: ${timeStr}</span>` : ''}
@@ -233,7 +235,7 @@ export class NetworkView {
                 </div>
                 <div class="network-tabs">
                     <button class="network-tab ${this.activeSubTab === 'connections' ? 'active' : ''}" data-subtab="connections">Verbindungen <span class="network-tab-count">${s.totalConnections || 0}</span></button>
-                    <button class="network-tab ${this.activeSubTab === 'livefeed' ? 'active' : ''}" data-subtab="livefeed" data-tier="erweitert">Live-Feed</button>
+                    <button class="network-tab ${this.activeSubTab === 'livefeed' ? 'active' : ''}" data-subtab="livefeed">Live-Feed</button>
                     <button class="network-tab ${this.activeSubTab === 'devices' ? 'active' : ''}" data-subtab="devices">Lokale Geräte${devCount > 0 ? ` <span class="network-tab-count">${devCount}</span>` : ''}</button>
                 </div>
                 ${showToolbar ? `<div class="network-toolbar">
@@ -386,9 +388,9 @@ export class NetworkView {
                         <strong class="network-group-name">${this._esc(g.processName)}</strong>
                         <span class="network-group-badge">${g.connectionCount}</span>
                         <span class="network-group-ips"${companyTooltip ? ` title="${this._esc(companyTooltip)}"` : ''}>${g.uniqueIPCount} IP${g.uniqueIPCount !== 1 ? 's' : ''}${companySummary ? ' (' + this._esc(companySummary) + ')' : ''}</span>
-                        ${g.hasTrackers ? '<span class="network-tracker-badge" data-tier="erweitert">Tracker</span>' : ''}
-                        ${g.hasHighRisk ? '<span class="network-highrisk-badge" data-tier="erweitert">&#9888; Hochrisiko</span>' : ''}
-                        <span class="network-group-states" data-tier="erweitert">
+                        ${g.hasTrackers ? '<span class="network-tracker-badge">Tracker</span>' : ''}
+                        ${g.hasHighRisk ? '<span class="network-highrisk-badge">&#9888; Hochrisiko</span>' : ''}
+                        <span class="network-group-states">
                             ${Object.entries(g.states).map(([state, count]) => {
                                 const cls = state === 'Established' ? 'pill-established' : state === 'Listen' ? 'pill-listen' : (state === 'TimeWait' || state === 'CloseWait') ? 'pill-closing' : '';
                                 return `<span class="network-state-pill ${cls}">${state}: ${count}</span>`;
@@ -445,7 +447,7 @@ export class NetworkView {
             </tr>`;
         }
 
-        return `<div class="network-group-detail" data-tier="erweitert">
+        return `<div class="network-group-detail">
             <table class="network-table">
                 <thead><tr>
                     <th>Remote-IP</th>
@@ -739,7 +741,7 @@ export class NetworkView {
                 return `<div class="network-adapter-card ${isDown ? 'network-adapter-down' : ''}">
                     <div class="network-adapter-name">${this._esc(b.name)}</div>
                     <div class="network-adapter-desc">${this._esc(b.description || '')}${linkLabel !== '\u2014' ? ` \u2014 ${linkLabel}` : ''}</div>
-                    ${hasHistory ? `<div class="network-sparkline-container" data-tier="erweitert"><canvas class="network-sparkline" data-adapter="${this._esc(b.name)}"></canvas></div>` : ''}
+                    ${hasHistory ? `<div class="network-sparkline-container"><canvas class="network-sparkline" data-adapter="${this._esc(b.name)}"></canvas></div>` : ''}
                     <div class="network-adapter-stats">
                         <div class="network-adapter-stat">
                             <span class="network-stat-label">\u2193 Empfangen</span>
@@ -769,7 +771,7 @@ export class NetworkView {
         const pct = w.signalPercent || 0;
         const sigColor = pct >= 60 ? 'var(--success, #22c55e)' : pct >= 30 ? 'var(--warning, #f59e0b)' : 'var(--danger, #ef4444)';
         const sigWidth = Math.max(5, pct);
-        return `<div class="network-wifi-details" data-tier="erweitert">
+        return `<div class="network-wifi-details">
             <h4 class="network-section-title">WLAN-Details</h4>
             <div class="network-wifi-grid">
                 <div class="network-wifi-signal">

@@ -4573,15 +4573,13 @@ textarea::placeholder {
 .network-dns-table td { padding: 3px 8px; border-bottom: 1px solid var(--border-color-light, rgba(255,255,255,0.04)); }
 .network-dns-table tbody tr:hover { background: var(--bg-tertiary, rgba(255,255,255,0.03)); }
 .network-dns-table-wrap { max-height: 400px; overflow-y: auto; }
-/* Drei-Stufen-UI: Tier-Toggle */
+/* Zwei-Stufen-UI: Normal / Experte */
 .network-tier-toggle { display: inline-flex; border: 1px solid var(--border-color); border-radius: 6px; overflow: hidden; margin-right: 8px; }
 .network-tier-btn { background: transparent; border: none; color: var(--text-secondary); font-size: 11px; padding: 4px 10px; cursor: pointer; transition: background 0.15s, color 0.15s; }
 .network-tier-btn:hover { background: var(--bg-tertiary, rgba(255,255,255,0.05)); color: var(--text-primary); }
 .network-tier-btn.active { background: var(--accent); color: #fff; font-weight: 600; }
-/* Tier-basierte Sichtbarkeit */
-.network-tier-basis [data-tier="erweitert"],
-.network-tier-basis [data-tier="experte"] { display: none !important; }
-.network-tier-erweitert [data-tier="experte"] { display: none !important; }
+/* Normal-Modus: Experten-Elemente ausblenden */
+.network-tier-normal [data-tier="experte"] { display: none !important; }
 .network-adapter-speed { font-size: 11px; color: var(--accent-text); margin-bottom: 10px; }
 .network-adapter-stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
 .network-adapter-stat { text-align: center; }
