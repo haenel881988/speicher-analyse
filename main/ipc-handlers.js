@@ -991,6 +991,11 @@ function register(mainWindow) {
         return network.getPollingData();
     });
 
+    ipcMain.handle('get-connection-diff', async () => {
+        const network = require('./network');
+        return network.getConnectionDiff();
+    });
+
     ipcMain.handle('save-network-snapshot', async (_event, pollingData) => {
         const history = require('./network-history');
         return history.saveSnapshot(pollingData);

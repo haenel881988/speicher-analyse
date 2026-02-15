@@ -834,6 +834,98 @@ async function getPollingData() {
     }
 }
 
+// ---------------------------------------------------------------------------
+// 10) getConnectionDiff – Verbindungsänderungen seit letztem Aufruf
+//     Vergleicht aktuelle Verbindungen mit vorherigem Snapshot und liefert
+//     NEU/GESCHLOSSEN/GEÄNDERT-Events für den Live-Feed.
+// ---------------------------------------------------------------------------
+let _prevConnections = null; // Map: key → { processName, remoteAddress, remotePort, state, localPort }
+
+function _connKey(c) {
+    return `${c.processName || ''}:${c.remoteAddress || ''}:${c.remotePort || 0}:${c.localPort || 0}`;
+}
+
+async function getConnectionDiff() {
+    const connections = await getConnections();
+    const now = new Date().toISOString();
+    const events = [];
+
+    // Aktuelle Verbindungen als Map aufbauen
+    const currentMap = new Map();
+    for (const c of connections) {
+        const key = _connKey(c);
+        // Bei Duplikaten (gleicher Key) den mit höherem State vorziehen
+        if (!currentMap.has(key) || c.state === 'Established') {
+            currentMap.set(key, c);
+        }
+    }
+
+    if (_prevConnections) {
+        // Neue Verbindungen (in current, nicht in prev)
+        for (const [key, c] of currentMap) {
+            if (!_prevConnections.has(key)) {
+                const cached = _ipCache.get(c.remoteAddress);
+                events.push({
+                    timestamp: now,
+                    type: 'NEU',
+                    processName: c.processName || 'System',
+                    remoteAddress: c.remoteAddress,
+                    remotePort: c.remotePort,
+                    localPort: c.localPort,
+                    state: c.state,
+                    org: cached?.org || '',
+                    country: cached?.countryCode || '',
+                    isTracker: cached?.isTracker || false,
+                    isHighRisk: cached?.isHighRisk || false,
+                });
+            } else {
+                // State-Änderungen prüfen
+                const prev = _prevConnections.get(key);
+                if (prev.state !== c.state) {
+                    const cached = _ipCache.get(c.remoteAddress);
+                    events.push({
+                        timestamp: now,
+                        type: 'GEÄNDERT',
+                        processName: c.processName || 'System',
+                        remoteAddress: c.remoteAddress,
+                        remotePort: c.remotePort,
+                        localPort: c.localPort,
+                        state: c.state,
+                        prevState: prev.state,
+                        org: cached?.org || '',
+                        country: cached?.countryCode || '',
+                        isTracker: cached?.isTracker || false,
+                        isHighRisk: cached?.isHighRisk || false,
+                    });
+                }
+            }
+        }
+
+        // Geschlossene Verbindungen (in prev, nicht in current)
+        for (const [key, c] of _prevConnections) {
+            if (!currentMap.has(key)) {
+                const cached = _ipCache.get(c.remoteAddress);
+                events.push({
+                    timestamp: now,
+                    type: 'GESCHLOSSEN',
+                    processName: c.processName || 'System',
+                    remoteAddress: c.remoteAddress,
+                    remotePort: c.remotePort,
+                    localPort: c.localPort,
+                    state: c.state,
+                    org: cached?.org || '',
+                    country: cached?.countryCode || '',
+                    isTracker: cached?.isTracker || false,
+                    isHighRisk: cached?.isHighRisk || false,
+                });
+            }
+        }
+    }
+
+    _prevConnections = currentMap;
+    return { events, totalConnections: connections.length };
+}
+
 module.exports = {
     getConnections,
     getBandwidth,
@@ -843,6 +935,7 @@ module.exports = {
     getNetworkSummary,
     getGroupedConnections,
     getPollingData,
+    getConnectionDiff,
     resolveIPs,
     lookupIPs,
 };

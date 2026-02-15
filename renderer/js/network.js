@@ -29,6 +29,9 @@ export class NetworkView {
         this._deviceFilter = '';
         this._groupByType = true;          // Default: gruppierte Ansicht
         this._collapsedGroups = new Set();  // Eingeklappte Gerätetyp-Gruppen
+        this._feedEvents = [];              // Live-Feed: Rolling-Buffer (max 500)
+        this._feedPollInterval = null;      // Separates Polling für Connection-Diff
+        this._feedPaused = false;           // Auto-Scroll pausiert wenn User scrollt
         this._setupScanProgressListener();
     }
 
@@ -65,16 +68,21 @@ export class NetworkView {
         await this.refresh();
     }
 
-    /** Aktiviert Auto-Live (Bandwidth-Polling) wenn der Netzwerk-Tab sichtbar wird. */
+    /** Aktiviert Auto-Live (Bandwidth-Polling + Feed-Polling) wenn der Netzwerk-Tab sichtbar wird. */
     activate() {
         if (!this._loaded) return;
         this.startPolling(5000);
         this._pollBandwidth();
+        // Live-Feed-Polling starten wenn auf dem Feed-Tab
+        if (this.activeSubTab === 'livefeed') {
+            this._startFeedPolling();
+        }
     }
 
     /** Stoppt Auto-Live wenn der User den Netzwerk-Tab verlässt. */
     deactivate() {
         this.stopPolling();
+        this._stopFeedPolling();
     }
 
     async refresh(usePollingEndpoint = false) {
@@ -750,17 +758,112 @@ export class NetworkView {
 
     /**
      * Live-Feed Tab — Echtzeit-Verbindungsstream (Wireshark-light).
-     * Platzhalter für Phase 3 (wird mit Connection-Diff vom Backend befüllt).
+     * Zeigt neue, geschlossene und geänderte Verbindungen in Echtzeit.
      */
     _renderLiveFeed() {
+        const eventRows = this._feedEvents.map(e => {
+            const typeClass = e.type === 'NEU' ? 'network-feed-new' :
+                              e.type === 'GESCHLOSSEN' ? 'network-feed-closed' :
+                              'network-feed-changed';
+            const typeLabel = e.type === 'NEU' ? '+ NEU' :
+                              e.type === 'GESCHLOSSEN' ? '- GESCHL.' :
+                              '\u2194 GEÄND.';
+            const flag = this._countryFlag(e.country);
+            const time = e.timestamp ? new Date(e.timestamp).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '';
+            const port = e.remotePort || '';
+            const protocol = this._portToProtocol(e.remotePort);
+            const riskClass = e.isHighRisk ? 'network-feed-risk' : e.isTracker ? 'network-feed-tracker' : '';
+
+            return `<tr class="${typeClass} ${riskClass}">
+                <td class="network-feed-time">${time}</td>
+                <td class="network-feed-type"><span class="network-feed-badge ${typeClass}-badge">${typeLabel}</span></td>
+                <td class="network-feed-proc">${this._esc(e.processName)}</td>
+                <td class="network-feed-ip" title="${this._esc(e.remoteAddress)}">${this._esc(e.remoteAddress)}</td>
+                <td class="network-feed-port">${port}${protocol ? ` <span class="network-feed-proto">${protocol}</span>` : ''}</td>
+                <td class="network-feed-org">${flag ? flag + ' ' : ''}${this._esc(e.org || '')}${e.isTracker ? ' \u{1f441}' : ''}${e.isHighRisk ? ' \u26a0' : ''}</td>
+                <td class="network-feed-state">${this._esc(e.state)}${e.prevState ? ` \u2190 ${e.prevState}` : ''}</td>
+            </tr>`;
+        }).join('');
+
+        const eventCount = this._feedEvents.length;
+        const newCount = this._feedEvents.filter(e => e.type === 'NEU').length;
+        const closedCount = this._feedEvents.filter(e => e.type === 'GESCHLOSSEN').length;
+
         return `<div class="network-livefeed">
-            <div class="network-livefeed-placeholder" style="padding:32px;text-align:center;color:var(--text-secondary)">
-                <div style="font-size:32px;margin-bottom:12px">\u{1f4e1}</div>
-                <h3 style="margin:0 0 8px;color:var(--text-primary)">Live-Feed</h3>
-                <p style="margin:0">Echtzeit-Verbindungsstream — wird in der nächsten Version implementiert.</p>
-                <p style="margin:8px 0 0;font-size:12px;color:var(--text-muted)">Neue Verbindungen erscheinen hier in Echtzeit, ähnlich wie in Wireshark.</p>
+            <div class="network-livefeed-header">
+                <div class="network-livefeed-stats">
+                    <span>${eventCount} Ereignisse</span>
+                    <span class="network-feed-stat-new">+${newCount} neu</span>
+                    <span class="network-feed-stat-closed">-${closedCount} geschlossen</span>
+                </div>
+                <div class="network-livefeed-controls">
+                    <button class="network-btn network-btn-small" id="network-feed-clear">Leeren</button>
+                    <button class="network-btn network-btn-small" id="network-feed-pause">${this._feedPaused ? '\u25b6 Fortsetzen' : '\u23f8 Pause'}</button>
+                </div>
             </div>
+            ${eventCount === 0 ? `
+                <div class="network-livefeed-empty">
+                    <div style="font-size:24px;margin-bottom:8px">\u{1f4e1}</div>
+                    <p>Warte auf Verbindungsänderungen...</p>
+                    <p style="font-size:12px;color:var(--text-muted)">Neue, geschlossene und geänderte TCP-Verbindungen erscheinen hier in Echtzeit.</p>
+                </div>
+            ` : `
+                <div class="network-livefeed-table-wrap" id="network-feed-scroll">
+                    <table class="network-livefeed-table">
+                        <thead><tr>
+                            <th>Zeit</th>
+                            <th>Typ</th>
+                            <th>Prozess</th>
+                            <th>Remote-IP</th>
+                            <th>Port</th>
+                            <th>Firma</th>
+                            <th>Status</th>
+                        </tr></thead>
+                        <tbody>${eventRows}</tbody>
+                    </table>
+                </div>
+            `}
         </div>`;
+    }
+
+    /** Wandelt bekannte Ports in Protokoll-Kürzel um. */
+    _portToProtocol(port) {
+        const map = { 80: 'HTTP', 443: 'HTTPS', 22: 'SSH', 21: 'FTP', 53: 'DNS', 25: 'SMTP', 110: 'POP3', 143: 'IMAP', 993: 'IMAPS', 3389: 'RDP', 5900: 'VNC', 8080: 'HTTP', 8443: 'HTTPS', 3306: 'MySQL', 5432: 'PgSQL', 27017: 'MongoDB', 6379: 'Redis' };
+        return map[port] || '';
+    }
+
+    /** Startet Connection-Diff-Polling für den Live-Feed Tab. */
+    _startFeedPolling() {
+        this._stopFeedPolling();
+        // Sofort ersten Diff holen
+        this._pollConnectionDiff();
+        this._feedPollInterval = setInterval(() => this._pollConnectionDiff(), 3000);
+    }
+
+    /** Stoppt Connection-Diff-Polling. */
+    _stopFeedPolling() {
+        if (this._feedPollInterval) {
+            clearInterval(this._feedPollInterval);
+            this._feedPollInterval = null;
+        }
+    }
+
+    /** Holt Connection-Diff vom Backend und hängt Events an den Feed an. */
+    async _pollConnectionDiff() {
+        if (this._feedPaused) return;
+        try {
+            const diff = await window.api.getConnectionDiff();
+            if (diff.events && diff.events.length > 0) {
+                // Neue Events vorn einfügen (neuste zuerst)
+                this._feedEvents = [...diff.events, ...this._feedEvents].slice(0, 500);
+                // Nur Feed-Bereich aktualisieren wenn auf dem Live-Feed Tab
+                if (this.activeSubTab === 'livefeed') {
+                    this.render();
+                }
+            }
+        } catch (err) {
+            console.error('Connection-Diff Fehler:', err);
+        }
     }
 
     _renderHistory() {
@@ -875,7 +978,14 @@ export class NetworkView {
         // Sub-tabs
         this.container.querySelectorAll('.network-tab').forEach(tab => {
             tab.onclick = async () => {
+                const prevSubTab = this.activeSubTab;
                 this.activeSubTab = tab.dataset.subtab;
+                // Feed-Polling starten/stoppen je nach Sub-Tab
+                if (tab.dataset.subtab === 'livefeed' && prevSubTab !== 'livefeed') {
+                    this._startFeedPolling();
+                } else if (tab.dataset.subtab !== 'livefeed' && prevSubTab === 'livefeed') {
+                    this._stopFeedPolling();
+                }
                 this.render();
             };
         });
@@ -899,7 +1009,21 @@ export class NetworkView {
             };
         }
 
-        // Auto-Live: kein manueller Toggle mehr — Polling wird durch activate()/deactivate() gesteuert
+        // Live-Feed Buttons
+        const feedClearBtn = this.container.querySelector('#network-feed-clear');
+        if (feedClearBtn) {
+            feedClearBtn.onclick = () => {
+                this._feedEvents = [];
+                this.render();
+            };
+        }
+        const feedPauseBtn = this.container.querySelector('#network-feed-pause');
+        if (feedPauseBtn) {
+            feedPauseBtn.onclick = () => {
+                this._feedPaused = !this._feedPaused;
+                this.render();
+            };
+        }
 
         // Group toggle (aufklappen/zuklappen)
         this.container.querySelectorAll('[data-toggle]').forEach(header => {

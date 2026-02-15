@@ -243,6 +243,7 @@ contextBridge.exposeInMainWorld('api', {
     getGroupedConnections: () => ipcRenderer.invoke('get-grouped-connections'),
     resolveIPs: (ipAddresses) => ipcRenderer.invoke('resolve-ips', ipAddresses),
     getPollingData: () => ipcRenderer.invoke('get-polling-data'),
+    getConnectionDiff: () => ipcRenderer.invoke('get-connection-diff'),
     saveNetworkSnapshot: (data) => ipcRenderer.invoke('save-network-snapshot', data),
     getNetworkHistory: () => ipcRenderer.invoke('get-network-history'),
     clearNetworkHistory: () => ipcRenderer.invoke('clear-network-history'),
