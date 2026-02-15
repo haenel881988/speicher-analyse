@@ -218,6 +218,7 @@ async function scanNetworkActive(onProgress) {
     if (onProgress) onProgress({ phase: 'ping', current: 0, total: 254, message: `Scanne ${subnetInfo.subnet}.0/24...` });
 
     // Phase 2: Ping Sweep (.NET async — kompatibel mit PowerShell 5.1 UND 7)
+    // DNS-Auflösung ebenfalls parallel (GetHostEntryAsync) statt sequenziell
     const pingSweepScript = `
         $subnet = '${subnetInfo.subnet}'
         $timeout = 1000
@@ -228,23 +229,28 @@ async function scanNetworkActive(onProgress) {
             $tasks[$ip] = $ping.SendPingAsync($ip, $timeout)
         }
         try { [System.Threading.Tasks.Task]::WaitAll($tasks.Values) } catch {}
-        $online = @()
+        $onlineIPs = [System.Collections.Generic.List[hashtable]]::new()
         foreach ($kv in $tasks.GetEnumerator()) {
             $t = $kv.Value
             if ($t.Status -eq 'RanToCompletion' -and $t.Result.Status -eq 'Success') {
                 $r = $t.Result
-                $hostname = ''
-                try {
-                    $dns = [System.Net.Dns]::GetHostEntry($kv.Key)
-                    if ($dns.HostName -and $dns.HostName -ne $kv.Key) { $hostname = $dns.HostName }
-                } catch {}
-                $online += [PSCustomObject]@{
-                    ip = $kv.Key
-                    ttl = $r.Options.Ttl
-                    rtt = $r.RoundtripTime
-                    hostname = $hostname
-                }
+                $onlineIPs.Add(@{ ip=$kv.Key; ttl=$r.Options.Ttl; rtt=$r.RoundtripTime })
             }
+        }
+        $dnsTasks = @{}
+        foreach ($d in $onlineIPs) {
+            $dnsTasks[$d.ip] = [System.Net.Dns]::GetHostEntryAsync($d.ip)
+        }
+        try { [System.Threading.Tasks.Task]::WaitAll([System.Threading.Tasks.Task[]]@($dnsTasks.Values), 10000) } catch {}
+        $online = foreach ($d in $onlineIPs) {
+            $hostname = ''
+            $dt = $dnsTasks[$d.ip]
+            if ($dt.Status -eq 'RanToCompletion') {
+                try {
+                    if ($dt.Result.HostName -and $dt.Result.HostName -ne $d.ip) { $hostname = $dt.Result.HostName }
+                } catch {}
+            }
+            [PSCustomObject]@{ ip=$d.ip; ttl=$d.ttl; rtt=$d.rtt; hostname=$hostname }
         }
         @($online) | Sort-Object { [version]$_.ip } | ConvertTo-Json -Compress
     `.trim();
@@ -317,31 +323,42 @@ async function scanNetworkActive(onProgress) {
     if (onProgress) onProgress({ phase: 'ports', current: 0, total: onlineDevices.length, message: `${onlineDevices.length} Geräte gefunden, scanne Ports...` });
 
     const ipList = onlineDevices.map(d => `'${d.ip}'`).join(',');
+    // PARALLEL Port-Scan: Alle TCP-Connects gleichzeitig starten, dann warten.
+    // Vorher: foreach IP → foreach Port (sequenziell) = N×18×500ms = sehr langsam.
+    // Jetzt: Alle ConnectAsync gleichzeitig, WaitAll mit globalem Timeout.
     const portScanScript = `
         $ips = @(${ipList})
         $ports = @(22, 80, 135, 443, 445, 515, 554, 631, 1400, 3074, 3389, 5000, 5001, 5900, 8080, 8554, 9100, 37777)
-        $results = foreach ($ip in $ips) {
-            $openPorts = @()
+        $timeoutMs = 3000
+        $connections = [System.Collections.Generic.List[object]]::new()
+        foreach ($ip in $ips) {
             foreach ($port in $ports) {
-                try {
-                    $tcp = New-Object System.Net.Sockets.TcpClient
-                    $ar = $tcp.BeginConnect($ip, $port, $null, $null)
-                    $wait = $ar.AsyncWaitHandle.WaitOne(500)
-                    if ($wait -and $tcp.Connected) { $openPorts += $port }
-                    $tcp.Close()
-                } catch {}
+                $tcp = New-Object System.Net.Sockets.TcpClient
+                $connections.Add(@{ ip=$ip; port=$port; tcp=$tcp; task=$tcp.ConnectAsync($ip, $port) })
             }
-            [PSCustomObject]@{ ip=$ip; ports=($openPorts -join ',') }
+        }
+        $allTasks = [System.Threading.Tasks.Task[]]@($connections | ForEach-Object { $_.task })
+        try { [System.Threading.Tasks.Task]::WaitAll($allTasks, $timeoutMs) } catch {}
+        $openMap = @{}
+        foreach ($c in $connections) {
+            if ($c.task.Status -eq 'RanToCompletion' -and $c.tcp.Connected) {
+                if (-not $openMap[$c.ip]) { $openMap[$c.ip] = [System.Collections.Generic.List[int]]::new() }
+                $openMap[$c.ip].Add($c.port)
+            }
+            try { $c.tcp.Close() } catch {}
+            try { $c.tcp.Dispose() } catch {}
+        }
+        $results = foreach ($ip in $ips) {
+            [PSCustomObject]@{ ip=$ip; ports=if($openMap[$ip]){($openMap[$ip] -join ',')}else{''} }
         }
         @($results) | ConvertTo-Json -Compress
     `.trim();
 
     const portMap = new Map(); // IP → number[] (offene Ports)
     try {
-        // Timeout: 13 Ports × 500ms × Anzahl Geräte + 20s Puffer
-        const portsCount = 18;  // Muss mit $ports Array übereinstimmen
-        const timeout = Math.min(Math.max(90000, onlineDevices.length * portsCount * 600 + 20000), 300000);
-        log.info(`Port Scan: ${onlineDevices.length} Geräte × ${portsCount} Ports, Timeout: ${Math.round(timeout / 1000)}s`);
+        // Parallel: Alle Connects gleichzeitig, 3s LAN-Timeout + PS-Overhead
+        const timeout = Math.min(Math.max(30000, onlineDevices.length * 500 + 20000), 90000);
+        log.info(`Port Scan (parallel): ${onlineDevices.length} Geräte × 18 Ports, Timeout: ${Math.round(timeout / 1000)}s`);
         const { stdout } = await runPS(portScanScript, { timeout, maxBuffer: 5 * 1024 * 1024 });
         if (stdout && stdout.trim() && stdout.trim() !== 'null') {
             const raw = JSON.parse(stdout.trim());
@@ -367,23 +384,41 @@ async function scanNetworkActive(onProgress) {
         const smbIpList = smbDevices.map(d => `'${d.ip}'`).join(',');
         const smbScript = `
             $ips = @(${smbIpList})
-            $results = foreach ($ip in $ips) {
+            $maxConcurrent = 5
+            $pool = [RunspaceFactory]::CreateRunspacePool(1, $maxConcurrent)
+            $pool.Open()
+            $scriptBlock = {
+                param($ip)
                 $shares = @()
                 try {
                     $output = net view "\\\\$ip" 2>&1
                     foreach ($line in $output) {
-                        if ($line -match '^(\\S+)\\s+(Platte|Disk|Datenträger)') {
+                        if ($line -match '^(\\S+)\\s+(Platte|Disk|Datentr)') {
                             $shares += $Matches[1]
                         }
                     }
                 } catch {}
                 [PSCustomObject]@{ ip=$ip; shares=($shares -join ',') }
             }
+            $jobs = foreach ($ip in $ips) {
+                $ps = [PowerShell]::Create().AddScript($scriptBlock).AddArgument($ip)
+                $ps.RunspacePool = $pool
+                @{ ps=$ps; handle=$ps.BeginInvoke() }
+            }
+            $results = foreach ($j in $jobs) {
+                try { $j.ps.EndInvoke($j.handle) } catch {}
+                try { $j.ps.Dispose() } catch {}
+            }
+            $pool.Close()
+            $pool.Dispose()
             @($results) | ConvertTo-Json -Compress
         `.trim();
 
         try {
-            const { stdout } = await runPS(smbScript, { timeout: 60000 });
+            // Parallel: max 5 gleichzeitig, 10s pro net-view + PS-Overhead
+            const smbTimeout = Math.min(Math.max(30000, smbDevices.length * 3000 + 15000), 60000);
+            log.info(`SMB Shares (parallel, max 5): ${smbDevices.length} Geräte, Timeout: ${Math.round(smbTimeout / 1000)}s`);
+            const { stdout } = await runPS(smbScript, { timeout: smbTimeout });
             if (stdout && stdout.trim() && stdout.trim() !== 'null') {
                 const raw = JSON.parse(stdout.trim());
                 const arr = Array.isArray(raw) ? raw : [raw];
@@ -396,49 +431,40 @@ async function scanNetworkActive(onProgress) {
         }
     }
 
-    // Phase 5: SNMP-Erkennung (alle Online-Geräte, die nicht der eigene PC sind)
-    if (onProgress) onProgress({ phase: 'snmp', current: 0, total: 0, message: 'SNMP-Abfragen (Modell, Firmware)...' });
+    // Phase 5+5.5+5.6: SNMP + Vendor-Lookup + Gerätemodell parallel (unabhängige Datenquellen)
+    if (onProgress) onProgress({ phase: 'identify', current: 0, total: 0, message: 'SNMP + Hersteller + Gerätemodelle parallel...' });
 
     const snmpTargets = onlineDevices
         .filter(d => d.ip !== subnetInfo.localIP)
         .map(d => d.ip);
 
-    let snmpMap = new Map();
-    try {
-        snmpMap = await querySNMPBatch(snmpTargets, (current, total) => {
-            if (onProgress) onProgress({ phase: 'snmp', current, total, message: `SNMP ${current}/${total} abgefragt...` });
-        });
-    } catch (err) {
-        log.warn('SNMP-Scan fehlgeschlagen:', err.message);
-    }
-
-    // Live OUI-Lookup für alle gefundenen MAC-Adressen (IEEE-Datenbank via API)
     const allMacs = onlineDevices
         .map(d => macMap.get(d.ip) || '')
         .filter(Boolean);
-
-    if (onProgress) onProgress({ phase: 'vendor', current: 0, total: 0, message: 'Hersteller werden identifiziert (IEEE-Datenbank)...' });
-
-    const vendorMap = allMacs.length > 0 ? await lookupVendorsBatch(allMacs, (current, total) => {
-        if (onProgress) onProgress({ phase: 'vendor', current, total, message: `Hersteller ${current}/${total} identifiziert...` });
-    }) : new Map();
-
-    // Phase 5.5: Gerätemodell-Erkennung (HTTP Banner + UPnP/SSDP + IPP)
-    if (onProgress) onProgress({ phase: 'identify', current: 0, total: 0, message: 'Gerätemodelle werden erkannt...' });
 
     const preliminaryDevices = onlineDevices.map(d => ({
         ip: d.ip,
         openPorts: (portMap.get(d.ip) || []).map(p => ({ port: p })),
     }));
 
-    let identityMap = new Map();
-    try {
-        identityMap = await identifyDevices(preliminaryDevices, (current, total) => {
+    const [snmpMap, vendorMap, identityMap] = await Promise.all([
+        // SNMP: braucht nur IP-Adressen
+        querySNMPBatch(snmpTargets, (current, total) => {
+            if (onProgress) onProgress({ phase: 'snmp', current, total, message: `SNMP ${current}/${total} abgefragt...` });
+        }).catch(err => { log.warn('SNMP-Scan fehlgeschlagen:', err.message); return new Map(); }),
+
+        // Vendor: braucht nur MAC-Adressen
+        allMacs.length > 0
+            ? lookupVendorsBatch(allMacs, (current, total) => {
+                if (onProgress) onProgress({ phase: 'vendor', current, total, message: `Hersteller ${current}/${total} identifiziert...` });
+            }).catch(err => { log.warn('Vendor-Lookup fehlgeschlagen:', err.message); return new Map(); })
+            : Promise.resolve(new Map()),
+
+        // Gerätemodell: braucht IP + Ports
+        identifyDevices(preliminaryDevices, (current, total) => {
             if (onProgress) onProgress({ phase: 'identify', current, total, message: `Gerätemodelle ${current}/${total} geprüft...` });
-        });
-    } catch (err) {
-        log.warn('Geräte-Identifikation fehlgeschlagen:', err.message);
-    }
+        }).catch(err => { log.warn('Geräte-Identifikation fehlgeschlagen:', err.message); return new Map(); }),
+    ]);
 
     // Phase 5.6: Lokaler PC — WMI (Hersteller + Modell dynamisch auslesen)
     let localPCInfo = null;

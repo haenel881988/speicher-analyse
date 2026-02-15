@@ -118,7 +118,7 @@ node launch.js  # oder: npm start
 - **GPU Cache:** `--disable-gpu-shader-disk-cache` aktiv
 - **Security:** BLOCKED_PATHS in `registry.js` beachten
 - **VERBOTEN: Statische Listen für Erkennung/Discovery.** Die App muss in der Realität funktionieren, nicht nur in Simons Netzwerk. Statische Listen haben NICHTS mit der Realität zu tun — sie funktionieren nur für den Entwickler, nicht für andere Nutzer. IMMER dynamisch erkennen (Protokoll-Queries, Broadcast, OS-APIs), NIEMALS eine feste Liste von "bekannten" Einträgen als Erkennungsgrundlage. Feste Listen sind NUR erlaubt als Fallback-Label/Anzeige NACH einer dynamischen Erkennung — nie als Filter davor.
-- **Realitätsprinzip:** Code muss auf JEDEM Rechner funktionieren, nicht nur auf dem Entwickler-PC. Jede Annahme über die Umgebung (welche Geräte, welche Software, welche Services existieren) ist ein Bug.
+- **Realitätsprinzip (ABSOLUT):** Code muss auf JEDEM Rechner in JEDEM Netzwerk funktionieren, nicht nur auf dem Entwickler-PC. Jede Annahme über die Umgebung (welche Geräte, welche Software, welche Services, welche Netzwerke existieren) ist ein Bug. NIEMALS lokale Testdaten, IP-Adressen, MAC-Adressen, Hostnamen oder Gerätenamen aus der Entwicklungsumgebung im Code verwenden. Multi-Produkt-Hersteller dürfen NICHT einem einzigen Gerätetyp zugeordnet werden. Wenn ein Gerätetyp nicht eindeutig erkannt werden kann → ehrlich "Unbekanntes Gerät" anzeigen statt raten.
 
 ## Dateimanagement (docs/)
 

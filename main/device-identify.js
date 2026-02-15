@@ -33,67 +33,55 @@ async function identifyDevices(devices, onProgress) {
     const onlineIPs = new Set(devices.map(d => d.ip));
     let completed = 0;
 
-    // --- Phase A: UPnP/SSDP (1x Broadcast für alle Geräte) ---
-    log.info(`Geräte-Identifikation: UPnP für ${onlineIPs.size} Geräte...`);
-    try {
-        const upnpResults = await _probeUPnP(onlineIPs);
-        for (const [ip, info] of upnpResults) {
-            results.set(ip, { ...info, identifiedBy: 'upnp' });
-        }
-        log.info(`UPnP: ${upnpResults.size} Geräte identifiziert`);
-    } catch (err) {
-        log.warn('UPnP-Discovery fehlgeschlagen:', err.message);
-    }
+    // --- Phase A: UPnP + mDNS + WSD parallel (verschiedene UDP-Ports: 1900, 5353, 3702) ---
+    log.info(`Geräte-Identifikation: UPnP + mDNS + WSD parallel für ${onlineIPs.size} Geräte...`);
 
-    // --- Phase A.5: mDNS/Bonjour (1x Broadcast — ähnlich wie UPnP) ---
-    log.info('Geräte-Identifikation: mDNS-Discovery...');
-    try {
-        const mdnsResults = await discoverServices();
-        for (const [ip, info] of mdnsResults) {
-            if (!onlineIPs.has(ip)) continue;
-            const existing = results.get(ip) || {};
-            results.set(ip, {
-                modelName: existing.modelName || info.modelName || '',
-                serialNumber: existing.serialNumber || info.serialNumber || '',
-                firmwareVersion: existing.firmwareVersion || '',
-                identifiedBy: existing.identifiedBy
-                    ? existing.identifiedBy + '+mdns'
-                    : 'mdns',
-                mdnsServices: info.services || [],
-                mdnsServiceTypes: info.serviceTypes || [],
-                mdnsHostname: info.hostname || '',
-            });
-        }
-        log.info(`mDNS: ${mdnsResults.size} Geräte mit Services entdeckt`);
-    } catch (err) {
-        log.warn('mDNS-Discovery fehlgeschlagen:', err.message);
-    }
+    const [upnpResults, mdnsResults, wsdResults] = await Promise.all([
+        _probeUPnP(onlineIPs).catch(err => { log.warn('UPnP-Discovery fehlgeschlagen:', err.message); return new Map(); }),
+        discoverServices().catch(err => { log.warn('mDNS-Discovery fehlgeschlagen:', err.message); return new Map(); }),
+        discoverWSDFull(onlineIPs).catch(err => { log.warn('WSD-Discovery fehlgeschlagen:', err.message); return new Map(); }),
+    ]);
 
-    // --- Phase A.6: WSD (Web Services Discovery — Drucker, Windows-Geraete) ---
-    // Unicast-Antworten = funktioniert OHNE Firewall-Aenderungen
-    log.info('Geräte-Identifikation: WSD-Discovery...');
-    try {
-        const wsdResults = await discoverWSDFull(onlineIPs);
-        for (const [ip, info] of wsdResults) {
-            if (!onlineIPs.has(ip)) continue;
-            const existing = results.get(ip) || {};
-            results.set(ip, {
-                modelName: existing.modelName || info.modelName || '',
-                serialNumber: existing.serialNumber || info.serialNumber || '',
-                firmwareVersion: existing.firmwareVersion || info.firmwareVersion || '',
-                identifiedBy: existing.identifiedBy
-                    ? existing.identifiedBy + '+wsd'
-                    : 'wsd',
-                mdnsServices: existing.mdnsServices || [],
-                mdnsServiceTypes: existing.mdnsServiceTypes || [],
-                mdnsHostname: existing.mdnsHostname || '',
-                wsdTypes: info.types || [],
-            });
-        }
-        log.info(`WSD: ${wsdResults.size} Geräte entdeckt`);
-    } catch (err) {
-        log.warn('WSD-Discovery fehlgeschlagen:', err.message);
+    // Merge: UPnP zuerst (höchste Priorität), dann mDNS, dann WSD
+    for (const [ip, info] of upnpResults) {
+        results.set(ip, { ...info, identifiedBy: 'upnp' });
     }
+    log.info(`UPnP: ${upnpResults.size} Geräte identifiziert`);
+
+    for (const [ip, info] of mdnsResults) {
+        if (!onlineIPs.has(ip)) continue;
+        const existing = results.get(ip) || {};
+        results.set(ip, {
+            modelName: existing.modelName || info.modelName || '',
+            serialNumber: existing.serialNumber || info.serialNumber || '',
+            firmwareVersion: existing.firmwareVersion || '',
+            identifiedBy: existing.identifiedBy
+                ? existing.identifiedBy + '+mdns'
+                : 'mdns',
+            mdnsServices: info.services || [],
+            mdnsServiceTypes: info.serviceTypes || [],
+            mdnsHostname: info.hostname || '',
+        });
+    }
+    log.info(`mDNS: ${mdnsResults.size} Geräte mit Services entdeckt`);
+
+    for (const [ip, info] of wsdResults) {
+        if (!onlineIPs.has(ip)) continue;
+        const existing = results.get(ip) || {};
+        results.set(ip, {
+            modelName: existing.modelName || info.modelName || '',
+            serialNumber: existing.serialNumber || info.serialNumber || '',
+            firmwareVersion: existing.firmwareVersion || info.firmwareVersion || '',
+            identifiedBy: existing.identifiedBy
+                ? existing.identifiedBy + '+wsd'
+                : 'wsd',
+            mdnsServices: existing.mdnsServices || [],
+            mdnsServiceTypes: existing.mdnsServiceTypes || [],
+            mdnsHostname: existing.mdnsHostname || '',
+            wsdTypes: info.types || [],
+        });
+    }
+    log.info(`WSD: ${wsdResults.size} Geräte entdeckt`);
 
     // --- Merge-Helper: Bestehende Identity-Daten NICHT überschreiben (WU-10) ---
     function _mergeResult(existing, newFields) {
