@@ -1,5 +1,6 @@
 mod commands;
 mod ps;
+mod scan;
 
 pub fn run() {
     tauri::Builder::default()

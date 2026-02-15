@@ -4,10 +4,11 @@
   "description": "Speicher Analyse - Disk Space Analyzer & File Manager",
   "main": "main/main.js",
   "scripts": {
-    "start": "node launch.js",
+    "start": "src-tauri\\target\\release\\speicher-analyse.exe",
+    "build": "npx tauri build",
+    "start:electron": "node launch.js",
     "postinstall": "node scripts/rebuild-pty.js",
-    "build": "electron-builder",
-    "build:win": "electron-builder --win"
+    "build:electron": "electron-builder --win"
   },
   "author": "Speicher Analyse",
   "license": "MIT",

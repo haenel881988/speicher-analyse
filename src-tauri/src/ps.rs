@@ -1,14 +1,21 @@
 use std::process::Stdio;
 use tokio::process::Command;
+#[cfg(windows)]
+#[allow(unused_imports)]
+use std::os::windows::process::CommandExt;
+
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 /// Run a PowerShell script and return stdout as String.
 /// Uses UTF-8 output encoding, 30s timeout equivalent.
+/// CREATE_NO_WINDOW prevents visible PowerShell console windows.
 pub async fn run_ps(script: &str) -> Result<String, String> {
     let utf8_prefix = "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; ";
     let full_script = format!("{}{}", utf8_prefix, script);
 
-    let output = Command::new("powershell.exe")
-        .args([
+    let mut cmd = Command::new("powershell.exe");
+    cmd.args([
             "-NoProfile",
             "-NonInteractive",
             "-ExecutionPolicy", "Bypass",
@@ -16,8 +23,12 @@ pub async fn run_ps(script: &str) -> Result<String, String> {
         ])
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .output()
+        .stderr(Stdio::piped());
+
+    #[cfg(windows)]
+    cmd.creation_flags(CREATE_NO_WINDOW);
+
+    let output = cmd.output()
         .await
         .map_err(|e| format!("PowerShell start failed: {}", e))?;
 
