@@ -38,3 +38,16 @@ pub async fn run_ps_json(script: &str) -> Result<serde_json::Value, String> {
     }
     serde_json::from_str(&output).map_err(|e| format!("JSON parse error: {} — output: {}", e, &output[..output.len().min(200)]))
 }
+
+/// Run PowerShell, parse as JSON, and ensure result is always an array.
+/// PowerShell's ConvertTo-Json returns a single object (not array) when there's only one item.
+pub async fn run_ps_json_array(script: &str) -> Result<serde_json::Value, String> {
+    let result = run_ps_json(script).await?;
+    if result.is_array() {
+        Ok(result)
+    } else if result.is_null() {
+        Ok(serde_json::json!([]))
+    } else {
+        Ok(serde_json::json!([result]))
+    }
+}

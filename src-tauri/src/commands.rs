@@ -6,8 +6,8 @@ use std::path::Path;
 
 #[tauri::command]
 pub async fn get_drives() -> Result<Value, String> {
-    crate::ps::run_ps_json(
-        "Get-PSDrive -PSProvider FileSystem | Where-Object { $_.Used -ne $null } | ForEach-Object { [PSCustomObject]@{ letter = $_.Name + ':'; label = $_.Description; total = $_.Used + $_.Free; free = $_.Free; used = $_.Used } } | ConvertTo-Json -Compress"
+    crate::ps::run_ps_json_array(
+        "Get-CimInstance Win32_LogicalDisk | Where-Object {$_.Size -gt 0} | ForEach-Object { $total = [long]$_.Size; $free = [long]$_.FreeSpace; $used = $total - $free; $pct = [math]::Round(($used / $total) * 1000) / 10; [PSCustomObject]@{ device = $_.DeviceID + '\\'; mountpoint = $_.DeviceID + '\\'; fstype = $_.FileSystem; total = $total; used = $used; free = $free; percent = $pct } } | ConvertTo-Json -Compress"
     ).await
 }
 
@@ -57,7 +57,7 @@ foreach ($item in $items) {{
 $children | Sort-Object size -Descending | ConvertTo-Json -Compress"#,
         path.replace("'", "''")
     );
-    crate::ps::run_ps_json(&script).await
+    crate::ps::run_ps_json_array(&script).await
 }
 
 #[tauri::command]
@@ -243,7 +243,7 @@ pub async fn release_scan_bulk_data(scan_id: String) -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn scan_cleanup_categories(scan_id: String) -> Result<Value, String> {
-    crate::ps::run_ps_json(
+    crate::ps::run_ps_json_array(
         r#"$cats = @()
 $temp = [System.IO.Path]::GetTempPath()
 $tempSize = (Get-ChildItem -Path $temp -Recurse -Force -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum
@@ -332,7 +332,7 @@ pub async fn restore_registry_backup() -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn get_autostart_entries() -> Result<Value, String> {
-    crate::ps::run_ps_json(
+    crate::ps::run_ps_json_array(
         r#"$entries = @()
 Get-CimInstance Win32_StartupCommand -ErrorAction SilentlyContinue | ForEach-Object {
     $entries += [PSCustomObject]@{ name=$_.Name; command=$_.Command; location=$_.Location; user=$_.User; enabled=$true }
@@ -355,7 +355,7 @@ pub async fn delete_autostart(entry: Value) -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn get_services() -> Result<Value, String> {
-    crate::ps::run_ps_json(
+    crate::ps::run_ps_json_array(
         r#"Get-Service | Select-Object Name, DisplayName, Status, StartType | ConvertTo-Json -Compress"#
     ).await
 }
@@ -382,7 +382,7 @@ pub async fn set_service_start_type(name: String, start_type: String) -> Result<
 
 #[tauri::command]
 pub async fn get_optimizations() -> Result<Value, String> {
-    crate::ps::run_ps_json(
+    crate::ps::run_ps_json_array(
         r#"$opts = @()
 # Visual Effects
 $vfx = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects' -ErrorAction SilentlyContinue).VisualFXSetting
@@ -403,7 +403,7 @@ pub async fn apply_optimization(id: String) -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn scan_bloatware() -> Result<Value, String> {
-    crate::ps::run_ps_json(
+    crate::ps::run_ps_json_array(
         r#"Get-AppxPackage | Where-Object { $_.IsFramework -eq $false -and $_.SignatureKind -ne 'System' } | Select-Object Name, PackageFullName, Publisher, InstallLocation | ConvertTo-Json -Compress"#
     ).await
 }
@@ -433,7 +433,7 @@ pub async fn check_windows_updates() -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn get_update_history() -> Result<Value, String> {
-    crate::ps::run_ps_json(
+    crate::ps::run_ps_json_array(
         r#"$session = New-Object -ComObject Microsoft.Update.Session
 $searcher = $session.CreateUpdateSearcher()
 $count = $searcher.GetTotalHistoryCount()
@@ -457,7 +457,7 @@ pub async fn update_software(package_id: String) -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn get_driver_info() -> Result<Value, String> {
-    crate::ps::run_ps_json(
+    crate::ps::run_ps_json_array(
         r#"Get-CimInstance Win32_PnPSignedDriver | Where-Object { $_.DeviceName } | Select-Object DeviceName, DriverVersion, DriverDate, Manufacturer -First 50 | ConvertTo-Json -Compress"#
     ).await
 }
@@ -513,18 +513,36 @@ pub async fn deep_search_cancel() -> Result<Value, String> {
 #[tauri::command]
 pub async fn list_directory(dir_path: String, max_entries: Option<u32>) -> Result<Value, String> {
     let limit = max_entries.unwrap_or(5000);
+    let escaped = dir_path.replace("'", "''");
     let script = format!(
-        r#"Get-ChildItem -LiteralPath '{}' -Force -ErrorAction SilentlyContinue | Select-Object Name, FullName, Length, LastWriteTime, CreationTime, PSIsContainer, Extension, Attributes -First {} | ForEach-Object {{
-    [PSCustomObject]@{{ name=$_.Name; path=$_.FullName; size=[long]$_.Length; modified=$_.LastWriteTime.ToString('o'); created=$_.CreationTime.ToString('o'); isDir=$_.PSIsContainer; ext=$_.Extension; hidden=($_.Attributes -band [IO.FileAttributes]::Hidden) -ne 0 }}
-}} | ConvertTo-Json -Compress"#,
-        dir_path.replace("'", "''"), limit
+        r#"$allItems = @(Get-ChildItem -LiteralPath '{}' -Force -ErrorAction SilentlyContinue)
+$totalCount = $allItems.Count
+$items = $allItems | Select-Object -First {}
+$entries = @($items | ForEach-Object {{
+    [PSCustomObject]@{{ name=$_.Name; path=$_.FullName; size=[long]$_.Length; modified=[long]([DateTimeOffset]$_.LastWriteTime).ToUnixTimeMilliseconds(); created=[long]([DateTimeOffset]$_.CreationTime).ToUnixTimeMilliseconds(); isDirectory=$_.PSIsContainer; extension=$_.Extension.ToLower(); readonly=$_.IsReadOnly; hidden=($_.Attributes -band [IO.FileAttributes]::Hidden) -ne 0 }}
+}})
+[PSCustomObject]@{{ path='{}'; parentPath=Split-Path '{}' -Parent; entries=$entries; totalEntries=$totalCount; truncated=($totalCount -gt {}) }} | ConvertTo-Json -Depth 3 -Compress"#,
+        escaped, limit, escaped, escaped, limit
     );
-    crate::ps::run_ps_json(&script).await
+    let result = crate::ps::run_ps_json(&script).await?;
+    // Ensure entries is always an array
+    if let Some(entries) = result.get("entries") {
+        if !entries.is_array() && !entries.is_null() {
+            let mut obj = result.clone();
+            obj.as_object_mut().unwrap().insert("entries".to_string(), json!([entries.clone()]));
+            return Ok(obj);
+        } else if entries.is_null() {
+            let mut obj = result.clone();
+            obj.as_object_mut().unwrap().insert("entries".to_string(), json!([]));
+            return Ok(obj);
+        }
+    }
+    Ok(result)
 }
 
 #[tauri::command]
 pub async fn get_known_folders() -> Result<Value, String> {
-    crate::ps::run_ps_json(
+    crate::ps::run_ps_json_array(
         r#"$folders = @()
 $folders += [PSCustomObject]@{ name='Desktop'; path=[Environment]::GetFolderPath('Desktop') }
 $folders += [PSCustomObject]@{ name='Dokumente'; path=[Environment]::GetFolderPath('MyDocuments') }
@@ -553,7 +571,7 @@ pub async fn find_empty_folders(dir_path: String, max_depth: Option<u32>) -> Res
         r#"Get-ChildItem -LiteralPath '{}' -Recurse -Directory -Depth {} -Force -ErrorAction SilentlyContinue | Where-Object {{ (Get-ChildItem $_.FullName -Force -ErrorAction SilentlyContinue).Count -eq 0 }} | Select-Object FullName | ConvertTo-Json -Compress"#,
         dir_path.replace("'", "''"), depth
     );
-    crate::ps::run_ps_json(&script).await
+    crate::ps::run_ps_json_array(&script).await
 }
 
 #[tauri::command]
@@ -722,7 +740,7 @@ pub async fn terminal_open_external(cwd: Option<String>, command: Option<String>
 
 #[tauri::command]
 pub async fn get_privacy_settings() -> Result<Value, String> {
-    crate::ps::run_ps_json(
+    crate::ps::run_ps_json_array(
         r#"$settings = @()
 $telemetry = (Get-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection' -Name AllowTelemetry -ErrorAction SilentlyContinue).AllowTelemetry
 $settings += [PSCustomObject]@{ id='telemetry'; name='Telemetrie'; description='Windows-Diagnosedaten'; currentValue=if($telemetry -eq 0){'disabled'}else{'enabled'}; recommended='disabled'; category='privacy' }
@@ -752,7 +770,7 @@ pub async fn reset_all_privacy() -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn get_scheduled_tasks_audit() -> Result<Value, String> {
-    crate::ps::run_ps_json(
+    crate::ps::run_ps_json_array(
         r#"Get-ScheduledTask | Where-Object { $_.State -eq 'Ready' } | Select-Object TaskName, TaskPath, State, Description -First 100 | ConvertTo-Json -Compress"#
     ).await
 }
@@ -803,7 +821,7 @@ $cs = Get-CimInstance Win32_ComputerSystem
 
 #[tauri::command]
 pub async fn get_disk_health() -> Result<Value, String> {
-    crate::ps::run_ps_json(
+    crate::ps::run_ps_json_array(
         r#"Get-PhysicalDisk | Select-Object FriendlyName, MediaType, HealthStatus, OperationalStatus, Size, @{N='Temperature';E={($_ | Get-StorageReliabilityCounter).Temperature}}, @{N='Wear';E={($_ | Get-StorageReliabilityCounter).Wear}}, @{N='ReadErrors';E={($_ | Get-StorageReliabilityCounter).ReadErrorsTotal}}, @{N='PowerOnHours';E={($_ | Get-StorageReliabilityCounter).PowerOnHours}} | ConvertTo-Json -Compress"#
     ).await
 }
@@ -812,7 +830,7 @@ pub async fn get_disk_health() -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn audit_software() -> Result<Value, String> {
-    crate::ps::run_ps_json(
+    crate::ps::run_ps_json_array(
         r#"$programs = @()
 $paths = @('HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*','HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*','HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*')
 foreach ($p in $paths) {
@@ -838,14 +856,14 @@ pub async fn check_audit_updates() -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn get_connections() -> Result<Value, String> {
-    crate::ps::run_ps_json(
+    crate::ps::run_ps_json_array(
         r#"Get-NetTCPConnection -ErrorAction SilentlyContinue | Where-Object { $_.State -eq 'Established' } | Select-Object LocalAddress, LocalPort, RemoteAddress, RemotePort, State, OwningProcess, @{N='ProcessName';E={(Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue).ProcessName}} | ConvertTo-Json -Compress"#
     ).await
 }
 
 #[tauri::command]
 pub async fn get_bandwidth() -> Result<Value, String> {
-    crate::ps::run_ps_json(
+    crate::ps::run_ps_json_array(
         r#"Get-NetAdapterStatistics -ErrorAction SilentlyContinue | Select-Object Name, ReceivedBytes, SentBytes, ReceivedUnicastPackets, SentUnicastPackets | ConvertTo-Json -Compress"#
     ).await
 }
@@ -857,7 +875,7 @@ pub async fn get_firewall_rules(direction: Option<String>) -> Result<Value, Stri
         r#"Get-NetFirewallRule -Direction '{}' -Enabled True -ErrorAction SilentlyContinue | Select-Object DisplayName, Direction, Action, Profile -First 100 | ConvertTo-Json -Compress"#,
         dir
     );
-    crate::ps::run_ps_json(&script).await
+    crate::ps::run_ps_json_array(&script).await
 }
 
 #[tauri::command]
@@ -889,7 +907,7 @@ $listening = (Get-NetTCPConnection -ErrorAction SilentlyContinue | Where-Object 
 
 #[tauri::command]
 pub async fn get_grouped_connections() -> Result<Value, String> {
-    crate::ps::run_ps_json(
+    crate::ps::run_ps_json_array(
         r#"Get-NetTCPConnection -ErrorAction SilentlyContinue | Where-Object { $_.State -eq 'Established' } | Group-Object OwningProcess | ForEach-Object {
     $proc = Get-Process -Id $_.Name -ErrorAction SilentlyContinue
     [PSCustomObject]@{ processId=[int]$_.Name; processName=$proc.ProcessName; connectionCount=$_.Count; connections=$_.Group | Select-Object RemoteAddress, RemotePort }
@@ -934,7 +952,7 @@ $output | ForEach-Object { if ($_ -match '^\s+(.+?)\s+:\s+(.+)$') { $info[$Match
 
 #[tauri::command]
 pub async fn get_dns_cache() -> Result<Value, String> {
-    crate::ps::run_ps_json(
+    crate::ps::run_ps_json_array(
         r#"Get-DnsClientCache -ErrorAction SilentlyContinue | Where-Object { $_.Type -in @(1,28) } | Select-Object Entry, RecordName, Data, TimeToLive, Type -First 200 | ConvertTo-Json -Compress"#
     ).await
 }
@@ -1002,7 +1020,7 @@ pub async fn export_network_history(format: Option<String>) -> Result<Value, Str
 
 #[tauri::command]
 pub async fn scan_local_network() -> Result<Value, String> {
-    crate::ps::run_ps_json(
+    crate::ps::run_ps_json_array(
         r#"$gateway = (Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue | Select-Object -First 1).NextHop
 $subnet = $gateway -replace '\.\d+$', ''
 $results = @()
@@ -1019,7 +1037,19 @@ $results | ConvertTo-Json -Compress"#
 
 #[tauri::command]
 pub async fn scan_network_active() -> Result<Value, String> {
-    scan_local_network().await
+    crate::ps::run_ps_json_array(
+        r#"$gateway = (Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue | Select-Object -First 1).NextHop
+$subnet = $gateway -replace '\.\d+$', ''
+$results = @()
+1..254 | ForEach-Object {
+    $ip = "$subnet.$_"
+    if (Test-Connection $ip -Count 1 -TimeoutSeconds 1 -Quiet -ErrorAction SilentlyContinue) {
+        $hostname = try { [System.Net.Dns]::GetHostEntry($ip).HostName } catch { '' }
+        $results += [PSCustomObject]@{ ip=$ip; hostname=$hostname; online=$true }
+    }
+}
+$results | ConvertTo-Json -Compress"#
+    ).await
 }
 
 #[tauri::command]
@@ -1039,7 +1069,7 @@ foreach ($port in $ports) {{
 }}
 $results | ConvertTo-Json -Compress"#, ip
     );
-    crate::ps::run_ps_json(&script).await
+    crate::ps::run_ps_json_array(&script).await
 }
 
 #[tauri::command]
@@ -1047,7 +1077,7 @@ pub async fn get_smb_shares(ip: String) -> Result<Value, String> {
     let script = format!(
         r#"Get-SmbConnection -ServerName '{}' -ErrorAction SilentlyContinue | Select-Object ServerName, ShareName | ConvertTo-Json -Compress"#, ip
     );
-    crate::ps::run_ps_json(&script).await
+    crate::ps::run_ps_json_array(&script).await
 }
 
 #[tauri::command]
@@ -1066,7 +1096,7 @@ pub async fn get_system_info() -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn run_security_audit() -> Result<Value, String> {
-    crate::ps::run_ps_json(
+    crate::ps::run_ps_json_array(
         r#"$checks = @()
 $fw = (Get-NetFirewallProfile -ErrorAction SilentlyContinue | Where-Object { $_.Enabled }).Count
 $checks += [PSCustomObject]@{ id='firewall'; name='Firewall'; status=if($fw -ge 3){'ok'}else{'warning'}; detail="$fw/3 Profile aktiv" }

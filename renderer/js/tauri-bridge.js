@@ -3,13 +3,17 @@
  * Loaded BEFORE app.js via <script> tag in index.html.
  * In Electron mode, this file is not loaded (preload.js handles window.api).
  */
+(function() {
+    // Detect if we're running in Tauri
+    if (!window.__TAURI__ || window.api) return;
 
-// Detect if we're running in Tauri
-const isTauri = !!(window.__TAURI__);
-
-if (isTauri && !window.api) {
     const { invoke } = window.__TAURI__.core;
     const { listen } = window.__TAURI__.event;
+
+    // snake_case → camelCase (Tauri v2 expects camelCase for Rust snake_case params)
+    function toCamel(s) {
+        return s.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+    }
 
     // Helper: create invoke wrapper with named parameters
     function makeInvoke(cmd, ...paramNames) {
@@ -17,7 +21,7 @@ if (isTauri && !window.api) {
             const params = {};
             paramNames.forEach((name, i) => {
                 if (i < args.length && args[i] !== undefined) {
-                    params[name] = args[i];
+                    params[toCamel(name)] = args[i];
                 }
             });
             return invoke(cmd, params);
@@ -296,4 +300,4 @@ if (isTauri && !window.api) {
     };
 
     console.log('[Tauri Bridge] window.api mapped — 147 methods + 20 event listeners');
-}
+})();
