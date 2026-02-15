@@ -1,8 +1,9 @@
 'use strict';
-// Network Monitor — connections, bandwidth, firewall, npcap detection
+// Network Monitor — connections, bandwidth, firewall
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
+const { app } = require('electron');
 const { runPS, runSafe, isSafeShellArg } = require('./cmd-utils');
 const log = require('./logger').createLogger('network');
 
@@ -11,6 +12,10 @@ const PS_OPTS = { timeout: PS_TIMEOUT, maxBuffer: 10 * 1024 * 1024 };
 
 // Bandbreiten-Delta: Vorherige Werte für Echtzeit-Berechnung (MB/s)
 const _prevBandwidth = new Map(); // adapterName → { receivedBytes, sentBytes, timestamp }
+
+// Bandbreiten-History: Ring-Buffer für Sparklines (max 60 Einträge = 5 Min bei 5s Polling)
+const _bandwidthHistory = new Map(); // adapterName → Array<{ts, rx, tx}>
+const MAX_BW_HISTORY = 60;
 
 // ---------------------------------------------------------------------------
 // 1) getConnections – Aktive TCP-Verbindungen mit Prozess-Informationen
@@ -106,6 +111,14 @@ async function getBandwidth() {
                     txPerSec = Math.max(0, (sentBytes - prev.sentBytes) / elapsed);
                 }
             }
+            // Bandbreiten-History für Sparklines
+            if (rxPerSec > 0 || txPerSec > 0 || (_bandwidthHistory.has(name) && _bandwidthHistory.get(name).length > 0)) {
+                if (!_bandwidthHistory.has(name)) _bandwidthHistory.set(name, []);
+                const history = _bandwidthHistory.get(name);
+                history.push({ ts: now, rx: rxPerSec, tx: txPerSec });
+                if (history.length > MAX_BW_HISTORY) history.shift();
+            }
+
             return {
                 name,
                 description:     a.description     || '',
@@ -122,6 +135,63 @@ async function getBandwidth() {
     } catch (err) {
         log.error('Netzwerkadapter-Statistiken konnten nicht abgerufen werden:', err.message);
         return [];
+    }
+}
+
+/**
+ * Gibt die Bandbreiten-History für Sparklines zurück.
+ * @returns {Object} Map: adapterName → Array<{ts, rx, tx}>
+ */
+function getBandwidthHistory() {
+    const result = {};
+    for (const [name, history] of _bandwidthHistory) {
+        result[name] = history;
+    }
+    return result;
+}
+
+// ---------------------------------------------------------------------------
+// 2b) getWiFiInfo – WLAN-Details (SSID, Signal, Kanal, Frequenz)
+// ---------------------------------------------------------------------------
+async function getWiFiInfo() {
+    try {
+        const { stdout } = await runSafe('netsh', ['wlan', 'show', 'interfaces'], { timeout: 10000 });
+        if (!stdout || stdout.includes('not running') || stdout.includes('nicht')) {
+            return null; // Kein WLAN-Adapter oder Service nicht aktiv
+        }
+        const lines = stdout.split('\n');
+        const info = {};
+        for (const line of lines) {
+            const match = line.match(/^\s+(.+?)\s+:\s+(.+)$/);
+            if (!match) continue;
+            const key = match[1].trim().toLowerCase();
+            const val = match[2].trim();
+            // Locale-unabhängig: deutsche und englische Keys
+            if (key === 'ssid' || key === 'name') info.ssid = val;
+            if (key === 'signal') info.signal = val;
+            if (key === 'channel' || key === 'kanal') info.channel = val;
+            if (key.includes('radio') || key.includes('funk')) info.radioType = val;
+            if (key.includes('band') || key === 'band') info.band = val;
+            if (key.includes('authentication') || key.includes('authentifizierung')) info.auth = val;
+            if (key.includes('cipher') || key.includes('verschlüsselung') || key.includes('verschluesselung')) info.cipher = val;
+            if (key.includes('receive rate') || key.includes('empfangsrate')) info.rxRate = val;
+            if (key.includes('transmit rate') || key.includes('übertragungsrate') || key.includes('uebertragungsrate') || key.includes('senderate')) info.txRate = val;
+            if (key === 'bssid') info.bssid = val;
+            if (key === 'state' || key === 'zustand') info.state = val;
+            if (key.includes('profile') || key.includes('profil')) info.profile = val;
+            if (key.includes('network type') || key.includes('netzwerktyp')) info.networkType = val;
+        }
+        // Kein SSID = nicht verbunden
+        if (!info.ssid) return null;
+        // Signal-Prozent extrahieren
+        if (info.signal) {
+            const pct = parseInt(info.signal, 10);
+            if (!isNaN(pct)) info.signalPercent = pct;
+        }
+        return info;
+    } catch (err) {
+        log.warn('WiFi info failed:', err.message);
+        return null;
     }
 }
 
@@ -419,17 +489,81 @@ async function checkProcessesRunning(processNames) {
 // ---------------------------------------------------------------------------
 const _ipCache = new Map();
 const MAX_IP_CACHE = 2000;
+const IP_CACHE_TTL = 7 * 24 * 60 * 60 * 1000; // 7 Tage
+let _ipCacheDirty = false;
+let _ipCacheSaveTimer = null;
+
+function _getIPCachePath() {
+    try {
+        return path.join(app.getPath('userData'), 'ip-cache.json');
+    } catch {
+        return null;
+    }
+}
+
+function _loadIPCache() {
+    const cachePath = _getIPCachePath();
+    if (!cachePath) return;
+    try {
+        if (!fs.existsSync(cachePath)) return;
+        const raw = JSON.parse(fs.readFileSync(cachePath, 'utf-8'));
+        const now = Date.now();
+        let loaded = 0;
+        for (const [ip, entry] of Object.entries(raw)) {
+            if (entry.cachedAt && (now - entry.cachedAt) < IP_CACHE_TTL) {
+                _ipCache.set(ip, entry);
+                loaded++;
+                if (loaded >= MAX_IP_CACHE) break;
+            }
+        }
+        if (loaded > 0) log.info(`IP-Cache geladen: ${loaded} Einträge`);
+    } catch (err) {
+        log.warn('IP-Cache laden fehlgeschlagen:', err.message);
+    }
+}
+
+function _saveIPCache() {
+    if (!_ipCacheDirty) return;
+    const cachePath = _getIPCachePath();
+    if (!cachePath) return;
+    try {
+        const obj = Object.fromEntries(_ipCache);
+        fs.writeFileSync(cachePath, JSON.stringify(obj), 'utf-8');
+        _ipCacheDirty = false;
+        log.info(`IP-Cache gespeichert: ${_ipCache.size} Einträge`);
+    } catch (err) {
+        log.warn('IP-Cache speichern fehlgeschlagen:', err.message);
+    }
+}
+
+function _scheduleSaveIPCache() {
+    _ipCacheDirty = true;
+    if (_ipCacheSaveTimer) return;
+    _ipCacheSaveTimer = setTimeout(() => {
+        _ipCacheSaveTimer = null;
+        _saveIPCache();
+    }, 60000); // 60s debounce
+}
+
+// IP-Cache beim Laden des Moduls initialisieren
+_loadIPCache();
+
+// Beim Beenden speichern
+process.on('exit', () => _saveIPCache());
 
 function _cacheIP(ip, data) {
     if (_ipCache.size >= MAX_IP_CACHE) {
         const oldest = _ipCache.keys().next().value;
         _ipCache.delete(oldest);
     }
+    data.cachedAt = Date.now();
     _ipCache.set(ip, data);
+    _scheduleSaveIPCache();
 }
 
 /**
  * Prüft ob eine IP-Adresse privat/lokal ist (nicht an API senden).
+ * SYNC: Identische Logik in renderer/js/network.js (_isLocalIP)
  */
 function isPrivateIP(ip) {
     if (!ip) return true;
@@ -437,7 +571,7 @@ function isPrivateIP(ip) {
         ip === '0.0.0.0' ||
         ip === '::' ||
         ip === '::1' ||
-        ip === '127.0.0.1' ||
+        ip.startsWith('127.') ||
         ip.startsWith('10.') ||
         ip.startsWith('192.168.') ||
         ip.startsWith('169.254.') ||
@@ -726,6 +860,17 @@ async function getPollingData() {
             $procId = [int]$g.Name
             [PSCustomObject]@{ name = if ($procs.ContainsKey($procId)) { $procs[$procId].Name } else { "PID $procId" }; cc = $g.Count }
         })
+        $udpEndpoints = Get-NetUDPEndpoint -ErrorAction SilentlyContinue | Select-Object LocalAddress, LocalPort, OwningProcess
+        $udpConns = @(foreach ($u in $udpEndpoints) {
+            $pi = $procs[[int]$u.OwningProcess]
+            if (-not $pi) { try { $p2 = Get-Process -Id $u.OwningProcess -ErrorAction SilentlyContinue; if ($p2) { $procs[$p2.Id] = @{ Name=$p2.ProcessName; Path=$p2.Path }; $pi = $procs[$p2.Id] } } catch {} }
+            [PSCustomObject]@{
+                la = $u.LocalAddress
+                lp = $u.LocalPort
+                op = $u.OwningProcess
+                pn = if ($pi) { $pi.Name } else { '' }
+            }
+        })
         $adapters = Get-NetAdapter -ErrorAction SilentlyContinue | Select-Object Name, InterfaceDescription, Status, LinkSpeed
         $stats = Get-NetAdapterStatistics -ErrorAction SilentlyContinue | Select-Object Name, ReceivedBytes, SentBytes, ReceivedUnicastPackets, SentUnicastPackets
         $statsMap = @{}; foreach ($s in $stats) { $statsMap[$s.Name] = $s }
@@ -735,6 +880,7 @@ async function getPollingData() {
         })
         [PSCustomObject]@{
             connections = $connections
+            udp = $udpConns
             summary = [PSCustomObject]@{ tc=$total; ec=$established; lc=$listening; ui=$uniqueIPs; tp=$topProcesses }
             bandwidth = $bw
         } | ConvertTo-Json -Depth 4 -Compress
@@ -751,7 +897,20 @@ async function getPollingData() {
             remoteAddress: c.ra || '', remotePort: Number(c.rp) || 0,
             state: c.st || '', owningProcess: Number(c.op) || 0,
             processName: c.pn || '', processPath: c.pp || '',
+            protocol: 'TCP',
         }));
+
+        // UDP-Endpunkte parsen
+        const rawUdp = Array.isArray(data.udp) ? data.udp : (data.udp ? [data.udp] : []);
+        const udpConnections = rawUdp.map(u => ({
+            localAddress: u.la || '', localPort: Number(u.lp) || 0,
+            remoteAddress: '', remotePort: 0,
+            state: 'UDP', owningProcess: Number(u.op) || 0,
+            processName: u.pn || '', processPath: '',
+            protocol: 'UDP',
+        }));
+        // UDP zu Connections hinzufügen
+        connections.push(...udpConnections);
 
         // Summary parsen
         const s = data.summary || {};
@@ -759,6 +918,7 @@ async function getPollingData() {
         const summary = {
             totalConnections: Number(s.tc) || 0, establishedCount: Number(s.ec) || 0,
             listeningCount: Number(s.lc) || 0, uniqueRemoteIPs: Number(s.ui) || 0, topProcesses: topProc,
+            udpCount: udpConnections.length,
         };
 
         // Bandwidth parsen + Delta-Berechnung für Echtzeit-Anzeige
@@ -778,6 +938,14 @@ async function getPollingData() {
                     txPerSec = Math.max(0, (sentBytes - prev.sentBytes) / elapsed);
                 }
             }
+            // Bandbreiten-History für Sparklines (auch im Polling-Pfad)
+            if (rxPerSec > 0 || txPerSec > 0 || (_bandwidthHistory.has(name) && _bandwidthHistory.get(name).length > 0)) {
+                if (!_bandwidthHistory.has(name)) _bandwidthHistory.set(name, []);
+                const history = _bandwidthHistory.get(name);
+                history.push({ ts: bwNow, rx: rxPerSec, tx: txPerSec });
+                if (history.length > MAX_BW_HISTORY) history.shift();
+            }
+
             return {
                 name, description: b.d || '', status: b.s || '', linkSpeed: b.ls || '',
                 receivedBytes, sentBytes,
@@ -945,118 +1113,47 @@ async function getConnectionDiff() {
 }
 
 // ---------------------------------------------------------------------------
-// 11) isNpcapInstalled – Prüft ob npcap-Treiber installiert sind
+// DNS-Cache – Zeigt kürzlich aufgelöste Domains
 // ---------------------------------------------------------------------------
-function isNpcapInstalled() {
+async function getDnsCache() {
+    const psScript = `
+        Get-DnsClientCache -ErrorAction SilentlyContinue |
+            Where-Object { $_.Type -in 1, 28 } |
+            Select-Object Entry, Data, TimeToLive, Type |
+            ConvertTo-Json -Depth 2 -Compress
+    `.trim();
     try {
-        return fs.existsSync('C:\\Windows\\System32\\Npcap\\wpcap.dll');
-    } catch {
-        return false;
+        const { stdout } = await runPS(psScript, PS_OPTS);
+        if (!stdout || !stdout.trim()) return [];
+        let parsed = JSON.parse(stdout.trim());
+        if (!Array.isArray(parsed)) parsed = [parsed];
+        return parsed.map(e => ({
+            domain: e.Entry || '',
+            ip: e.Data || '',
+            ttl: e.TimeToLive || 0,
+            type: e.Type === 1 ? 'A' : e.Type === 28 ? 'AAAA' : String(e.Type),
+        }));
+    } catch (err) {
+        log.warn('DNS cache read failed:', err.message);
+        return [];
     }
 }
 
-// ---------------------------------------------------------------------------
-// 12) installNpcap – Npcap automatisch herunterladen und installieren
-// ---------------------------------------------------------------------------
-async function installNpcap() {
-    if (isNpcapInstalled()) return { success: true, message: 'Npcap ist bereits installiert.' };
-
-    const os = require('os');
-    const tempDir = os.tmpdir();
-    const installerPath = path.join(tempDir, 'npcap-installer.exe');
-
-    // Schritt 1: Neueste Version von npcap.com ermitteln und herunterladen
-    const psDownload = `
-        $ErrorActionPreference = 'Stop'
-        $ProgressPreference = 'SilentlyContinue'
-        try {
-            $page = Invoke-WebRequest -Uri 'https://npcap.com' -UseBasicParsing -TimeoutSec 20
-            $match = [regex]::Match($page.Content, 'npcap-([\\d.]+)\\.exe')
-            if ($match.Success) {
-                $version = $match.Groups[1].Value
-                $url = "https://npcap.com/dist/npcap-$version.exe"
-            } else {
-                Write-Output 'ERR:Konnte Npcap-Version nicht ermitteln'
-                exit
-            }
-        } catch {
-            Write-Output "ERR:Download-Seite nicht erreichbar: $($_.Exception.Message)"
-            exit
-        }
-        Write-Output "VERSION:$version"
-        Write-Output "URL:$url"
-        try {
-            Invoke-WebRequest -Uri $url -OutFile '${installerPath.replace(/\\/g, '\\\\')}' -TimeoutSec 120
-            if (Test-Path '${installerPath.replace(/\\/g, '\\\\')}') {
-                Write-Output 'DOWNLOAD:OK'
-            } else {
-                Write-Output 'ERR:Datei wurde nicht erstellt'
-            }
-        } catch {
-            Write-Output "ERR:Download fehlgeschlagen: $($_.Exception.Message)"
-        }
-    `.trim();
-
-    log.info('Npcap-Download gestartet...');
-    let dlResult;
+async function clearDnsCache() {
     try {
-        dlResult = await runPS(psDownload, { timeout: 180000 }); // 3 min für Download
+        await runPS('Clear-DnsClientCache', { timeout: 10000 });
+        return { success: true };
     } catch (err) {
-        return { success: false, error: `Download fehlgeschlagen: ${err.message}` };
+        log.warn('DNS cache clear failed:', err.message);
+        return { success: false, error: err.message };
     }
-
-    const dlOut = dlResult.stdout || '';
-    if (dlOut.includes('ERR:')) {
-        const errMsg = dlOut.split('\n').find(l => l.startsWith('ERR:'))?.replace('ERR:', '') || 'Unbekannter Fehler';
-        return { success: false, error: errMsg };
-    }
-    if (!dlOut.includes('DOWNLOAD:OK')) {
-        return { success: false, error: 'Download fehlgeschlagen. Bitte Internetverbindung prüfen.' };
-    }
-
-    const version = (dlOut.match(/VERSION:(.+)/)?.[1] || '').trim();
-    log.info(`Npcap ${version} heruntergeladen, starte Installation...`);
-
-    // Schritt 2: Installer mit Admin-Elevation ausführen (UAC-Prompt für den User)
-    const psInstall = `
-        try {
-            Start-Process -FilePath '${installerPath.replace(/\\/g, '\\\\')}' -Verb RunAs -Wait
-            Write-Output 'INSTALL:DONE'
-        } catch {
-            Write-Output "ERR:Installation abgebrochen: $($_.Exception.Message)"
-        } finally {
-            Remove-Item '${installerPath.replace(/\\/g, '\\\\')}' -Force -ErrorAction SilentlyContinue
-        }
-    `.trim();
-
-    try {
-        const instResult = await runPS(psInstall, { timeout: 300000 }); // 5 min für Installation
-        const instOut = instResult.stdout || '';
-        if (instOut.includes('ERR:')) {
-            const errMsg = instOut.split('\n').find(l => l.startsWith('ERR:'))?.replace('ERR:', '') || 'Installation fehlgeschlagen';
-            return { success: false, error: errMsg };
-        }
-    } catch (err) {
-        // Aufräumen
-        try { fs.unlinkSync(installerPath); } catch { /* ignore */ }
-        return { success: false, error: `Installation fehlgeschlagen: ${err.message}` };
-    }
-
-    // Schritt 3: Prüfen ob Installation erfolgreich war
-    const installed = isNpcapInstalled();
-    log.info(`Npcap-Installation ${installed ? 'erfolgreich' : 'fehlgeschlagen'} (${version})`);
-    return {
-        success: installed,
-        version: version || null,
-        message: installed
-            ? `Npcap ${version} wurde erfolgreich installiert.`
-            : 'Npcap-Installer wurde gestartet, aber die Installation scheint nicht abgeschlossen. Bitte erneut versuchen.',
-    };
 }
 
 module.exports = {
     getConnections,
     getBandwidth,
+    getBandwidthHistory,
+    getWiFiInfo,
     getFirewallRules,
     blockProcess,
     unblockProcess,
@@ -1064,8 +1161,8 @@ module.exports = {
     getGroupedConnections,
     getPollingData,
     getConnectionDiff,
-    isNpcapInstalled,
-    installNpcap,
     resolveIPs,
     lookupIPs,
+    getDnsCache,
+    clearDnsCache,
 };

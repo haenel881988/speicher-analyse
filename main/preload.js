@@ -244,8 +244,10 @@ contextBridge.exposeInMainWorld('api', {
     resolveIPs: (ipAddresses) => ipcRenderer.invoke('resolve-ips', ipAddresses),
     getPollingData: () => ipcRenderer.invoke('get-polling-data'),
     getConnectionDiff: () => ipcRenderer.invoke('get-connection-diff'),
-    isNpcapInstalled: () => ipcRenderer.invoke('is-npcap-installed'),
-    installNpcap: () => ipcRenderer.invoke('install-npcap'),
+    getBandwidthHistory: () => ipcRenderer.invoke('get-bandwidth-history'),
+    getWiFiInfo: () => ipcRenderer.invoke('get-wifi-info'),
+    getDnsCache: () => ipcRenderer.invoke('get-dns-cache'),
+    clearDnsCache: () => ipcRenderer.invoke('clear-dns-cache'),
     startNetworkRecording: () => ipcRenderer.invoke('start-network-recording'),
     stopNetworkRecording: () => ipcRenderer.invoke('stop-network-recording'),
     getNetworkRecordingStatus: () => ipcRenderer.invoke('get-network-recording-status'),
@@ -262,6 +264,7 @@ contextBridge.exposeInMainWorld('api', {
     getLastNetworkScan: () => ipcRenderer.invoke('get-last-network-scan'),
     scanDevicePorts: (ip) => ipcRenderer.invoke('scan-device-ports', ip),
     getSMBShares: (ip) => ipcRenderer.invoke('get-smb-shares', ip),
+    updateOUIDatabase: () => ipcRenderer.invoke('update-oui-database'),
     onNetworkScanProgress: (callback) => {
         ipcRenderer.removeAllListeners('network-scan-progress');
         ipcRenderer.on('network-scan-progress', (_event, data) => callback(data));

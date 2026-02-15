@@ -33,6 +33,9 @@ const DEFAULTS = {
     // Explorer
     showSizeColors: false,          // Farbliche Hervorhebung großer Dateien/Ordner im Explorer
 
+    // Netzwerk
+    networkDetailLevel: 'erweitert', // 'basis' | 'erweitert' | 'experte'
+
     // Layout
     smartLayout: true,              // Intelligentes Panel-Layout basierend auf Fenstergröße
 

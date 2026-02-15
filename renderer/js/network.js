@@ -38,7 +38,26 @@ export class NetworkView {
         this._recordings = [];              // Liste gespeicherter Aufzeichnungen
         this._cardFilter = null;            // Aktiver Metrikkarten-Filter (z.B. 'established', 'tracker')
         this._searchDebounce = null;       // Debounce-Timer für Suchfeld
+        this._sparklineCharts = new Map();  // Chart.js Instanzen für Bandbreiten-Sparklines
+        this._bandwidthHistory = {};        // Cache für Bandbreiten-History-Daten
+        this._dnsExpanded = false;          // DNS-Cache aufgeklappt?
+        this._dnsCache = [];                // DNS-Cache-Daten
+        this._wifiInfo = null;              // WiFi-Infos
+        this._detailLevel = 'erweitert';    // Drei-Stufen: basis | erweitert | experte
+        this._loadDetailLevel();
         this._setupScanProgressListener();
+    }
+
+    async _loadDetailLevel() {
+        try {
+            if (window.api.getPreferences) {
+                const prefs = await window.api.getPreferences();
+                const level = prefs?.networkDetailLevel;
+                if (level && ['basis', 'erweitert', 'experte'].includes(level)) {
+                    this._detailLevel = level;
+                }
+            }
+        } catch { /* Default beibehalten */ }
     }
 
     _setupScanProgressListener() {
@@ -184,8 +203,14 @@ export class NetworkView {
         if (this._isRefreshing) return;
         this._isRefreshing = true;
         try {
-            const bandwidth = await window.api.getBandwidth();
+            const [bandwidth, history, wifiInfo] = await Promise.all([
+                window.api.getBandwidth(),
+                window.api.getBandwidthHistory(),
+                window.api.getWiFiInfo(),
+            ]);
             this.bandwidth = bandwidth || [];
+            this._bandwidthHistory = history || {};
+            this._wifiInfo = wifiInfo;
             this._lastRefreshTime = new Date();
             this.render();
         } catch (err) {
@@ -204,10 +229,15 @@ export class NetworkView {
         const showToolbar = this.activeSubTab === 'connections' || this.activeSubTab === 'livefeed';
 
         this.container.innerHTML = `
-            <div class="network-page">
+            <div class="network-page network-tier-${this._detailLevel}">
                 <div class="network-header">
                     <h2>Netzwerk-Monitor</h2>
                     <div class="network-header-controls">
+                        <div class="network-tier-toggle">
+                            <button class="network-tier-btn ${this._detailLevel === 'basis' ? 'active' : ''}" data-tier-level="basis" title="Einfache Übersicht">Basis</button>
+                            <button class="network-tier-btn ${this._detailLevel === 'erweitert' ? 'active' : ''}" data-tier-level="erweitert" title="Standard-Ansicht">Erweitert</button>
+                            <button class="network-tier-btn ${this._detailLevel === 'experte' ? 'active' : ''}" data-tier-level="experte" title="Alle Details">Experte</button>
+                        </div>
                         <button class="network-btn" id="network-refresh" title="Netzwerkdaten neu laden">&#8635; Aktualisieren</button>
                         ${timeStr ? `<span class="network-timestamp">Stand: ${timeStr}</span>` : ''}
                         ${this.pollInterval ? `<span class="network-live-indicator"><span class="network-live-dot"></span> Live</span>` : ''}
@@ -215,7 +245,7 @@ export class NetworkView {
                 </div>
                 <div class="network-tabs">
                     <button class="network-tab ${this.activeSubTab === 'connections' ? 'active' : ''}" data-subtab="connections">Verbindungen <span class="network-tab-count">${s.totalConnections || 0}</span></button>
-                    <button class="network-tab ${this.activeSubTab === 'livefeed' ? 'active' : ''}" data-subtab="livefeed">Live-Feed</button>
+                    <button class="network-tab ${this.activeSubTab === 'livefeed' ? 'active' : ''}" data-subtab="livefeed" data-tier="erweitert">Live-Feed</button>
                     <button class="network-tab ${this.activeSubTab === 'devices' ? 'active' : ''}" data-subtab="devices">Lokale Geräte${devCount > 0 ? ` <span class="network-tab-count">${devCount}</span>` : ''}</button>
                 </div>
                 ${showToolbar ? `<div class="network-toolbar">
@@ -227,6 +257,7 @@ export class NetworkView {
             </div>`;
 
         this._wireEvents();
+        this._renderSparklines();
     }
 
     _renderSubTab() {
@@ -267,6 +298,10 @@ export class NetworkView {
                     <div class="network-card-value">${s.uniqueRemoteIPs || 0}</div>
                     <div class="network-card-label">Remote-IPs</div>
                 </div>
+                ${s.udpCount > 0 ? `<div class="network-card network-card-clickable ${cf === 'udp' ? 'network-card-active' : ''}" data-card-filter="udp" data-tier="experte">
+                    <div class="network-card-value">${s.udpCount}</div>
+                    <div class="network-card-label">UDP</div>
+                </div>` : ''}
                 <div class="network-card network-card-clickable ${cf === 'firmen' ? 'network-card-active' : ''}" data-card-filter="firmen">
                     <div class="network-card-value">${totalCompanies}</div>
                     <div class="network-card-label">Firmen</div>
@@ -292,6 +327,16 @@ export class NetworkView {
             </div>` : ''}
 
             ${this._renderGroupedConnections()}
+
+            <div class="network-dns-section" data-tier="experte">
+                <div class="network-dns-header" id="network-dns-toggle">
+                    <h3 class="network-section-title" style="cursor:pointer;margin:0">
+                        ${this._dnsExpanded ? '\u25BC' : '\u25B6'} DNS-Cache (zuletzt aufgelöste Domains)
+                    </h3>
+                    <button class="network-btn-small" id="network-dns-clear" title="DNS-Cache leeren">Cache leeren</button>
+                </div>
+                ${this._dnsExpanded ? this._renderDnsCache() : ''}
+            </div>
         </div>`;
     }
 
@@ -319,6 +364,7 @@ export class NetworkView {
                 case 'highrisk':    groups = groups.filter(g => g.hasHighRisk); break;
                 case 'firmen':      groups = groups.filter(g => (g.resolvedCompanies || []).length > 0); break;
                 case 'remoteips':   groups = groups.filter(g => g.uniqueIPCount > 0); break;
+                case 'udp':         groups = groups.filter(g => g.connections && g.connections.some(c => c.protocol === 'UDP')); break;
             }
         }
 
@@ -352,16 +398,16 @@ export class NetworkView {
                         <strong class="network-group-name">${this._esc(g.processName)}</strong>
                         <span class="network-group-badge">${g.connectionCount}</span>
                         <span class="network-group-ips"${companyTooltip ? ` title="${this._esc(companyTooltip)}"` : ''}>${g.uniqueIPCount} IP${g.uniqueIPCount !== 1 ? 's' : ''}${companySummary ? ' (' + this._esc(companySummary) + ')' : ''}</span>
-                        ${g.hasTrackers ? '<span class="network-tracker-badge">Tracker</span>' : ''}
-                        ${g.hasHighRisk ? '<span class="network-highrisk-badge">&#9888; Hochrisiko</span>' : ''}
-                        <span class="network-group-states">
+                        ${g.hasTrackers ? '<span class="network-tracker-badge" data-tier="erweitert">Tracker</span>' : ''}
+                        ${g.hasHighRisk ? '<span class="network-highrisk-badge" data-tier="erweitert">&#9888; Hochrisiko</span>' : ''}
+                        <span class="network-group-states" data-tier="erweitert">
                             ${Object.entries(g.states).map(([state, count]) => {
                                 const cls = state === 'Established' ? 'pill-established' : state === 'Listen' ? 'pill-listen' : (state === 'TimeWait' || state === 'CloseWait') ? 'pill-closing' : '';
                                 return `<span class="network-state-pill ${cls}">${state}: ${count}</span>`;
                             }).join('')}
                         </span>
                         ${ghostWarning ? '<span class="network-ghost-warning">Hintergrund-Aktivität!</span>' : ''}
-                        ${g.processPath ? `<button class="network-btn-small" data-block="${this._esc(g.processName)}" data-path="${this._esc(g.processPath)}">Blockieren</button>` : ''}
+                        ${g.processPath ? `<button class="network-btn-small" data-block="${this._esc(g.processName)}" data-path="${this._esc(g.processPath)}" data-tier="experte">Blockieren</button>` : ''}
                     </div>
                     ${expanded ? this._renderGroupDetail(g) : ''}
                 </div>`;
@@ -392,10 +438,13 @@ export class NetworkView {
             const flag = this._countryFlag(info.countryCode);
             const ports = [...new Set(connections.map(c => c.remotePort).filter(Boolean))].sort((a, b) => a - b);
             const states = {};
+            const protocols = new Set();
             for (const c of connections) {
                 states[c.state] = (states[c.state] || 0) + 1;
+                protocols.add(c.protocol || 'TCP');
             }
             const stateStr = Object.entries(states).map(([s, n]) => `${s}: ${n}`).join(', ');
+            const protoBadges = [...protocols].map(p => `<span class="network-proto-badge network-proto-${p.toLowerCase()}">${p}</span>`).join('');
             const rowClass = isHighRisk ? 'network-row-highrisk' : isTracker ? 'network-row-tracker' : '';
 
             rows += `<tr class="${rowClass}">
@@ -404,11 +453,11 @@ export class NetworkView {
                 <td class="network-isp" title="${this._esc(info.isp || '')}">${this._esc(info.isp && info.isp !== info.org ? info.isp : '')}</td>
                 <td>${ports.map(p => { const label = this._portLabel(p); return label ? `<span title="${label}">${p}</span>` : p; }).join(', ') || '-'}</td>
                 <td>${connections.length}</td>
-                <td><span class="network-state-pills">${stateStr}</span></td>
+                <td>${protoBadges} <span class="network-state-pills">${stateStr}</span></td>
             </tr>`;
         }
 
-        return `<div class="network-group-detail">
+        return `<div class="network-group-detail" data-tier="erweitert">
             <table class="network-table">
                 <thead><tr>
                     <th>Remote-IP</th>
@@ -697,9 +746,12 @@ export class NetworkView {
                 const linkLabel = this._formatLinkSpeed(b.linkSpeed);
                 const totalPackets = ((b.receivedPackets || 0) + (b.sentPackets || 0));
 
+                const hasHistory = this._bandwidthHistory[b.name] && this._bandwidthHistory[b.name].length > 1;
+
                 return `<div class="network-adapter-card ${isDown ? 'network-adapter-down' : ''}">
                     <div class="network-adapter-name">${this._esc(b.name)}</div>
                     <div class="network-adapter-desc">${this._esc(b.description || '')}${linkLabel !== '\u2014' ? ` \u2014 ${linkLabel}` : ''}</div>
+                    ${hasHistory ? `<div class="network-sparkline-container" data-tier="erweitert"><canvas class="network-sparkline" data-adapter="${this._esc(b.name)}"></canvas></div>` : ''}
                     <div class="network-adapter-stats">
                         <div class="network-adapter-stat">
                             <span class="network-stat-label">\u2193 Empfangen</span>
@@ -718,6 +770,64 @@ export class NetworkView {
                     </div>
                 </div>`;
             }).join('')}
+        </div>
+        ${this._renderWiFiDetails()}`;
+    }
+
+    _renderWiFiDetails() {
+        const w = this._wifiInfo;
+        if (!w) return '';
+        // Signalstärke-Farbe: rot < 30%, gelb < 60%, grün >= 60%
+        const pct = w.signalPercent || 0;
+        const sigColor = pct >= 60 ? 'var(--success, #22c55e)' : pct >= 30 ? 'var(--warning, #f59e0b)' : 'var(--danger, #ef4444)';
+        const sigWidth = Math.max(5, pct);
+        return `<div class="network-wifi-details" data-tier="erweitert">
+            <h4 class="network-section-title">WLAN-Details</h4>
+            <div class="network-wifi-grid">
+                <div class="network-wifi-signal">
+                    <span class="network-wifi-ssid">${this._esc(w.ssid || '—')}</span>
+                    <div class="network-wifi-signal-bar-bg">
+                        <div class="network-wifi-signal-bar" style="width:${sigWidth}%;background:${sigColor}"></div>
+                    </div>
+                    <span class="network-wifi-signal-pct" style="color:${sigColor}">${pct}%</span>
+                </div>
+                <div class="network-wifi-info-grid">
+                    ${w.channel ? `<div class="network-wifi-item"><span class="network-wifi-label">Kanal</span><span class="network-wifi-value">${this._esc(w.channel)}</span></div>` : ''}
+                    ${w.radioType ? `<div class="network-wifi-item"><span class="network-wifi-label">Funk</span><span class="network-wifi-value">${this._esc(w.radioType)}</span></div>` : ''}
+                    ${w.band ? `<div class="network-wifi-item"><span class="network-wifi-label">Band</span><span class="network-wifi-value">${this._esc(w.band)}</span></div>` : ''}
+                    ${w.auth ? `<div class="network-wifi-item"><span class="network-wifi-label">Auth</span><span class="network-wifi-value">${this._esc(w.auth)}</span></div>` : ''}
+                    ${w.cipher ? `<div class="network-wifi-item"><span class="network-wifi-label">Verschl.</span><span class="network-wifi-value">${this._esc(w.cipher)}</span></div>` : ''}
+                    ${w.rxRate ? `<div class="network-wifi-item"><span class="network-wifi-label">Empfang</span><span class="network-wifi-value">${this._esc(w.rxRate)}</span></div>` : ''}
+                    ${w.txRate ? `<div class="network-wifi-item"><span class="network-wifi-label">Senden</span><span class="network-wifi-value">${this._esc(w.txRate)}</span></div>` : ''}
+                    ${w.bssid ? `<div class="network-wifi-item"><span class="network-wifi-label">BSSID</span><span class="network-wifi-value">${this._esc(w.bssid)}</span></div>` : ''}
+                </div>
+            </div>
+        </div>`;
+    }
+
+    _renderDnsCache() {
+        if (this._dnsCache.length === 0) return '<div class="network-empty" style="margin-top:8px">DNS-Cache ist leer</div>';
+        // Gruppiert nach Domain
+        const grouped = {};
+        for (const e of this._dnsCache) {
+            const d = e.domain;
+            if (!grouped[d]) grouped[d] = [];
+            grouped[d].push(e);
+        }
+        const sorted = Object.entries(grouped).sort((a, b) => a[0].localeCompare(b[0]));
+        return `<div class="network-dns-table-wrap" style="margin-top:8px">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+                <span class="network-stat-label">${this._dnsCache.length} Einträge, ${sorted.length} Domains</span>
+                <button class="network-btn-small" id="network-dns-refresh">&#8635; Aktualisieren</button>
+            </div>
+            <table class="network-dns-table">
+                <thead><tr><th>Domain</th><th>IP-Adresse</th><th>TTL</th><th>Typ</th></tr></thead>
+                <tbody>
+                    ${sorted.map(([domain, entries]) => entries.map(e =>
+                        `<tr><td>${this._esc(domain)}</td><td>${this._esc(e.ip)}</td><td>${e.ttl}s</td><td>${this._esc(e.type)}</td></tr>`
+                    ).join('')).join('')}
+                </tbody>
+            </table>
         </div>`;
     }
 
@@ -754,16 +864,88 @@ export class NetworkView {
         return `${(mbits * 1000).toFixed(0)} Kbit/s`;
     }
 
+    /**
+     * Erstellt Chart.js Sparklines in den Bandbreiten-Adapter-Karten.
+     * Wird nach jedem render() aufgerufen.
+     */
+    _renderSparklines() {
+        // Alte Charts zerstören
+        for (const [, chart] of this._sparklineCharts) {
+            chart.destroy();
+        }
+        this._sparklineCharts.clear();
+
+        const canvases = this.container.querySelectorAll('.network-sparkline');
+        if (!canvases.length || typeof Chart === 'undefined') return;
+
+        for (const canvas of canvases) {
+            const adapterName = canvas.dataset.adapter;
+            const history = this._bandwidthHistory[adapterName];
+            if (!history || history.length < 2) continue;
+
+            const rxData = history.map(h => h.rx / 1024); // KB/s
+            const txData = history.map(h => h.tx / 1024); // KB/s
+            const labels = history.map(() => '');
+
+            const ctx = canvas.getContext('2d');
+            const chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            data: rxData,
+                            borderColor: 'rgba(46, 204, 113, 0.8)',
+                            backgroundColor: 'rgba(46, 204, 113, 0.15)',
+                            borderWidth: 1.5,
+                            fill: true,
+                            pointRadius: 0,
+                            tension: 0.3,
+                        },
+                        {
+                            data: txData,
+                            borderColor: 'rgba(52, 152, 219, 0.8)',
+                            backgroundColor: 'rgba(52, 152, 219, 0.15)',
+                            borderWidth: 1.5,
+                            fill: true,
+                            pointRadius: 0,
+                            tension: 0.3,
+                        },
+                    ],
+                },
+                options: {
+                    animation: false,
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { enabled: false },
+                    },
+                    scales: {
+                        x: { display: false },
+                        y: { display: false, beginAtZero: true },
+                    },
+                    layout: { padding: 0 },
+                },
+            });
+
+            this._sparklineCharts.set(adapterName, chart);
+        }
+    }
+
     /** Label für aktiven Karten-Filter */
     _cardFilterLabel(filter) {
-        const labels = { established: 'Aktive Verbindungen', listening: 'Lauschende Ports', tracker: 'Tracker-Prozesse', highrisk: 'Hochrisiko-Prozesse', firmen: 'Prozesse mit Firmenzuordnung', remoteips: 'Prozesse mit Remote-IPs' };
+        const labels = { established: 'Aktive Verbindungen', listening: 'Lauschende Ports', tracker: 'Tracker-Prozesse', highrisk: 'Hochrisiko-Prozesse', firmen: 'Prozesse mit Firmenzuordnung', remoteips: 'Prozesse mit Remote-IPs', udp: 'UDP-Endpunkte' };
         return labels[filter] || filter;
     }
 
-    /** Prüft ob eine IP lokal/privat ist */
+    /**
+     * Prüft ob eine IP lokal/privat ist.
+     * SYNC: Identische Logik in main/network.js (isPrivateIP)
+     */
     _isLocalIP(ip) {
         if (!ip) return true;
-        return ip === '0.0.0.0' || ip === '::' || ip === '::1' || ip === '127.0.0.1' ||
+        return ip === '0.0.0.0' || ip === '::' || ip === '::1' ||
                ip.startsWith('127.') || ip.startsWith('10.') || ip.startsWith('192.168.') ||
                ip.startsWith('169.254.') || /^172\.(1[6-9]|2\d|3[01])\./.test(ip) ||
                ip.startsWith('fe80:') || ip.startsWith('fd') || ip.startsWith('fc');
@@ -912,11 +1094,11 @@ export class NetworkView {
                     <span class="network-feed-stat-closed">-${closedCount} geschlossen</span>
                 </div>
                 <div class="network-livefeed-controls">
-                    ${this._recording
+                    <span data-tier="experte">${this._recording
                         ? `<span class="network-recording-indicator"><span class="network-rec-dot"></span> ${recTimeStr} (${rec?.eventCount || 0} Events)</span>
                            <button class="network-btn network-btn-small network-btn-danger" id="network-rec-stop">Aufzeichnung stoppen</button>`
                         : `<button class="network-btn network-btn-small network-btn-rec" id="network-rec-start">Aufzeichnung starten</button>`
-                    }
+                    }</span>
                     <button class="network-btn network-btn-small" id="network-feed-clear">Leeren</button>
                     <button class="network-btn network-btn-small" id="network-feed-pause">${this._feedPaused ? '\u25b6 Fortsetzen' : '\u23f8 Pause'}</button>
                 </div>
@@ -1326,6 +1508,51 @@ export class NetworkView {
                 }, 50);
             };
         });
+
+        // Tier-Level Toggle
+        this.container.querySelectorAll('[data-tier-level]').forEach(btn => {
+            btn.onclick = () => {
+                this._detailLevel = btn.dataset.tierLevel;
+                if (window.api.setPreference) {
+                    window.api.setPreference('networkDetailLevel', this._detailLevel);
+                }
+                this.render();
+            };
+        });
+
+        // DNS-Cache Toggle + Clear
+        const dnsToggle = this.container.querySelector('#network-dns-toggle');
+        if (dnsToggle) {
+            dnsToggle.onclick = async (e) => {
+                if (e.target.closest('#network-dns-clear')) return;
+                this._dnsExpanded = !this._dnsExpanded;
+                if (this._dnsExpanded && this._dnsCache.length === 0) {
+                    try { this._dnsCache = await window.api.getDnsCache(); } catch (err) { console.error('DNS cache error:', err); }
+                }
+                this.render();
+            };
+        }
+        const dnsClearBtn = this.container.querySelector('#network-dns-clear');
+        if (dnsClearBtn) {
+            dnsClearBtn.onclick = async (e) => {
+                e.stopPropagation();
+                const result = await window.api.clearDnsCache();
+                if (result.success) {
+                    showToast('DNS-Cache geleert', 'success');
+                    this._dnsCache = [];
+                    this.render();
+                } else {
+                    showToast('Fehler: ' + (result.error || 'unbekannt'), 'error');
+                }
+            };
+        }
+        const dnsRefreshBtn = this.container.querySelector('#network-dns-refresh');
+        if (dnsRefreshBtn) {
+            dnsRefreshBtn.onclick = async () => {
+                try { this._dnsCache = await window.api.getDnsCache(); } catch (err) { console.error('DNS cache error:', err); }
+                this.render();
+            };
+        }
 
         // Device filter
         const deviceFilterInput = this.container.querySelector('#network-device-filter');

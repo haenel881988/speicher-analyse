@@ -40,6 +40,17 @@ function saveSnapshot(pollingData) {
         return { success: false, error: 'Keine Daten zum Speichern' };
     }
 
+    // Bandbreiten-Daten kompakt speichern (pro Adapter: Name + aktuelle Raten + Totals)
+    const bandwidthSnapshot = (pollingData.bandwidth || [])
+        .filter(b => b.receivedBytes > 0 || b.sentBytes > 0)
+        .map(b => ({
+            name: b.name,
+            rxPerSec: b.rxPerSec || 0,
+            txPerSec: b.txPerSec || 0,
+            receivedBytes: b.receivedBytes || 0,
+            sentBytes: b.sentBytes || 0,
+        }));
+
     const snapshot = {
         timestamp: new Date().toISOString(),
         summary: {
@@ -47,7 +58,9 @@ function saveSnapshot(pollingData) {
             establishedCount: pollingData.summary.establishedCount || 0,
             listeningCount: pollingData.summary.listeningCount || 0,
             uniqueRemoteIPs: pollingData.summary.uniqueRemoteIPs || 0,
+            udpCount: pollingData.summary.udpCount || 0,
         },
+        bandwidth: bandwidthSnapshot,
         groups: (pollingData.grouped || []).map(g => ({
             processName: g.processName,
             connectionCount: g.connectionCount,
@@ -93,19 +106,24 @@ function exportHistory(format = 'json') {
     const history = _loadHistory();
 
     if (format === 'csv') {
-        const header = 'Zeitpunkt;Verbindungen;Aktiv;Lauschend;Remote-IPs;Prozesse;Tracker;Hochrisiko';
+        const header = 'Zeitpunkt;Verbindungen;Aktiv;Lauschend;Remote-IPs;UDP;Prozesse;Tracker;Hochrisiko;Bandbreite-Rx;Bandbreite-Tx';
         const rows = history.map(s => {
             const trackerCount = s.groups.filter(g => g.hasTrackers).length;
             const highRiskCount = s.groups.filter(g => g.hasHighRisk).length;
+            const totalRx = (s.bandwidth || []).reduce((sum, b) => sum + (b.rxPerSec || 0), 0);
+            const totalTx = (s.bandwidth || []).reduce((sum, b) => sum + (b.txPerSec || 0), 0);
             return [
                 s.timestamp,
                 s.summary.totalConnections,
                 s.summary.establishedCount,
                 s.summary.listeningCount,
                 s.summary.uniqueRemoteIPs,
+                s.summary.udpCount || 0,
                 s.groups.length,
                 trackerCount,
                 highRiskCount,
+                Math.round(totalRx),
+                Math.round(totalTx),
             ].join(';');
         });
         return header + '\n' + rows.join('\n');

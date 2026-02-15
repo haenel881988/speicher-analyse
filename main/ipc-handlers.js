@@ -996,14 +996,24 @@ function register(mainWindow) {
         return network.getConnectionDiff();
     });
 
-    ipcMain.handle('is-npcap-installed', async () => {
+    ipcMain.handle('get-bandwidth-history', async () => {
         const network = require('./network');
-        return network.isNpcapInstalled();
+        return network.getBandwidthHistory();
     });
 
-    ipcMain.handle('install-npcap', async () => {
+    ipcMain.handle('get-wifi-info', async () => {
         const network = require('./network');
-        return network.installNpcap();
+        return network.getWiFiInfo();
+    });
+
+    ipcMain.handle('get-dns-cache', async () => {
+        const network = require('./network');
+        return network.getDnsCache();
+    });
+
+    ipcMain.handle('clear-dns-cache', async () => {
+        const network = require('./network');
+        return network.clearDnsCache();
     });
 
     // === Network Recording ===
@@ -1086,6 +1096,12 @@ function register(mainWindow) {
     ipcMain.handle('get-audit-history', async () => {
         const { getAuditHistory } = require('./security-audit');
         return getAuditHistory();
+    });
+
+    // === OUI-Datenbank ===
+    ipcMain.handle('update-oui-database', async () => {
+        const { updateOUIDatabase } = require('./oui-database');
+        return updateOUIDatabase();
     });
 
     // === Network Scanner (Geräte-Erkennung) ===

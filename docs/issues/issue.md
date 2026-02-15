@@ -45,6 +45,11 @@ Weitere Funktionen fehlen bei entsprechenden Dateitypen, bei Bildern z.B.: die A
 
 
 
+# Netzwerk
+
+
+
+
 ## Erledigte Issues
 
 → Archiviert in [`archiv/erledigte-issues_v7.0-v8.0.md`](archiv/erledigte-issues_v7.0-v8.0.md)
