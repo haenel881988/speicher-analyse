@@ -32,6 +32,10 @@ export class NetworkView {
         this._feedEvents = [];              // Live-Feed: Rolling-Buffer (max 500)
         this._feedPollInterval = null;      // Separates Polling für Connection-Diff
         this._feedPaused = false;           // Auto-Scroll pausiert wenn User scrollt
+        this._recording = false;            // Aufzeichnung aktiv?
+        this._recordingStatus = null;       // Status der aktiven Aufzeichnung
+        this._recordingTimer = null;        // Timer-Intervall für Dauer-Anzeige
+        this._recordings = [];              // Liste gespeicherter Aufzeichnungen
         this._setupScanProgressListener();
     }
 
@@ -83,6 +87,11 @@ export class NetworkView {
     deactivate() {
         this.stopPolling();
         this._stopFeedPolling();
+        // Recording-Timer stoppen (Aufzeichnung selbst läuft im Backend weiter)
+        if (this._recordingTimer) {
+            clearInterval(this._recordingTimer);
+            this._recordingTimer = null;
+        }
     }
 
     async refresh(usePollingEndpoint = false) {
@@ -759,6 +768,7 @@ export class NetworkView {
     /**
      * Live-Feed Tab — Echtzeit-Verbindungsstream (Wireshark-light).
      * Zeigt neue, geschlossene und geänderte Verbindungen in Echtzeit.
+     * Enthält Aufzeichnungs-Controls und gespeicherte Aufzeichnungsliste.
      */
     _renderLiveFeed() {
         const eventRows = this._feedEvents.map(e => {
@@ -789,6 +799,44 @@ export class NetworkView {
         const newCount = this._feedEvents.filter(e => e.type === 'NEU').length;
         const closedCount = this._feedEvents.filter(e => e.type === 'GESCHLOSSEN').length;
 
+        // Aufzeichnungs-Status
+        const rec = this._recordingStatus;
+        const recElapsed = rec?.elapsedSeconds || 0;
+        const recMin = Math.floor(recElapsed / 60);
+        const recSec = recElapsed % 60;
+        const recTimeStr = `${String(recMin).padStart(2, '0')}:${String(recSec).padStart(2, '0')}`;
+
+        // Aufzeichnungsliste
+        const recListHtml = this._recordings.length > 0 ? `
+            <div class="network-recordings-section">
+                <div class="network-recordings-header">
+                    <h4 class="network-section-title">Gespeicherte Aufzeichnungen</h4>
+                    <button class="network-btn network-btn-small" id="network-open-recordings-dir" title="Aufzeichnungsverzeichnis öffnen">Ordner öffnen</button>
+                </div>
+                <table class="network-recordings-table">
+                    <thead><tr>
+                        <th>Datum</th>
+                        <th>Dauer</th>
+                        <th>Ereignisse</th>
+                        <th>Grösse</th>
+                        <th></th>
+                    </tr></thead>
+                    <tbody>${this._recordings.map(r => {
+                        const date = r.startedAt ? new Date(r.startedAt).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
+                        const dur = r.durationSeconds ? `${Math.floor(r.durationSeconds / 60)}:${String(r.durationSeconds % 60).padStart(2, '0')}` : '—';
+                        const size = r.sizeBytes < 1024 ? `${r.sizeBytes} B` : r.sizeBytes < 1024 * 1024 ? `${(r.sizeBytes / 1024).toFixed(1)} KB` : `${(r.sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
+                        return `<tr${r.isActive ? ' class="network-recording-active"' : ''}>
+                            <td>${date}</td>
+                            <td>${dur}</td>
+                            <td>${r.eventCount}</td>
+                            <td>${size}</td>
+                            <td>${r.isActive ? '<span style="color:var(--danger)">Aktiv</span>' : `<button class="network-btn-small network-btn-danger" data-delete-recording="${this._esc(r.filename)}" title="Löschen">&#10005;</button>`}</td>
+                        </tr>`;
+                    }).join('')}</tbody>
+                </table>
+            </div>
+        ` : '';
+
         return `<div class="network-livefeed">
             <div class="network-livefeed-header">
                 <div class="network-livefeed-stats">
@@ -797,6 +845,11 @@ export class NetworkView {
                     <span class="network-feed-stat-closed">-${closedCount} geschlossen</span>
                 </div>
                 <div class="network-livefeed-controls">
+                    ${this._recording
+                        ? `<span class="network-recording-indicator"><span class="network-rec-dot"></span> ${recTimeStr} (${rec?.eventCount || 0} Events)</span>
+                           <button class="network-btn network-btn-small network-btn-danger" id="network-rec-stop">Aufzeichnung stoppen</button>`
+                        : `<button class="network-btn network-btn-small network-btn-rec" id="network-rec-start">Aufzeichnung starten</button>`
+                    }
                     <button class="network-btn network-btn-small" id="network-feed-clear">Leeren</button>
                     <button class="network-btn network-btn-small" id="network-feed-pause">${this._feedPaused ? '\u25b6 Fortsetzen' : '\u23f8 Pause'}</button>
                 </div>
@@ -823,6 +876,7 @@ export class NetworkView {
                     </table>
                 </div>
             `}
+            ${recListHtml}
         </div>`;
     }
 
@@ -835,9 +889,32 @@ export class NetworkView {
     /** Startet Connection-Diff-Polling für den Live-Feed Tab. */
     _startFeedPolling() {
         this._stopFeedPolling();
+        // Aufzeichnungsliste + Status laden
+        this._loadRecordings();
+        this._restoreRecordingStatus();
         // Sofort ersten Diff holen
         this._pollConnectionDiff();
         this._feedPollInterval = setInterval(() => this._pollConnectionDiff(), 3000);
+    }
+
+    /** Prüft ob eine Aufzeichnung läuft (z.B. nach Tab-Wechsel). */
+    async _restoreRecordingStatus() {
+        try {
+            const status = await window.api.getNetworkRecordingStatus();
+            if (status.active) {
+                this._recording = true;
+                this._recordingStatus = status;
+                if (!this._recordingTimer) {
+                    this._recordingTimer = setInterval(async () => {
+                        try {
+                            this._recordingStatus = await window.api.getNetworkRecordingStatus();
+                            if (this.activeSubTab === 'livefeed') this.render();
+                        } catch { /* ignorieren */ }
+                    }, 1000);
+                }
+                this.render();
+            }
+        } catch { /* ignorieren */ }
     }
 
     /** Stoppt Connection-Diff-Polling. */
@@ -856,6 +933,10 @@ export class NetworkView {
             if (diff.events && diff.events.length > 0) {
                 // Neue Events vorn einfügen (neuste zuerst)
                 this._feedEvents = [...diff.events, ...this._feedEvents].slice(0, 500);
+                // Events an laufende Aufzeichnung anhängen
+                if (this._recording) {
+                    window.api.appendNetworkRecordingEvents(diff.events).catch(() => {});
+                }
                 // Nur Feed-Bereich aktualisieren wenn auf dem Live-Feed Tab
                 if (this.activeSubTab === 'livefeed') {
                     this.render();
@@ -864,6 +945,59 @@ export class NetworkView {
         } catch (err) {
             console.error('Connection-Diff Fehler:', err);
         }
+    }
+
+    /** Startet eine Netzwerk-Aufzeichnung. */
+    async _startRecording() {
+        try {
+            const result = await window.api.startNetworkRecording();
+            if (result.success) {
+                this._recording = true;
+                this._recordingStatus = { eventCount: 0, elapsedSeconds: 0 };
+                // Timer für die Dauer-Anzeige
+                this._recordingTimer = setInterval(async () => {
+                    try {
+                        this._recordingStatus = await window.api.getNetworkRecordingStatus();
+                        if (this.activeSubTab === 'livefeed') this.render();
+                    } catch { /* ignorieren */ }
+                }, 1000);
+                showToast('Aufzeichnung gestartet', 'success');
+                this.render();
+            } else {
+                showToast(result.error || 'Aufzeichnung konnte nicht gestartet werden', 'error');
+            }
+        } catch (err) {
+            showToast('Fehler: ' + err.message, 'error');
+        }
+    }
+
+    /** Stoppt die laufende Aufzeichnung. */
+    async _stopRecording() {
+        try {
+            const result = await window.api.stopNetworkRecording();
+            this._recording = false;
+            if (this._recordingTimer) {
+                clearInterval(this._recordingTimer);
+                this._recordingTimer = null;
+            }
+            this._recordingStatus = null;
+            if (result.success) {
+                showToast(`Aufzeichnung gespeichert: ${result.eventCount} Ereignisse, ${Math.floor(result.durationSeconds / 60)}:${String(result.durationSeconds % 60).padStart(2, '0')}`, 'success');
+                await this._loadRecordings();
+            } else {
+                showToast(result.error || 'Fehler beim Stoppen', 'error');
+            }
+            this.render();
+        } catch (err) {
+            showToast('Fehler: ' + err.message, 'error');
+        }
+    }
+
+    /** Lädt die Liste gespeicherter Aufzeichnungen. */
+    async _loadRecordings() {
+        try {
+            this._recordings = await window.api.listNetworkRecordings();
+        } catch { this._recordings = []; }
     }
 
     _renderHistory() {
@@ -1024,6 +1158,37 @@ export class NetworkView {
                 this.render();
             };
         }
+
+        // Recording controls
+        const recStartBtn = this.container.querySelector('#network-rec-start');
+        if (recStartBtn) {
+            recStartBtn.onclick = () => this._startRecording();
+        }
+        const recStopBtn = this.container.querySelector('#network-rec-stop');
+        if (recStopBtn) {
+            recStopBtn.onclick = () => this._stopRecording();
+        }
+        const openRecDirBtn = this.container.querySelector('#network-open-recordings-dir');
+        if (openRecDirBtn) {
+            openRecDirBtn.onclick = async () => {
+                await window.api.openNetworkRecordingsDir();
+            };
+        }
+        // Delete recording buttons
+        this.container.querySelectorAll('[data-delete-recording]').forEach(btn => {
+            btn.onclick = async () => {
+                const filename = btn.dataset.deleteRecording;
+                if (!confirm(`Aufzeichnung "${filename}" löschen?`)) return;
+                const result = await window.api.deleteNetworkRecording(filename);
+                if (result.success) {
+                    showToast('Aufzeichnung gelöscht', 'success');
+                    await this._loadRecordings();
+                    this.render();
+                } else {
+                    showToast(result.error || 'Löschen fehlgeschlagen', 'error');
+                }
+            };
+        });
 
         // Group toggle (aufklappen/zuklappen)
         this.container.querySelectorAll('[data-toggle]').forEach(header => {

@@ -4600,6 +4600,22 @@ textarea::placeholder {
 .network-feed-org { font-size: 11px; color: var(--text-secondary); }
 .network-feed-state { font-size: 11px; color: var(--text-muted); }
 
+/* Recording Controls */
+.network-btn-rec { background: var(--danger); color: #fff; border: none; }
+.network-btn-rec:hover { background: #c0392b; }
+.network-recording-indicator { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--danger); }
+.network-rec-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); animation: network-rec-pulse 1s ease-in-out infinite; }
+@keyframes network-rec-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+.network-recording-active td { background: rgba(231, 76, 60, 0.08); }
+
+/* Recordings List */
+.network-recordings-section { margin-top: 16px; border-top: 1px solid var(--border); padding-top: 12px; }
+.network-recordings-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.network-recordings-header h4 { margin: 0; font-size: 13px; }
+.network-recordings-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.network-recordings-table th { text-align: left; padding: 6px 10px; color: var(--text-muted); font-weight: 500; border-bottom: 1px solid var(--border); }
+.network-recordings-table td { padding: 6px 10px; border-bottom: 1px solid var(--border); }
+
 /* ===== v8.0: Security Audit ===== */
 .security-page { padding: 20px; max-width: 800px; }
 .security-header { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }

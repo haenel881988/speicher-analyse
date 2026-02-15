@@ -996,6 +996,44 @@ function register(mainWindow) {
         return network.getConnectionDiff();
     });
 
+    // === Network Recording ===
+    ipcMain.handle('start-network-recording', async () => {
+        const recording = require('./network-recording');
+        return recording.startRecording();
+    });
+
+    ipcMain.handle('stop-network-recording', async () => {
+        const recording = require('./network-recording');
+        return recording.stopRecording();
+    });
+
+    ipcMain.handle('get-network-recording-status', async () => {
+        const recording = require('./network-recording');
+        return recording.getRecordingStatus();
+    });
+
+    ipcMain.handle('append-network-recording-events', async (_event, events) => {
+        const recording = require('./network-recording');
+        return recording.appendEvents(events);
+    });
+
+    ipcMain.handle('list-network-recordings', async () => {
+        const recording = require('./network-recording');
+        return recording.listRecordings();
+    });
+
+    ipcMain.handle('delete-network-recording', async (_event, filename) => {
+        const recording = require('./network-recording');
+        return recording.deleteRecording(filename);
+    });
+
+    ipcMain.handle('open-network-recordings-dir', async () => {
+        const recording = require('./network-recording');
+        const dir = recording.getRecordingsDir();
+        shell.openPath(dir);
+        return { success: true, path: dir };
+    });
+
     ipcMain.handle('save-network-snapshot', async (_event, pollingData) => {
         const history = require('./network-history');
         return history.saveSnapshot(pollingData);
