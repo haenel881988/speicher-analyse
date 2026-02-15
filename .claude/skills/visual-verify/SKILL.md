@@ -101,6 +101,18 @@ Dieser Skill kann an einen Sub-Agent delegiert werden:
 Task(subagent_type="general-purpose", prompt="Führe /visual-verify für den [view] aus. App läuft auf Port 9222. ...")
 ```
 
+## Cleanup (PFLICHT)
+
+Nach Abschluss der Verifikation MÜSSEN alle temporären Dateien gelöscht werden:
+1. **Erstellte JS-Scripts** in `tools/wcag/` löschen (z.B. `verify-*.js`, `test-*.js`)
+2. **Screenshots** in `tools/wcag/*.png` löschen
+3. Nur permanente Dateien bleiben: `wcag-gate.js`, `wcag-static-check.js`, `restore-window.ps1`, `package.json`
+
+Sub-Agents die an diesen Skill delegiert werden, MÜSSEN die Cleanup-Anweisung im Prompt erhalten:
+```
+"Nach der Verifikation: Lösche ALLE erstellten .js und .png Dateien in tools/wcag/ (ausser wcag-gate.js, wcag-static-check.js, restore-window.ps1)."
+```
+
 ## Hinweise
 
 - **`page.click()` hängt** in dieser Electron-App → immer `page.evaluate(() => el.click())` verwenden

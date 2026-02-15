@@ -120,6 +120,13 @@ node launch.js  # oder: npm start
 - **VERBOTEN: Statische Listen für Erkennung/Discovery.** Die App muss in der Realität funktionieren, nicht nur in Simons Netzwerk. Statische Listen haben NICHTS mit der Realität zu tun — sie funktionieren nur für den Entwickler, nicht für andere Nutzer. IMMER dynamisch erkennen (Protokoll-Queries, Broadcast, OS-APIs), NIEMALS eine feste Liste von "bekannten" Einträgen als Erkennungsgrundlage. Feste Listen sind NUR erlaubt als Fallback-Label/Anzeige NACH einer dynamischen Erkennung — nie als Filter davor.
 - **Realitätsprinzip (ABSOLUT):** Code muss auf JEDEM Rechner in JEDEM Netzwerk funktionieren, nicht nur auf dem Entwickler-PC. Jede Annahme über die Umgebung (welche Geräte, welche Software, welche Services, welche Netzwerke existieren) ist ein Bug. NIEMALS lokale Testdaten, IP-Adressen, MAC-Adressen, Hostnamen oder Gerätenamen aus der Entwicklungsumgebung im Code verwenden. Multi-Produkt-Hersteller dürfen NICHT einem einzigen Gerätetyp zugeordnet werden. Wenn ein Gerätetyp nicht eindeutig erkannt werden kann → ehrlich "Unbekanntes Gerät" anzeigen statt raten.
 
+## Temporäre Dateien (Cleanup-Policy)
+
+- **Sub-Agents räumen SELBST auf.** Jeder Sub-Agent der temporäre Dateien erstellt (Puppeteer-Scripts, Screenshots, Test-Dateien) MUSS diese vor Rückgabe löschen.
+- **`tools/wcag/` ist KEIN Ablageort.** Dort liegen nur permanente Infrastruktur-Dateien: `wcag-gate.js`, `wcag-static-check.js`, `restore-window.ps1`. Temporäre Scripts dort erstellen ist OK, aber sie MÜSSEN danach gelöscht werden.
+- **Screenshots (*.png) in `tools/wcag/`** werden per `.gitignore` ignoriert, MÜSSEN aber trotzdem nach Gebrauch gelöscht werden (Festplatte sauber halten).
+- **Vor jedem Commit prüfen:** `git status` — wenn untracked Dateien in `tools/` auftauchen, entweder löschen oder bewusst committen. Niemals unbemerkt liegen lassen.
+
 ## Dateimanagement (docs/)
 
 | Datei | Zweck |
