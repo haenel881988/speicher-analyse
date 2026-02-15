@@ -134,15 +134,35 @@ export class NetworkView {
         }
     }
 
-    startPolling(intervalMs = 10000) {
+    startPolling(intervalMs = 5000) {
         this.stopPolling();
-        this.pollInterval = setInterval(() => this.refresh(true), intervalMs);
+        this.pollInterval = setInterval(() => this._pollBandwidth(), intervalMs);
     }
 
     stopPolling() {
         if (this.pollInterval) {
             clearInterval(this.pollInterval);
             this.pollInterval = null;
+        }
+    }
+
+    /**
+     * Leichtgewichtiges Bandwidth-Polling für Echtzeit-Modus.
+     * Ruft NUR getBandwidth() auf (Get-NetAdapter + Get-NetAdapterStatistics, ~2-3s)
+     * statt den schweren getPollingData() (~10+ Sekunden).
+     */
+    async _pollBandwidth() {
+        if (this._isRefreshing) return;
+        this._isRefreshing = true;
+        try {
+            const bandwidth = await window.api.getBandwidth();
+            this.bandwidth = bandwidth || [];
+            this._lastRefreshTime = new Date();
+            this.render();
+        } catch (err) {
+            console.error('Bandwidth-Polling Fehler:', err);
+        } finally {
+            this._isRefreshing = false;
         }
     }
 
@@ -870,11 +890,13 @@ export class NetworkView {
             realtimeToggle.onchange = () => {
                 this.snapshotMode = !realtimeToggle.checked;
                 if (!this.snapshotMode) {
-                    this.startPolling(5000);
+                    this.render();           // Live-Indikator sofort zeigen
+                    this.startPolling(5000); // Danach alle 5s aktualisieren
+                    this._pollBandwidth();   // Sofort ersten Abruf starten (~2-3s)
                 } else {
                     this.stopPolling();
+                    this.render();
                 }
-                this.render();
             };
         }
 
