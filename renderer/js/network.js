@@ -164,9 +164,9 @@ export class NetworkView {
                             <span class="network-toggle-slider"></span>
                             <span>Echtzeit</span>
                         </label>
-                        <button class="network-btn" id="network-refresh" title="Netzwerkdaten neu laden">&#8635; ${this.snapshotMode ? 'Aktualisieren' : 'Aktualisieren'}</button>
+                        <button class="network-btn" id="network-refresh" title="Netzwerkdaten neu laden">&#8635; Aktualisieren</button>
                         ${timeStr ? `<span class="network-timestamp">Stand: ${timeStr}</span>` : ''}
-                        ${!this.snapshotMode && this.pollInterval ? `<span class="network-recording-indicator">&#9679; Aufnahme</span>` : ''}
+                        ${!this.snapshotMode && this.pollInterval ? `<span class="network-live-indicator"><span class="network-live-dot"></span> Live</span>` : ''}
                     </div>
                 </div>
                 <div class="network-tabs">
@@ -236,12 +236,12 @@ export class NetworkView {
 
             <div class="network-overview-sections">
                 <div class="network-overview-section">
-                    <h3 class="network-section-title">Top-Prozesse</h3>
-                    ${this._renderTopProcesses()}
-                </div>
-                <div class="network-overview-section">
                     <h3 class="network-section-title">Netzwerkadapter</h3>
                     ${this._renderBandwidth()}
+                </div>
+                <div class="network-overview-section">
+                    <h3 class="network-section-title">Sicherheit</h3>
+                    ${this._renderSecurityOverview()}
                 </div>
             </div>
         </div>`;
@@ -611,17 +611,25 @@ export class NetworkView {
 
         return `<div class="network-bandwidth-grid">
             ${sorted.map(b => {
-                const rxMB = (b.receivedBytes / (1024 * 1024)).toFixed(1);
-                const txMB = (b.sentBytes / (1024 * 1024)).toFixed(1);
                 const isInactive = b.receivedBytes === 0 && b.sentBytes === 0;
                 const isDown = b.status !== 'Up';
 
                 if (isInactive && isDown) {
-                    // Offline-Adapter: nur Name + Status, kein Platz verschwenden
                     return `<div class="network-adapter-card network-adapter-down" style="padding:10px 14px">
-                        <div class="network-adapter-name" style="margin:0">${this._esc(b.name)} <span style="font-weight:400;font-size:11px;color:var(--text-muted)">— Offline</span></div>
+                        <div class="network-adapter-name" style="margin:0">${this._esc(b.name)} <span style="font-weight:400;font-size:11px;color:var(--text-muted)">\u2014 Offline</span></div>
                     </div>`;
                 }
+
+                // Echtzeit-Geschwindigkeit (MB/s) — Delta vom Backend
+                const rxSpeed = b.rxPerSec || 0;
+                const txSpeed = b.txPerSec || 0;
+                const rxLabel = this._formatSpeed(rxSpeed);
+                const txLabel = this._formatSpeed(txSpeed);
+                const hasSpeed = rxSpeed > 0 || txSpeed > 0;
+
+                // Kumulative Gesamt-Bytes als Tooltip
+                const rxTotal = this._formatBytes(b.receivedBytes);
+                const txTotal = this._formatBytes(b.sentBytes);
 
                 return `<div class="network-adapter-card ${isDown ? 'network-adapter-down' : ''}">
                     <div class="network-adapter-name">${this._esc(b.name)}</div>
@@ -629,12 +637,12 @@ export class NetworkView {
                     <div class="network-adapter-speed">${b.linkSpeed || '-'}</div>
                     <div class="network-adapter-stats">
                         <div class="network-adapter-stat">
-                            <span class="network-stat-label">Empfangen</span>
-                            <span class="network-stat-value">${rxMB} MB</span>
+                            <span class="network-stat-label">\u2193 Empfangen</span>
+                            <span class="network-stat-value ${hasSpeed && rxSpeed > 0 ? 'network-stat-active' : ''}" title="Gesamt: ${rxTotal}">${rxLabel}</span>
                         </div>
                         <div class="network-adapter-stat">
-                            <span class="network-stat-label">Gesendet</span>
-                            <span class="network-stat-value">${txMB} MB</span>
+                            <span class="network-stat-label">\u2191 Gesendet</span>
+                            <span class="network-stat-value ${hasSpeed && txSpeed > 0 ? 'network-stat-active' : ''}" title="Gesamt: ${txTotal}">${txLabel}</span>
                         </div>
                         <div class="network-adapter-stat">
                             <span class="network-stat-label">Pakete</span>
@@ -646,24 +654,75 @@ export class NetworkView {
         </div>`;
     }
 
-    _renderTopProcesses() {
-        const top = this.summary?.topProcesses || [];
-        if (top.length === 0) return '<div class="network-empty">Keine Daten</div>';
+    /** Formatiert Bytes/s als lesbare Geschwindigkeit */
+    _formatSpeed(bytesPerSec) {
+        if (bytesPerSec <= 0) return '0 KB/s';
+        if (bytesPerSec < 1024) return `${Math.round(bytesPerSec)} B/s`;
+        if (bytesPerSec < 1024 * 1024) return `${(bytesPerSec / 1024).toFixed(1)} KB/s`;
+        return `${(bytesPerSec / (1024 * 1024)).toFixed(1)} MB/s`;
+    }
 
-        const maxCount = top[0]?.connectionCount || 1;
-        return `<div class="network-top-list">
-            ${top.map((p, i) => {
-                const pct = Math.round((p.connectionCount / maxCount) * 100);
-                return `<div class="network-top-item">
-                    <span class="network-top-rank">${i + 1}</span>
-                    <span class="network-top-name">${this._esc(p.name)}</span>
-                    <div class="network-top-bar">
-                        <div class="network-top-bar-fill" style="width:${pct}%"></div>
-                    </div>
-                    <span class="network-top-count">${p.connectionCount}</span>
-                </div>`;
-            }).join('')}
-        </div>`;
+    /** Formatiert kumulative Bytes als lesbare Grösse */
+    _formatBytes(bytes) {
+        if (bytes <= 0) return '0 B';
+        if (bytes < 1024) return `${bytes} B`;
+        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+        if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+        return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+    }
+
+    _renderSecurityOverview() {
+        // Tracker-Prozesse sammeln
+        const trackerProcs = this.groupedData.filter(g => g.hasTrackers);
+        // Hochrisiko-Prozesse sammeln
+        const highRiskProcs = this.groupedData.filter(g => g.hasHighRisk);
+        // Unbekannte Remote-Verbindungen (nicht aufgelöst)
+        const unknownProcs = this.groupedData.filter(g =>
+            g.uniqueIPCount > 0 && g.resolvedCompanies.length === 0 && !g.hasTrackers && !g.hasHighRisk
+        );
+
+        if (trackerProcs.length === 0 && highRiskProcs.length === 0 && unknownProcs.length === 0) {
+            return `<div class="network-security-ok">
+                <span style="font-size:18px">\u2705</span>
+                <span>Keine Tracker oder Hochrisiko-Verbindungen erkannt</span>
+            </div>`;
+        }
+
+        let html = '<div class="network-security-list">';
+
+        if (highRiskProcs.length > 0) {
+            html += `<div class="network-security-group network-security-danger">
+                <div class="network-security-group-title">\u26a0 Hochrisiko-Verbindungen (${highRiskProcs.length})</div>
+                ${highRiskProcs.map(g => `<div class="network-security-item">
+                    <span class="network-security-proc">${this._esc(g.processName)}</span>
+                    <span class="network-security-detail">${g.uniqueIPCount} IP${g.uniqueIPCount !== 1 ? 's' : ''}</span>
+                </div>`).join('')}
+            </div>`;
+        }
+
+        if (trackerProcs.length > 0) {
+            html += `<div class="network-security-group network-security-warn">
+                <div class="network-security-group-title">\u{1f50d} Tracker-Verbindungen (${trackerProcs.length})</div>
+                ${trackerProcs.map(g => `<div class="network-security-item">
+                    <span class="network-security-proc">${this._esc(g.processName)}</span>
+                    <span class="network-security-detail">${(g.resolvedCompanies || []).join(', ') || g.uniqueIPCount + ' IPs'}</span>
+                </div>`).join('')}
+            </div>`;
+        }
+
+        if (unknownProcs.length > 0) {
+            html += `<div class="network-security-group network-security-unknown">
+                <div class="network-security-group-title">\u2753 Nicht zugeordnete Verbindungen (${unknownProcs.length})</div>
+                ${unknownProcs.slice(0, 5).map(g => `<div class="network-security-item">
+                    <span class="network-security-proc">${this._esc(g.processName)}</span>
+                    <span class="network-security-detail">${g.uniqueIPCount} IP${g.uniqueIPCount !== 1 ? 's' : ''}</span>
+                </div>`).join('')}
+                ${unknownProcs.length > 5 ? `<div class="network-security-more">+ ${unknownProcs.length - 5} weitere</div>` : ''}
+            </div>`;
+        }
+
+        html += '</div>';
+        return html;
     }
 
     _renderHistory() {
@@ -805,13 +864,13 @@ export class NetworkView {
             };
         }
 
-        // Echtzeit-Toggle
+        // Echtzeit-Toggle (5s Intervall für sichtbare Bandbreiten-Updates)
         const realtimeToggle = this.container.querySelector('#network-realtime-toggle');
         if (realtimeToggle) {
             realtimeToggle.onchange = () => {
                 this.snapshotMode = !realtimeToggle.checked;
                 if (!this.snapshotMode) {
-                    this.startPolling(10000);
+                    this.startPolling(5000);
                 } else {
                     this.stopPolling();
                 }

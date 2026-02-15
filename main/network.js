@@ -8,6 +8,9 @@ const log = require('./logger').createLogger('network');
 const PS_TIMEOUT = 30000;
 const PS_OPTS = { timeout: PS_TIMEOUT, maxBuffer: 10 * 1024 * 1024 };
 
+// Bandbreiten-Delta: Vorherige Werte für Echtzeit-Berechnung (MB/s)
+const _prevBandwidth = new Map(); // adapterName → { receivedBytes, sentBytes, timestamp }
+
 // ---------------------------------------------------------------------------
 // 1) getConnections – Aktive TCP-Verbindungen mit Prozess-Informationen
 // ---------------------------------------------------------------------------
@@ -87,16 +90,34 @@ async function getBandwidth() {
         const { stdout } = await runPS(psScript, PS_OPTS);
         const raw = JSON.parse(stdout.trim());
         const arr = Array.isArray(raw) ? raw : [raw];
-        return arr.map(a => ({
-            name:            a.name            || '',
-            description:     a.description     || '',
-            status:          a.status          || '',
-            linkSpeed:       a.linkSpeed       || '',
-            receivedBytes:   Number(a.receivedBytes)   || 0,
-            sentBytes:       Number(a.sentBytes)       || 0,
-            receivedPackets: Number(a.receivedPackets) || 0,
-            sentPackets:     Number(a.sentPackets)     || 0,
-        }));
+        const now = Date.now();
+        return arr.map(a => {
+            const name = a.name || '';
+            const receivedBytes = Number(a.receivedBytes) || 0;
+            const sentBytes = Number(a.sentBytes) || 0;
+            const prev = _prevBandwidth.get(name);
+            _prevBandwidth.set(name, { receivedBytes, sentBytes, timestamp: now });
+            let rxPerSec = 0, txPerSec = 0;
+            if (prev) {
+                const elapsed = (now - prev.timestamp) / 1000;
+                if (elapsed > 0) {
+                    rxPerSec = Math.max(0, (receivedBytes - prev.receivedBytes) / elapsed);
+                    txPerSec = Math.max(0, (sentBytes - prev.sentBytes) / elapsed);
+                }
+            }
+            return {
+                name,
+                description:     a.description     || '',
+                status:          a.status          || '',
+                linkSpeed:       a.linkSpeed       || '',
+                receivedBytes,
+                sentBytes,
+                receivedPackets: Number(a.receivedPackets) || 0,
+                sentPackets:     Number(a.sentPackets)     || 0,
+                rxPerSec,
+                txPerSec,
+            };
+        });
     } catch (err) {
         log.error('Netzwerkadapter-Statistiken konnten nicht abgerufen werden:', err.message);
         return [];
@@ -739,13 +760,30 @@ async function getPollingData() {
             listeningCount: Number(s.lc) || 0, uniqueRemoteIPs: Number(s.ui) || 0, topProcesses: topProc,
         };
 
-        // Bandwidth parsen
+        // Bandwidth parsen + Delta-Berechnung für Echtzeit-Anzeige
         const rawBw = Array.isArray(data.bandwidth) ? data.bandwidth : (data.bandwidth ? [data.bandwidth] : []);
-        const bandwidth = rawBw.map(b => ({
-            name: b.n || '', description: b.d || '', status: b.s || '', linkSpeed: b.ls || '',
-            receivedBytes: Number(b.rb) || 0, sentBytes: Number(b.sb) || 0,
-            receivedPackets: Number(b.rp) || 0, sentPackets: Number(b.sp) || 0,
-        }));
+        const bwNow = Date.now();
+        const bandwidth = rawBw.map(b => {
+            const name = b.n || '';
+            const receivedBytes = Number(b.rb) || 0;
+            const sentBytes = Number(b.sb) || 0;
+            const prev = _prevBandwidth.get(name);
+            _prevBandwidth.set(name, { receivedBytes, sentBytes, timestamp: bwNow });
+            let rxPerSec = 0, txPerSec = 0;
+            if (prev) {
+                const elapsed = (bwNow - prev.timestamp) / 1000;
+                if (elapsed > 0) {
+                    rxPerSec = Math.max(0, (receivedBytes - prev.receivedBytes) / elapsed);
+                    txPerSec = Math.max(0, (sentBytes - prev.sentBytes) / elapsed);
+                }
+            }
+            return {
+                name, description: b.d || '', status: b.s || '', linkSpeed: b.ls || '',
+                receivedBytes, sentBytes,
+                receivedPackets: Number(b.rp) || 0, sentPackets: Number(b.sp) || 0,
+                rxPerSec, txPerSec,
+            };
+        });
 
         // Gruppierung (wie getGroupedConnections, aber NUR mit Cache-Daten)
         const groups = new Map();

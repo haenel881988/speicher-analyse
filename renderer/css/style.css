@@ -4527,6 +4527,9 @@ textarea::placeholder {
 }
 .network-timestamp { font-size: 11px; color: var(--text-muted); flex-shrink: 0; }
 .network-recording-indicator { font-size: 11px; color: var(--danger); font-weight: 600; flex-shrink: 0; }
+.network-live-indicator { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; color: var(--success, #22c55e); flex-shrink: 0; }
+.network-live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success, #22c55e); animation: network-pulse 1.5s ease-in-out infinite; }
+@keyframes network-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
 
 .network-bandwidth-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
 .network-adapter-card {
@@ -4543,6 +4546,7 @@ textarea::placeholder {
 .network-adapter-stat { text-align: center; }
 .network-stat-label { font-size: 10px; color: var(--text-secondary); display: block; }
 .network-stat-value { font-size: 14px; font-weight: 600; display: block; }
+.network-stat-active { color: var(--success, #22c55e); }
 
 .network-top-list { max-width: 600px; }
 .network-top-item { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
@@ -4551,6 +4555,19 @@ textarea::placeholder {
 .network-top-bar { flex: 1; height: 8px; background: var(--bg-tertiary); border-radius: 4px; overflow: hidden; }
 .network-top-bar-fill { height: 100%; background: var(--accent); border-radius: 4px; }
 .network-top-count { width: 40px; text-align: right; font-size: 12px; font-weight: 600; }
+
+/* Sicherheitsübersicht in der Netzwerk-Übersicht */
+.network-security-ok { display: flex; align-items: center; gap: 10px; padding: 16px; background: var(--bg-secondary); border-radius: 8px; color: var(--text-secondary); font-size: 13px; }
+.network-security-list { display: flex; flex-direction: column; gap: 12px; }
+.network-security-group { padding: 12px; border-radius: 8px; background: var(--bg-secondary); }
+.network-security-group-title { font-size: 12px; font-weight: 600; margin-bottom: 8px; }
+.network-security-danger .network-security-group-title { color: var(--danger, #ef4444); }
+.network-security-warn .network-security-group-title { color: var(--warning, #f59e0b); }
+.network-security-unknown .network-security-group-title { color: var(--text-secondary); }
+.network-security-item { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; font-size: 12px; }
+.network-security-proc { font-weight: 500; color: var(--text-primary); }
+.network-security-detail { color: var(--text-secondary); font-size: 11px; }
+.network-security-more { font-size: 11px; color: var(--text-muted); padding-top: 4px; }
 
 /* ===== v8.0: Security Audit ===== */
 .security-page { padding: 20px; max-width: 800px; }

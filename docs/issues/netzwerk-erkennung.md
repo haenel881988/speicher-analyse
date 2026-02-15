@@ -1084,3 +1084,304 @@ Simon startet einen Scan und prüft:
 - ARP-Geräte haben rtt = -1 (kein Ping möglich) → "— ms" statt "X ms"
 - Samsung TV vs. Samsung Handy → beide "Smartphone" (korrekter Fix braucht UPnP/mDNS)
 - Detaillierte Software-/Konfigurations-Analyse → braucht Level 2 (WinRM/SSH mit Auth) → separate Erweiterung (v8+)
+
+---
+---
+
+# Issue: Netzwerk-Register — UI, Architektur & Datenquellen
+
+**Erstellt:** 2026-02-15
+**Status:** Offen
+**Priorität:** Hoch
+**Betrifft:** Gesamtes Netzwerk-Register (alle 4 Tabs: Übersicht, Verbindungen, Lokale Geräte, Verlauf)
+
+> Ergebnis der Tiefenanalyse vom 15.02.2026. Diese Issues betreffen NICHT die Geräte-Erkennung (oben), sondern das gesamte Netzwerk-Register: UI-Struktur, Datenquellen und fehlende Funktionalität.
+
+---
+
+## Symptome (was Simon sieht)
+
+| # | Was passiert | Wo | Schwere |
+|---|-------------|-----|---------|
+| N-1 | Übersicht zeigt "Top-Prozesse" — gleiche Info wie Verbindungen-Tab | Übersicht | Hoch |
+| N-2 | Netzwerkadapter zeigen kumulative MB statt Echtzeit-Geschwindigkeit | Übersicht | Hoch |
+| N-3 | Echtzeit-Toggle macht keinen sichtbaren Unterschied | Header | Hoch |
+| N-4 | "Lokale Geräte" ist ein komplett anderes Feature als Verbindungen | Geräte-Tab | Mittel |
+| N-5 | IP-Auflösung nutzt ip-api.com (langsam, Rate-Limit, HTTP-only) | Verbindungen | Hoch |
+| N-6 | Verlauf funktioniert nur manuell (Snapshot speichern) | Verlauf-Tab | Mittel |
+
+---
+
+## N-1: Übersicht ist fragmentiert — Top-Prozesse dupliziert Information
+
+**Dateien:** `renderer/js/network.js` Zeile 237-246
+
+### Was passiert
+Die Übersicht zeigt zwei Abschnitte:
+1. **Top-Prozesse** — die 10 Prozesse mit den meisten Verbindungen
+2. **Netzwerkadapter** — Adapter-Statistiken
+
+Die "Top-Prozesse" zeigen exakt die gleiche Information die im Verbindungen-Tab ausführlicher zu sehen ist. Das verwirrt — man fragt sich: "Wo genau soll ich hinschauen?"
+
+### Warum das ein Problem ist
+- Die Übersicht soll einen SCHNELLEN Überblick geben, keine Detaildaten
+- Top-Prozesse ohne Kontext (welche IPs? welche Firmen?) sind nutzlos
+- Der Verbindungen-Tab zeigt die gleichen Prozesse + Verbindungsdetails + Firmen → macht Top-Prozesse überflüssig
+
+### Empfehlung
+Die Übersicht sollte folgendes zeigen:
+1. **Zusammenfassungskarten** (bereits vorhanden: Verbindungen, Aktiv, Lauschend, Remote-IPs, Firmen, Tracker, Hochrisiko)
+2. **Netzwerkadapter** mit Echtzeit-Bandbreite (siehe N-2)
+3. **Sicherheitsübersicht**: Tracker-Liste, Hochrisiko-Verbindungen, unbekannte Verbindungen
+4. **NICHT**: Top-Prozesse (gehört in Verbindungen-Tab)
+
+### Betroffener Code
+```
+renderer/js/network.js Zeile 237-246:
+  <div class="network-overview-section">
+      <h3 class="network-section-title">Top-Prozesse</h3>
+      ${this._renderTopProcesses()}
+  </div>
+```
+
+---
+
+## N-2: Netzwerkadapter zeigen kumulative Bytes statt Echtzeit-Geschwindigkeit
+
+**Dateien:** `main/network.js` Zeile 64-104, `renderer/js/network.js` Zeile 606-647
+
+### Was passiert
+Die Netzwerkadapter-Karten zeigen:
+- **Empfangen: 4521.3 MB** — das sind die GESAMTEN empfangenen Bytes seit dem letzten PC-Neustart
+- **Gesendet: 892.1 MB** — gleich, kumulative Bytes seit Boot
+
+Das sieht auf den ersten Blick aus wie "so viel Traffic gerade" — ist es aber nicht. Beim nächsten Refresh ändert sich die Zahl kaum (z.B. 4521.3 → 4522.1). Das vermittelt den Eindruck, dass nichts passiert.
+
+### Was der User ERWARTET
+- **Empfangen: 12.4 MB/s** — aktuelle Download-Geschwindigkeit
+- **Gesendet: 1.8 MB/s** — aktuelle Upload-Geschwindigkeit
+- Visuell erkennbar, ob gerade Traffic fliesst oder nicht
+
+### Wurzelursache
+`Get-NetAdapterStatistics` liefert kumulative Bytes (`.ReceivedBytes`, `.SentBytes`). Die API gibt diese direkt weiter. Es fehlt eine **Delta-Berechnung**: Aktueller Wert minus vorheriger Wert, geteilt durch die Zeit zwischen den Abfragen.
+
+### Lösung
+Im Backend (`main/network.js`): Vorherige Werte in einer Map speichern. Bei jedem Aufruf Delta berechnen:
+
+```javascript
+const _prevBandwidth = new Map();  // name → { receivedBytes, sentBytes, timestamp }
+
+function calculateBandwidth(currentStats) {
+    const now = Date.now();
+    return currentStats.map(adapter => {
+        const prev = _prevBandwidth.get(adapter.name);
+        _prevBandwidth.set(adapter.name, {
+            receivedBytes: adapter.receivedBytes,
+            sentBytes: adapter.sentBytes,
+            timestamp: now
+        });
+        if (!prev) return { ...adapter, rxPerSec: 0, txPerSec: 0 };
+        const elapsed = (now - prev.timestamp) / 1000;  // Sekunden
+        if (elapsed <= 0) return { ...adapter, rxPerSec: 0, txPerSec: 0 };
+        return {
+            ...adapter,
+            rxPerSec: Math.max(0, (adapter.receivedBytes - prev.receivedBytes) / elapsed),
+            txPerSec: Math.max(0, (adapter.sentBytes - prev.sentBytes) / elapsed),
+        };
+    });
+}
+```
+
+Im Frontend: `rxPerSec` und `txPerSec` als MB/s formatieren. Kumulative Bytes optional als Tooltip anzeigen.
+
+### Zusammenhang mit N-3
+Ohne Echtzeit-Bandbreite macht der Echtzeit-Button keinen sichtbaren Unterschied bei den Netzwerkadaptern.
+
+---
+
+## N-3: Echtzeit-Toggle macht keinen sichtbaren Unterschied
+
+**Dateien:** `renderer/js/network.js` Zeile 808-820, Zeile 137-147
+
+### Was passiert
+Der Echtzeit-Toggle im Header aktiviert ein 10-Sekunden-Polling. Technisch funktioniert er korrekt — alle 10 Sekunden werden neue Daten abgerufen und die Anzeige aktualisiert. Aber:
+
+1. **Verbindungen-Tab**: Die Verbindungen ändern sich selten so schnell, dass 10s-Updates sichtbar sind
+2. **Netzwerkadapter**: Kumulative Bytes ändern sich kaum (4521.3 → 4521.5 MB)
+3. **Übersicht**: Zahlenwerte ändern sich minimal (102 Verbindungen → 103)
+
+Aus Simons Sicht: Man aktiviert Echtzeit und es passiert... nichts Sichtbares.
+
+### Was der User ERWARTET
+Echtzeit bedeutet: Man sieht LIVE was passiert. Zahlen die sich bewegen, Graphen die sich füllen, Traffic der fliesst.
+
+### Evaluation: Ist der Echtzeit-Button überhaupt nötig?
+
+**Argument DAFÜR:**
+- Manche User wollen sehen wie sich Verbindungen entwickeln
+- Für Troubleshooting (z.B. welcher Prozess frisst Bandbreite) ist Echtzeit nützlich
+- Das 10s-Intervall reicht für TCP-Verbindungen (die dauern oft Minuten)
+
+**Argument DAGEGEN:**
+- PowerShell alle 10s aufrufen verbraucht CPU/Ressourcen
+- Ohne Echtzeit-Bandbreite (N-2) sieht man kaum Unterschiede
+- Die IP-Auflösung (ip-api.com) wird beim Polling NICHT durchgeführt (nur Cache) → neue IPs zeigen "Unbekannt" statt Firmennamen
+
+**Empfehlung:** Den Echtzeit-Button BEHALTEN, aber ERST sinnvoll machen:
+1. N-2 lösen (Echtzeit-Bandbreite mit Delta-Berechnung)
+2. Mini-Sparkline oder Balkendiagramm für Bandbreite
+3. Verbindungs-Diff anzeigen: "+3 neue, -1 geschlossen" seit letztem Update
+4. Visuelles Feedback: Pulsierender Indikator ("Live"), Timestamp aktualisiert sich
+5. Polling-Intervall auf 5s reduzieren für schnellere Reaktion
+
+Ohne diese Verbesserungen ist der Button nutzlos und sollte AUSGEBLENDET werden (nicht entfernt — der Code bleibt, wird nur unsichtbar, bis er Sinn macht).
+
+---
+
+## N-4: "Lokale Geräte" ist ein Fremdkörper im Netzwerk-Monitor
+
+**Dateien:** `renderer/js/network.js` Zeile 398-604
+
+### Was passiert
+Der Netzwerk-Monitor hat 4 Tabs:
+1. **Übersicht** — Zusammenfassung der Verbindungen
+2. **Verbindungen** — TCP-Verbindungen nach Prozess
+3. **Lokale Geräte** — Geräte-Inventar im Netzwerk (Scan)
+4. **Verlauf** — Snapshots
+
+Tabs 1, 2 und 4 gehören zusammen: Sie zeigen die **ausgehenden Verbindungen** des eigenen PCs. Tab 3 ist ein **komplett anderes Feature**: Es scannt das lokale Netzwerk nach Geräten (Router, Drucker, Smartphones, etc.).
+
+### Warum das ein Problem ist
+- Die beiden Features haben NICHTS miteinander zu tun
+- "Lokale Geräte" hat einen eigenen Scan-Button, eigene Ladezeiten (20-60s), eigenes Datenmodell
+- Die Verbindungen zeigen REMOTE-Ziele (Microsoft, Google, Cloudflare), die Geräte zeigen LOKALE Hardware
+- Der Netzwerk-Scanner (350+ Zeilen PowerShell, UPnP, mDNS, WSD, SNMP) ist ein eigenständiges System
+
+### Empfehlung: Zwei Optionen
+
+**Option A: Lokale Geräte als eigenen Sidebar-Tab**
+- Neuer Sidebar-Eintrag unter "Sicherheit" oder "System": "Netzwerk-Inventar"
+- Eigene View-Klasse, eigener Menüpunkt
+- Netzwerk-Monitor behält nur Übersicht + Verbindungen + Verlauf
+- **Vorteil:** Klare Trennung, kein Feature-Overload, beide Features können unabhängig wachsen
+
+**Option B: Zwei-Panel-Design im Netzwerk-Tab**
+- Oberer Bereich: Verbindungen (wie jetzt)
+- Unterer Bereich: Geräte-Inventar
+- Toggle/Collapse für jeden Bereich
+- **Vorteil:** Alles "Netzwerk-bezogen" bleibt zusammen
+
+**Empfehlung: Option A** — "Lokale Geräte" ist das grösste Feature im gesamten Netzwerk-Tab (gemessen an Code, Scan-Zeit und Komplexität). Es verdient einen eigenen Menüpunkt.
+
+---
+
+## N-5: IP-Auflösung — ip-api.com ersetzen
+
+**Dateien:** `main/network.js` Zeile 398-669
+
+### Was passiert
+Wenn der Verbindungen-Tab geladen wird, werden alle Remote-IP-Adressen an `ip-api.com` gesendet um Organisation, ISP und Land zu ermitteln. Damit erkennt die App z.B. dass eine Verbindung zu 13.107.42.14 → "Microsoft" gehört.
+
+### Probleme mit ip-api.com
+| Problem | Detail |
+|---------|--------|
+| Rate-Limit | 45 Anfragen/Minute (Free), bei vielen IPs schnell erreicht |
+| HTTP-only | ip-api.com verlangt HTTP (kein HTTPS im Free-Tier) → Daten im Klartext |
+| Internet nötig | Ohne Internet keine Auflösung → alle IPs zeigen "Unbekannt" |
+| Datenschutz | Jede besuchte IP wird an Drittanbieter gesendet |
+| Latenz | 200-500ms pro Batch → spürbare Verzögerung beim Laden |
+
+### Simons Frage: Brauchen wir das überhaupt? Wäre DNS/WHOIS besser?
+
+**Was ip-api.com liefert (und warum es nützlich ist):**
+- **Organisation**: "Microsoft Corporation" → zeigt dem User zu welcher Firma die Verbindung geht
+- **ISP**: "Level 3 Communications" → welcher Provider hostet den Server
+- **Land**: "US" → Hochrisiko-Erkennung (RU, CN, KP, IR)
+- **Tracker-Erkennung**: Via COMPANY_PATTERNS → identifiziert Werbenetzwerke
+
+**Kann DNS das ersetzen?**
+- **Reverse DNS (PTR)**: Gibt den Hostnamen zurück (z.B. `a-0001.a-msedge.net`). COMPANY_PATTERNS matcht dann "Microsoft". **JA, teilweise ersetzbar.**
+- **Problem**: Nicht alle IPs haben PTR-Records. Manche geben nur kryptische CDN-Namen zurück (z.B. `ec2-52-86-xxx.compute-1.amazonaws.com`).
+- **WHOIS**: Gibt ausführliche Besitzer-Informationen. **Sehr langsam** (1-3 Sekunden pro Query), nicht für Batch geeignet, WHOIS-Server haben aggressive Rate-Limits.
+
+**Empfohlene Lösung: Lokale Datenbank (MaxMind GeoLite2)**
+
+| Eigenschaft | ip-api.com | MaxMind GeoLite2 | DNS Reverse |
+|-------------|-----------|-----------------|-------------|
+| Geschwindigkeit | 200-500ms/Batch | <1ms/IP (lokal) | 50-200ms/IP |
+| Internet nötig | Ja | Nein (nach Download) | Ja |
+| Rate-Limit | 45/min | Unbegrenzt | Keins (aber langsam) |
+| Organisation/ISP | Ja | Ja (ASN-DB) | Teilweise (PTR) |
+| Land | Ja | Ja | Nein |
+| Datenschutz | IPs an Drittanbieter | 100% lokal | DNS-Anfragen sichtbar |
+| Aktualität | Immer aktuell | Monatliche Updates | Immer aktuell |
+| npm-Paket | — | `maxmind` (24.6 KB, pure JS) | Node.js built-in |
+
+**Wie bleibt die Datenbank aktuell?**
+- MaxMind aktualisiert GeoLite2 **alle 2 Wochen** (Dienstag)
+- Die App kann beim Start prüfen ob ein Update verfügbar ist (HEAD-Request auf Download-URL)
+- Automatisches Download + Replace der .mmdb-Datei (ca. 4 MB)
+- Auch OHNE Update funktioniert die DB — die Daten veralten langsam (IPs ändern Besitzer selten)
+- **Registrierung nötig**: Kostenloser MaxMind-Account + License-Key für Downloads
+
+**Simons Punkt "IP-Adressen sind dynamisch":**
+- Das stimmt für LOKALE IPs (192.168.x.x) — die ändern sich bei jedem DHCP-Lease
+- Für REMOTE IPs (13.107.42.14 = Microsoft) ist das NICHT der Fall — grosse Firmen besitzen feste IP-Blöcke seit Jahrzehnten
+- Die MaxMind-DB bildet genau diese Zuordnung ab: IP-Block → Organisation
+
+### Empfohlene Hybrid-Lösung
+
+```
+1. MaxMind GeoLite2 ASN-DB (offline)     → Organisation, AS-Nummer
+2. MaxMind GeoLite2 Country-DB (offline)  → Land, Kontinent
+3. COMPANY_PATTERNS (bereits vorhanden)   → Firmen-Labels + Tracker-Erkennung
+4. DNS Reverse als Fallback               → Hostname wenn DB kein Ergebnis hat
+```
+
+**Kein WHOIS nötig**: Zu langsam, zu unzuverlässig, MaxMind liefert die gleichen Daten schneller.
+
+### Aufwand
+- npm-Paket `maxmind` installieren
+- GeoLite2-ASN.mmdb + GeoLite2-Country.mmdb herunterladen (einmalig, ca. 8 MB)
+- `lookupIPs()` in `main/network.js` umschreiben (ca. 30 Zeilen)
+- `httpPost()` und ip-api.com-Code entfernen
+- Auto-Update-Check beim App-Start einbauen (optional)
+
+---
+
+## N-6: Verlauf funktioniert nur manuell
+
+**Dateien:** `renderer/js/network.js` Zeile 669-747
+
+### Was passiert
+Der Verlauf-Tab zeigt gespeicherte Snapshots. Ein Snapshot wird NUR erstellt wenn der User auf "Aktuellen Snapshot speichern" klickt. Es gibt keine automatische Aufzeichnung.
+
+### Warum das ein Problem ist
+- Niemand erinnert sich alle 5 Minuten auf "Snapshot speichern" zu klicken
+- Für Troubleshooting (z.B. "Wann hat der hohe Traffic angefangen?") braucht man historische Daten
+- Der Verlauf ist dadurch immer leer (es sei denn, der User ist sehr diszipliniert)
+
+### Empfehlung
+- **Auto-Snapshots**: Alle 15 Minuten automatisch (wenn die App läuft), max. 100 Snapshots
+- **Retention**: Ältere Snapshots automatisch löschen (z.B. nach 7 Tagen)
+- **Manueller Snapshot bleibt**: Als "Lesezeichen" für wichtige Momente
+- **Priorisierung**: NIEDRIG — sollte erst nach N-1 bis N-5 umgesetzt werden
+
+---
+
+## Zusammenfassung: Reihenfolge
+
+| Prio | Issue | Was | Aufwand |
+|------|-------|-----|---------|
+| 1 | N-2 | Echtzeit-Bandbreite (Delta-Berechnung) | Klein |
+| 2 | N-1 | Übersicht aufräumen (Top-Prozesse entfernen, Sicherheitsübersicht) | Klein |
+| 3 | N-3 | Echtzeit-Button sinnvoll machen oder ausblenden | Klein |
+| 4 | N-5 | ip-api.com durch MaxMind GeoLite2 ersetzen | Mittel |
+| 5 | N-4 | Lokale Geräte als eigenen Sidebar-Tab auslagern | Mittel |
+| 6 | N-6 | Auto-Snapshots im Verlauf | Klein |
+
+### Abhängigkeiten
+- N-3 kann erst nach N-2 sinnvoll gelöst werden (ohne Echtzeit-Bandbreite ist der Button nutzlos)
+- N-1 und N-2 können parallel umgesetzt werden
+- N-4 ist unabhängig, aber am aufwändigsten (neuer Sidebar-Tab + Code-Migration)
+- N-5 kann jederzeit umgesetzt werden (unabhängig von UI-Änderungen)
