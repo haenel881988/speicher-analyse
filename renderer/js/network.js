@@ -115,29 +115,17 @@ export class NetworkView {
         }
     }
 
-    async refresh(usePollingEndpoint = false) {
+    async refresh() {
         // Overlap-Prevention: wenn bereits ein Refresh läuft, überspringen
         if (this._isRefreshing) return;
         this._isRefreshing = true;
 
         try {
-            if (usePollingEndpoint) {
-                // Kombinierter Endpoint: 1 PS-Call statt 3 (für Echtzeit-Polling)
-                const data = await window.api.getPollingData();
-                this.summary = data.summary;
-                this.groupedData = data.grouped || [];
-                this.bandwidth = data.bandwidth || [];
-            } else {
-                // Voller Refresh mit IP-Auflösung (für manuellen Snapshot)
-                const summary = await window.api.getNetworkSummary();
-                this.summary = summary;
-
-                const grouped = await window.api.getGroupedConnections();
-                this.groupedData = grouped || [];
-
-                const bandwidth = await window.api.getBandwidth();
-                this.bandwidth = bandwidth || [];
-            }
+            // Kombinierter Endpoint: 1 PS-Call statt 3 (enthält TCP + UDP + Bandwidth)
+            const data = await window.api.getPollingData();
+            this.summary = data.summary;
+            this.groupedData = data.grouped || [];
+            this.bandwidth = data.bandwidth || [];
 
             this._lastRefreshTime = new Date();
             this._lastError = null;
