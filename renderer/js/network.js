@@ -11,7 +11,7 @@ export class NetworkView {
         this.bandwidth = [];
         this.summary = null;
         this.pollInterval = null;
-        this.activeSubTab = 'overview';
+        this.activeSubTab = 'connections';
         this.filter = '';
         this._expandedGroups = new Set();
         this._lastRefreshTime = null;
@@ -181,8 +181,8 @@ export class NetworkView {
         const timeStr = this._lastRefreshTime ? this._lastRefreshTime.toLocaleTimeString('de-DE') : '';
         const devCount = this._activeScanResult?.devices?.length || this.localDevices.length;
 
-        // Suchfeld nur im Verbindungen-Tab anzeigen
-        const showToolbar = this.activeSubTab === 'connections';
+        // Suchfeld im Verbindungen- und Live-Feed-Tab anzeigen
+        const showToolbar = this.activeSubTab === 'connections' || this.activeSubTab === 'livefeed';
 
         this.container.innerHTML = `
             <div class="network-page">
@@ -195,10 +195,9 @@ export class NetworkView {
                     </div>
                 </div>
                 <div class="network-tabs">
-                    <button class="network-tab ${this.activeSubTab === 'overview' ? 'active' : ''}" data-subtab="overview">Übersicht</button>
                     <button class="network-tab ${this.activeSubTab === 'connections' ? 'active' : ''}" data-subtab="connections">Verbindungen <span class="network-tab-count">${s.totalConnections || 0}</span></button>
+                    <button class="network-tab ${this.activeSubTab === 'livefeed' ? 'active' : ''}" data-subtab="livefeed">Live-Feed</button>
                     <button class="network-tab ${this.activeSubTab === 'devices' ? 'active' : ''}" data-subtab="devices">Lokale Geräte${devCount > 0 ? ` <span class="network-tab-count">${devCount}</span>` : ''}</button>
-                    <button class="network-tab ${this.activeSubTab === 'history' ? 'active' : ''}" data-subtab="history">Verlauf${this._historyData.length > 0 ? ` <span class="network-tab-count">${this._historyData.length}</span>` : ''}</button>
                 </div>
                 ${showToolbar ? `<div class="network-toolbar">
                     <input type="text" class="network-search" placeholder="Filtern nach Prozess oder IP..." value="${this._esc(this.filter)}">
@@ -213,21 +212,24 @@ export class NetworkView {
 
     _renderSubTab() {
         switch (this.activeSubTab) {
-            case 'overview': return this._renderOverview();
-            case 'connections': return this._renderGroupedConnections();
+            case 'connections': return this._renderMergedTab();
+            case 'livefeed': return this._renderLiveFeed();
             case 'devices': return this._renderLocalDevices();
-            case 'history': return this._renderHistory();
             default: return '';
         }
     }
 
-    _renderOverview() {
+    /**
+     * Konsolidierter Verbindungen-Tab: Metrikkarten + Bandwidth + Prozessgruppen.
+     * Ersetzt die getrennten Übersicht + Verbindungen Tabs.
+     */
+    _renderMergedTab() {
         const s = this.summary || {};
         const totalCompanies = new Set(this.groupedData.flatMap(g => g.resolvedCompanies || [])).size;
         const highRiskCount = this.groupedData.filter(g => g.hasHighRisk).length;
         const trackerCount = this.groupedData.filter(g => g.hasTrackers).length;
 
-        return `<div class="network-overview">
+        return `<div class="network-merged">
             <div class="network-overview-cards">
                 <div class="network-card">
                     <div class="network-card-value">${s.totalConnections || 0}</div>
@@ -259,16 +261,12 @@ export class NetworkView {
                 </div>` : ''}
             </div>
 
-            <div class="network-overview-sections">
-                <div class="network-overview-section">
-                    <h3 class="network-section-title">Netzwerkadapter</h3>
-                    ${this._renderBandwidth()}
-                </div>
-                <div class="network-overview-section">
-                    <h3 class="network-section-title">Sicherheit</h3>
-                    ${this._renderSecurityOverview()}
-                </div>
+            <div class="network-overview-section" style="margin-bottom:16px">
+                <h3 class="network-section-title">Netzwerkadapter</h3>
+                ${this._renderBandwidth()}
             </div>
+
+            ${this._renderGroupedConnections()}
         </div>`;
     }
 
@@ -750,6 +748,21 @@ export class NetworkView {
         return html;
     }
 
+    /**
+     * Live-Feed Tab — Echtzeit-Verbindungsstream (Wireshark-light).
+     * Platzhalter für Phase 3 (wird mit Connection-Diff vom Backend befüllt).
+     */
+    _renderLiveFeed() {
+        return `<div class="network-livefeed">
+            <div class="network-livefeed-placeholder" style="padding:32px;text-align:center;color:var(--text-secondary)">
+                <div style="font-size:32px;margin-bottom:12px">\u{1f4e1}</div>
+                <h3 style="margin:0 0 8px;color:var(--text-primary)">Live-Feed</h3>
+                <p style="margin:0">Echtzeit-Verbindungsstream — wird in der nächsten Version implementiert.</p>
+                <p style="margin:8px 0 0;font-size:12px;color:var(--text-muted)">Neue Verbindungen erscheinen hier in Echtzeit, ähnlich wie in Wireshark.</p>
+            </div>
+        </div>`;
+    }
+
     _renderHistory() {
         if (!this._historyLoaded) {
             return '<div class="loading-state">Verlauf wird geladen...</div>';
@@ -863,9 +876,6 @@ export class NetworkView {
         this.container.querySelectorAll('.network-tab').forEach(tab => {
             tab.onclick = async () => {
                 this.activeSubTab = tab.dataset.subtab;
-                if (tab.dataset.subtab === 'history' && !this._historyLoaded) {
-                    await this._loadHistory();
-                }
                 this.render();
             };
         });
