@@ -1,5 +1,6 @@
 'use strict';
-
+// Network Monitor — connections, bandwidth, firewall, npcap detection
+const fs = require('fs');
 const path = require('path');
 const http = require('http');
 const { runPS, runSafe, isSafeShellArg } = require('./cmd-utils');
@@ -926,6 +927,17 @@ async function getConnectionDiff() {
     return { events, totalConnections: connections.length };
 }
 
+// ---------------------------------------------------------------------------
+// 11) isNpcapInstalled – Prüft ob npcap-Treiber installiert sind
+// ---------------------------------------------------------------------------
+function isNpcapInstalled() {
+    try {
+        return fs.existsSync('C:\\Windows\\System32\\Npcap\\wpcap.dll');
+    } catch {
+        return false;
+    }
+}
+
 module.exports = {
     getConnections,
     getBandwidth,
@@ -936,6 +948,7 @@ module.exports = {
     getGroupedConnections,
     getPollingData,
     getConnectionDiff,
+    isNpcapInstalled,
     resolveIPs,
     lookupIPs,
 };

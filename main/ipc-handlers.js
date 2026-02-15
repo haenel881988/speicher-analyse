@@ -996,6 +996,11 @@ function register(mainWindow) {
         return network.getConnectionDiff();
     });
 
+    ipcMain.handle('is-npcap-installed', async () => {
+        const network = require('./network');
+        return network.isNpcapInstalled();
+    });
+
     // === Network Recording ===
     ipcMain.handle('start-network-recording', async () => {
         const recording = require('./network-recording');

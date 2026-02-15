@@ -36,6 +36,8 @@ export class NetworkView {
         this._recordingStatus = null;       // Status der aktiven Aufzeichnung
         this._recordingTimer = null;        // Timer-Intervall für Dauer-Anzeige
         this._recordings = [];              // Liste gespeicherter Aufzeichnungen
+        this._npcapInstalled = null;        // null = unbekannt, true/false = geprüft
+        this._isAdmin = null;               // Admin-Status
         this._setupScanProgressListener();
     }
 
@@ -806,6 +808,25 @@ export class NetworkView {
         const recSec = recElapsed % 60;
         const recTimeStr = `${String(recMin).padStart(2, '0')}:${String(recSec).padStart(2, '0')}`;
 
+        // npcap-Info-Leiste
+        let npcapInfoHtml = '';
+        if (this._npcapInstalled === false) {
+            npcapInfoHtml = `<div class="network-npcap-info network-npcap-install">
+                <span class="network-npcap-icon">\u{1f4e6}</span>
+                <span>Für erweiterte Paketanalyse (DNS-Abfragen, HTTP-Requests, Protokolle): <a href="#" id="network-npcap-link" class="network-npcap-link">Npcap installieren</a> (kostenlos, npcap.com)</span>
+            </div>`;
+        } else if (this._npcapInstalled === true && this._isAdmin === false) {
+            npcapInfoHtml = `<div class="network-npcap-info network-npcap-admin">
+                <span class="network-npcap-icon">\u{1f512}</span>
+                <span>Npcap erkannt. <button class="network-btn network-btn-small" id="network-npcap-elevate">Als Administrator starten</button> für erweiterte Paketanalyse.</span>
+            </div>`;
+        } else if (this._npcapInstalled === true && this._isAdmin === true) {
+            npcapInfoHtml = `<div class="network-npcap-info network-npcap-ready">
+                <span class="network-npcap-icon">\u2705</span>
+                <span>Paketerfassung verfügbar — erweiterte Protokollanalyse aktiviert.</span>
+            </div>`;
+        }
+
         // Aufzeichnungsliste
         const recListHtml = this._recordings.length > 0 ? `
             <div class="network-recordings-section">
@@ -854,6 +875,7 @@ export class NetworkView {
                     <button class="network-btn network-btn-small" id="network-feed-pause">${this._feedPaused ? '\u25b6 Fortsetzen' : '\u23f8 Pause'}</button>
                 </div>
             </div>
+            ${npcapInfoHtml}
             ${eventCount === 0 ? `
                 <div class="network-livefeed-empty">
                     <div style="font-size:24px;margin-bottom:8px">\u{1f4e1}</div>
@@ -889,9 +911,10 @@ export class NetworkView {
     /** Startet Connection-Diff-Polling für den Live-Feed Tab. */
     _startFeedPolling() {
         this._stopFeedPolling();
-        // Aufzeichnungsliste + Status laden
+        // Aufzeichnungsliste + Status + npcap-Status laden
         this._loadRecordings();
         this._restoreRecordingStatus();
+        this._checkNpcapStatus();
         // Sofort ersten Diff holen
         this._pollConnectionDiff();
         this._feedPollInterval = setInterval(() => this._pollConnectionDiff(), 3000);
@@ -998,6 +1021,16 @@ export class NetworkView {
         try {
             this._recordings = await window.api.listNetworkRecordings();
         } catch { this._recordings = []; }
+    }
+
+    /** Prüft npcap-Installation und Admin-Status (einmalig). */
+    async _checkNpcapStatus() {
+        if (this._npcapInstalled !== null) return; // Bereits geprüft
+        try {
+            this._npcapInstalled = await window.api.isNpcapInstalled();
+            this._isAdmin = await window.api.isAdmin();
+            if (this.activeSubTab === 'livefeed') this.render();
+        } catch { /* ignorieren */ }
     }
 
     _renderHistory() {
@@ -1174,6 +1207,23 @@ export class NetworkView {
                 await window.api.openNetworkRecordingsDir();
             };
         }
+        // npcap controls
+        const npcapLink = this.container.querySelector('#network-npcap-link');
+        if (npcapLink) {
+            npcapLink.onclick = (e) => {
+                e.preventDefault();
+                window.api.openExternal('https://npcap.com/#download');
+            };
+        }
+        const npcapElevateBtn = this.container.querySelector('#network-npcap-elevate');
+        if (npcapElevateBtn) {
+            npcapElevateBtn.onclick = async () => {
+                npcapElevateBtn.disabled = true;
+                npcapElevateBtn.textContent = 'Wird neu gestartet...';
+                await window.api.restartAsAdmin();
+            };
+        }
+
         // Delete recording buttons
         this.container.querySelectorAll('[data-delete-recording]').forEach(btn => {
             btn.onclick = async () => {

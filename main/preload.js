@@ -244,6 +244,7 @@ contextBridge.exposeInMainWorld('api', {
     resolveIPs: (ipAddresses) => ipcRenderer.invoke('resolve-ips', ipAddresses),
     getPollingData: () => ipcRenderer.invoke('get-polling-data'),
     getConnectionDiff: () => ipcRenderer.invoke('get-connection-diff'),
+    isNpcapInstalled: () => ipcRenderer.invoke('is-npcap-installed'),
     startNetworkRecording: () => ipcRenderer.invoke('start-network-recording'),
     stopNetworkRecording: () => ipcRenderer.invoke('stop-network-recording'),
     getNetworkRecordingStatus: () => ipcRenderer.invoke('get-network-recording-status'),
