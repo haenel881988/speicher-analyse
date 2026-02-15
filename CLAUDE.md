@@ -119,9 +119,9 @@ node launch.js  # oder: npm start
 - **VERBOTEN:** Neue GitHub-Repos erstellen (weder für Rewrites, Forks, Tests noch für irgendeinen anderen Grund)
 - **VERBOTEN:** Das Arbeitsverzeichnis wechseln (`cd` zu einem anderen Projekt)
 - **VERBOTEN:** Code in ein anderes Verzeichnis kopieren/verschieben und dort weiterarbeiten
-- **Rewrites/Migrationen** (z.B. Electron → Tauri) passieren IM SELBEN Verzeichnis, im selben Repo, auf einem neuen Branch
-- **Branches** sind erlaubt und erwünscht für große Änderungen — aber IMMER im selben Repo
-- Bei Unklarheit: FRAGEN, nicht eigenmächtig Verzeichnisse oder Repos anlegen
+- **VERBOTEN:** Neue Branches erstellen — ALLES passiert auf `main`
+- **Rewrites/Migrationen** (z.B. Electron → Tauri) passieren IM SELBEN Verzeichnis, im selben Repo, auf `main`
+- Bei Unklarheit: FRAGEN, nicht eigenmächtig Verzeichnisse, Repos oder Branches anlegen
 
 ## Technische Regeln
 

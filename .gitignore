@@ -28,6 +28,9 @@ Desktop.ini
 release/
 build/
 
+# Tauri build
+src-tauri/target/
+
 # WCAG tools temp files
 tools/wcag/*.png
 
