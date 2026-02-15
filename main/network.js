@@ -842,6 +842,13 @@ async function getPollingData() {
 // ---------------------------------------------------------------------------
 let _prevConnections = null; // Map: key → { processName, remoteAddress, remotePort, state, localPort }
 
+/** Prüft ob eine IP Loopback, leer oder Bind-Only ist (kein echtes Remote-Ziel). */
+function _isLoopbackOrEmpty(ip) {
+    if (!ip) return true;
+    return ip === '0.0.0.0' || ip === '::' || ip === '::1' || ip === '127.0.0.1' ||
+           ip.startsWith('127.') || ip === '*';
+}
+
 function _connKey(c) {
     return `${c.processName || ''}:${c.remoteAddress || ''}:${c.remotePort || 0}:${c.localPort || 0}`;
 }
@@ -851,14 +858,24 @@ async function getConnectionDiff() {
     const now = new Date().toISOString();
     const events = [];
 
-    // Aktuelle Verbindungen als Map aufbauen
+    // Aktuelle Verbindungen als Map aufbauen — lokale/Loopback-IPs filtern
     const currentMap = new Map();
     for (const c of connections) {
+        // Loopback, 0.0.0.0, :: und private IPs aus dem Diff ausschliessen
+        if (_isLoopbackOrEmpty(c.remoteAddress)) continue;
+        // "Idle" Prozess (PID 0) = reines Rauschen
+        if (!c.processName || c.processName.toLowerCase() === 'idle') continue;
         const key = _connKey(c);
         // Bei Duplikaten (gleicher Key) den mit höherem State vorziehen
         if (!currentMap.has(key) || c.state === 'Established') {
             currentMap.set(key, c);
         }
+    }
+
+    // Erster Aufruf: nur Baseline speichern, keine Events erzeugen
+    if (!_prevConnections) {
+        _prevConnections = currentMap;
+        return { events: [], totalConnections: connections.length };
     }
 
     if (_prevConnections) {

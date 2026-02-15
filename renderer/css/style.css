@@ -4587,12 +4587,20 @@ textarea::placeholder {
 .network-livefeed-controls { display: flex; gap: 8px; }
 .network-livefeed-empty { text-align: center; padding: 48px 24px; color: var(--text-secondary); }
 .network-livefeed-empty p { margin: 4px 0; }
-.network-livefeed-table-wrap { max-height: 60vh; overflow-y: auto; border-radius: 8px; border: 1px solid var(--border); }
-.network-livefeed-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.network-livefeed-table-wrap { max-height: 60vh; overflow-y: auto; overflow-x: auto; border-radius: 8px; border: 1px solid var(--border); }
+.network-livefeed-table { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
 .network-livefeed-table thead { position: sticky; top: 0; z-index: 1; }
 .network-livefeed-table th { background: var(--bg-secondary); padding: 8px 10px; text-align: left; font-size: 11px; font-weight: 600; color: var(--text-secondary); border-bottom: 1px solid var(--border); white-space: nowrap; }
-.network-livefeed-table td { padding: 6px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
-.network-feed-time { font-family: monospace; font-size: 11px; color: var(--text-muted); }
+.network-livefeed-table td { padding: 6px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Live-Feed column widths (7 columns: Zeit, Typ, Prozess, Remote-IP, Port, Firma, Status) */
+.network-feed-time { font-family: monospace; font-size: 11px; color: var(--text-muted); width: 70px; }
+.network-feed-type { width: 80px; }
+.network-feed-proc { font-weight: 500; color: var(--text-primary); width: 14%; }
+.network-feed-ip { font-family: monospace; font-size: 11px; width: 18%; }
+.network-feed-port { font-family: monospace; font-size: 11px; width: 10%; }
+.network-feed-proto { font-size: 9px; color: var(--accent-text); font-weight: 600; }
+.network-feed-org { font-size: 11px; color: var(--text-secondary); }
+.network-feed-state { font-size: 11px; color: var(--text-muted); width: 10%; }
 .network-feed-badge { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 10px; font-weight: 600; }
 .network-feed-new-badge { background: rgba(34, 197, 94, 0.15); color: var(--success, #22c55e); }
 .network-feed-closed-badge { background: rgba(239, 68, 68, 0.15); color: var(--danger, #ef4444); }
@@ -4602,12 +4610,6 @@ textarea::placeholder {
 .network-feed-changed td { background: rgba(245, 158, 11, 0.04); }
 .network-feed-risk td { border-left: 3px solid var(--danger, #ef4444); }
 .network-feed-tracker td { border-left: 3px solid var(--warning, #f59e0b); }
-.network-feed-proc { font-weight: 500; color: var(--text-primary); }
-.network-feed-ip { font-family: monospace; font-size: 11px; }
-.network-feed-port { font-family: monospace; font-size: 11px; }
-.network-feed-proto { font-size: 9px; color: var(--accent-text); font-weight: 600; }
-.network-feed-org { font-size: 11px; color: var(--text-secondary); }
-.network-feed-state { font-size: 11px; color: var(--text-muted); }
 
 /* Recording Controls */
 .network-btn-rec { background: var(--danger); color: #fff; border: none; }

@@ -762,6 +762,15 @@ export class NetworkView {
         return labels[filter] || filter;
     }
 
+    /** Prüft ob eine IP lokal/privat ist */
+    _isLocalIP(ip) {
+        if (!ip) return true;
+        return ip === '0.0.0.0' || ip === '::' || ip === '::1' || ip === '127.0.0.1' ||
+               ip.startsWith('127.') || ip.startsWith('10.') || ip.startsWith('192.168.') ||
+               ip.startsWith('169.254.') || /^172\.(1[6-9]|2\d|3[01])\./.test(ip) ||
+               ip.startsWith('fe80:') || ip.startsWith('fd') || ip.startsWith('fc');
+    }
+
     /** Bekannte Port-Protokolle */
     _portLabel(port) {
         const known = { 21: 'FTP', 22: 'SSH', 25: 'SMTP', 53: 'DNS', 80: 'HTTP', 110: 'POP3', 143: 'IMAP', 443: 'HTTPS', 445: 'SMB', 993: 'IMAPS', 995: 'POP3S', 3306: 'MySQL', 3389: 'RDP', 5432: 'PostgreSQL', 5900: 'VNC', 8080: 'HTTP-Alt', 8443: 'HTTPS-Alt', 9090: 'Mgmt' };
@@ -840,6 +849,9 @@ export class NetworkView {
             const port = e.remotePort || '';
             const protocol = this._portToProtocol(e.remotePort);
             const riskClass = e.isHighRisk ? 'network-feed-risk' : e.isTracker ? 'network-feed-tracker' : '';
+            const isLocal = this._isLocalIP(e.remoteAddress);
+            const orgLabel = isLocal ? '<span style="color:var(--text-muted)">Lokal</span>' :
+                (flag ? flag + ' ' : '') + this._esc(e.org || 'Unbekannt') + (e.isTracker ? ' \u{1f441}' : '') + (e.isHighRisk ? ' \u26a0' : '');
 
             return `<tr class="${typeClass} ${riskClass}">
                 <td class="network-feed-time">${time}</td>
@@ -847,7 +859,7 @@ export class NetworkView {
                 <td class="network-feed-proc">${this._esc(e.processName)}</td>
                 <td class="network-feed-ip" title="${this._esc(e.remoteAddress)}">${this._esc(e.remoteAddress)}</td>
                 <td class="network-feed-port">${port}${protocol ? ` <span class="network-feed-proto">${protocol}</span>` : ''}</td>
-                <td class="network-feed-org">${flag ? flag + ' ' : ''}${this._esc(e.org || '')}${e.isTracker ? ' \u{1f441}' : ''}${e.isHighRisk ? ' \u26a0' : ''}</td>
+                <td class="network-feed-org">${orgLabel}</td>
                 <td class="network-feed-state">${this._esc(e.state)}${e.prevState ? ` \u2190 ${e.prevState}` : ''}</td>
             </tr>`;
         }).join('');
@@ -948,13 +960,13 @@ export class NetworkView {
                 <div class="network-livefeed-table-wrap" id="network-feed-scroll">
                     <table class="network-livefeed-table">
                         <thead><tr>
-                            <th>Zeit</th>
-                            <th>Typ</th>
-                            <th>Prozess</th>
-                            <th>Remote-IP</th>
-                            <th>Port</th>
-                            <th>Firma</th>
-                            <th>Status</th>
+                            <th class="network-feed-time">Zeit</th>
+                            <th class="network-feed-type">Typ</th>
+                            <th class="network-feed-proc">Prozess</th>
+                            <th class="network-feed-ip">Remote-IP</th>
+                            <th class="network-feed-port">Port</th>
+                            <th class="network-feed-org">Firma</th>
+                            <th class="network-feed-state">Status</th>
                         </tr></thead>
                         <tbody>${eventRows}</tbody>
                     </table>
