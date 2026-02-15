@@ -109,6 +109,20 @@ node launch.js  # oder: npm start
 - **Electron-Fenster im Tray:** `Target.activateTarget` via CDP reicht NICHT, um ein minimiertes Electron-Fenster wiederherzustellen. Lösung: PowerShell + Win32 `ShowWindow(hWnd, SW_RESTORE)` + `SetForegroundWindow(hWnd)` (siehe `tools/wcag/restore-window.ps1`).
 - **Ablauf:** 1) Fenster sichtbar machen → 2) Screenshot → 3) Screenshot anschauen → 4) Jeden sichtbaren Text beschreiben → 5) Erst dann Urteil fällen.
 
+## Prinzip 6: Projektverzeichnis und Repo sind HEILIG
+
+**ABSOLUTES VERBOT: Keine eigenständigen Verzeichnis- oder Repo-Änderungen.**
+
+- Das Projektverzeichnis ist `C:\apps\vibe-coding\speicher_analyse\` — PUNKT. Kein anderes.
+- Das Git-Repo ist `haenel881988/speicher-analyse` — PUNKT. Kein anderes.
+- **VERBOTEN:** Neue Verzeichnisse außerhalb des Projektverzeichnisses erstellen
+- **VERBOTEN:** Neue GitHub-Repos erstellen (weder für Rewrites, Forks, Tests noch für irgendeinen anderen Grund)
+- **VERBOTEN:** Das Arbeitsverzeichnis wechseln (`cd` zu einem anderen Projekt)
+- **VERBOTEN:** Code in ein anderes Verzeichnis kopieren/verschieben und dort weiterarbeiten
+- **Rewrites/Migrationen** (z.B. Electron → Tauri) passieren IM SELBEN Verzeichnis, im selben Repo, auf einem neuen Branch
+- **Branches** sind erlaubt und erwünscht für große Änderungen — aber IMMER im selben Repo
+- Bei Unklarheit: FRAGEN, nicht eigenmächtig Verzeichnisse oder Repos anlegen
+
 ## Technische Regeln
 
 - **Sprache:** Alle UI-Texte auf Deutsch mit korrekten Umlauten (ä/ö/ü, nicht ae/oe/ue)
