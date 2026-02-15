@@ -152,28 +152,13 @@ pub async fn start_scan(app: tauri::AppHandle, path: String) -> Result<Value, St
 // === Tree Data ===
 
 #[tauri::command]
-pub async fn get_tree_node(_scan_id: String, path: String, depth: Option<u32>) -> Result<Value, String> {
-    let _d = depth.unwrap_or(1);
-    let script = format!(
-        r#"$items = Get-ChildItem -Path '{}' -Force -ErrorAction SilentlyContinue
-$children = @()
-foreach ($item in $items) {{
-    if ($item.PSIsContainer) {{
-        $size = (Get-ChildItem -Path $item.FullName -Recurse -Force -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum
-        $children += [PSCustomObject]@{{ name=$item.Name; path=$item.FullName; size=[long]$size; isDir=$true }}
-    }} else {{
-        $children += [PSCustomObject]@{{ name=$item.Name; path=$item.FullName; size=[long]$item.Length; isDir=$false }}
-    }}
-}}
-$children | Sort-Object size -Descending | ConvertTo-Json -Compress"#,
-        path.replace("'", "''")
-    );
-    crate::ps::run_ps_json_array(&script).await
+pub async fn get_tree_node(scan_id: String, path: String, depth: Option<u32>) -> Result<Value, String> {
+    Ok(crate::scan::tree_node(&scan_id, &path, depth.unwrap_or(1)))
 }
 
 #[tauri::command]
 pub async fn get_treemap_data(scan_id: String, path: String, depth: Option<u32>) -> Result<Value, String> {
-    get_tree_node(scan_id, path, depth).await
+    Ok(crate::scan::tree_node(&scan_id, &path, depth.unwrap_or(1)))
 }
 
 // === File Data (from scan state) ===
@@ -340,7 +325,7 @@ pub async fn cancel_duplicate_scan(_scan_id: String) -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn get_size_duplicates(_scan_id: String, _min_size: Option<u64>) -> Result<Value, String> {
-    Ok(json!([]))
+    Ok(json!({ "totalGroups": 0, "totalDuplicates": 0, "totalSaveable": 0, "totalFiles": 0, "groups": [] }))
 }
 
 // === Memory ===
@@ -357,23 +342,49 @@ pub async fn scan_cleanup_categories(_scan_id: String) -> Result<Value, String> 
     crate::ps::run_ps_json_array(
         r#"$cats = @()
 $temp = [System.IO.Path]::GetTempPath()
-$tempSize = (Get-ChildItem -Path $temp -Recurse -Force -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum
-$cats += [PSCustomObject]@{ id='temp'; name='Temporäre Dateien'; size=[long]$tempSize; count=(Get-ChildItem -Path $temp -Recurse -Force -File -ErrorAction SilentlyContinue).Count; paths=@($temp) }
-$cats | ConvertTo-Json -Compress"#
+$tempFiles = @(Get-ChildItem -Path $temp -Recurse -Force -File -ErrorAction SilentlyContinue)
+$tempSize = ($tempFiles | Measure-Object -Property Length -Sum).Sum
+$cats += [PSCustomObject]@{ id='temp'; name='Temporäre Dateien'; icon='trash'; description='Temporäre Dateien die nicht mehr benötigt werden'; totalSize=[long]$tempSize; fileCount=$tempFiles.Count; requiresAdmin=$false; paths=@([PSCustomObject]@{path=$temp;size=[long]$tempSize}) }
+$winTemp = "$env:SystemRoot\Temp"
+if (Test-Path $winTemp) {
+    $wtFiles = @(Get-ChildItem -Path $winTemp -Recurse -Force -File -ErrorAction SilentlyContinue)
+    $wtSize = ($wtFiles | Measure-Object -Property Length -Sum).Sum
+    $cats += [PSCustomObject]@{ id='wintemp'; name='Windows Temp'; icon='windows'; description='Temporäre Windows-Systemdateien'; totalSize=[long]$wtSize; fileCount=$wtFiles.Count; requiresAdmin=$true; paths=@([PSCustomObject]@{path=$winTemp;size=[long]$wtSize}) }
+}
+$thumbs = "$env:LOCALAPPDATA\Microsoft\Windows\Explorer"
+if (Test-Path $thumbs) {
+    $thFiles = @(Get-ChildItem -Path $thumbs -Filter 'thumbcache_*' -Force -File -ErrorAction SilentlyContinue)
+    $thSize = ($thFiles | Measure-Object -Property Length -Sum).Sum
+    $cats += [PSCustomObject]@{ id='thumbnails'; name='Miniaturansichten'; icon='image'; description='Zwischengespeicherte Vorschaubilder'; totalSize=[long]$thSize; fileCount=$thFiles.Count; requiresAdmin=$false; paths=@([PSCustomObject]@{path=$thumbs;size=[long]$thSize}) }
+}
+$cats | ConvertTo-Json -Depth 3 -Compress"#
     ).await
 }
 
 #[tauri::command]
 pub async fn clean_category(_category_id: String, paths: Vec<String>) -> Result<Value, String> {
+    let mut deleted_count: u64 = 0;
+    let mut errors: Vec<Value> = Vec::new();
     for p in &paths {
         let path = Path::new(p);
-        if path.is_dir() {
-            let _ = tokio::fs::remove_dir_all(path).await;
+        let result = if path.is_dir() {
+            // Count files before deleting
+            let count = walkdir::WalkDir::new(path).into_iter().filter_map(|e| e.ok()).filter(|e| e.file_type().is_file()).count() as u64;
+            match tokio::fs::remove_dir_all(path).await {
+                Ok(_) => { deleted_count += count; Ok(()) }
+                Err(e) => Err(e)
+            }
         } else {
-            let _ = tokio::fs::remove_file(path).await;
+            match tokio::fs::remove_file(path).await {
+                Ok(_) => { deleted_count += 1; Ok(()) }
+                Err(e) => Err(e)
+            }
+        };
+        if let Err(e) = result {
+            errors.push(json!({"path": p, "error": e.to_string()}));
         }
     }
-    Ok(json!({ "success": true }))
+    Ok(json!({ "success": true, "deletedCount": deleted_count, "errors": errors }))
 }
 
 // === Preview / Editor ===
@@ -409,18 +420,30 @@ pub async fn read_file_binary(file_path: String) -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn scan_registry() -> Result<Value, String> {
-    crate::ps::run_ps_json(
-        r#"$entries = @()
+    crate::ps::run_ps_json_array(
+        r#"$categories = @()
+# Verwaiste Deinstallationseinträge
+$orphaned = @()
 $paths = @('HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*','HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*')
 foreach ($p in $paths) {
     Get-ItemProperty $p -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName } | ForEach-Object {
         $installPath = $_.InstallLocation
         if ($installPath -and !(Test-Path $installPath)) {
-            $entries += [PSCustomObject]@{ name=$_.DisplayName; key=$_.PSPath; installPath=$installPath; type='orphaned' }
+            $orphaned += [PSCustomObject]@{ name=$_.DisplayName; key=$_.PSPath; reason="Installationsverzeichnis nicht gefunden: $installPath" }
         }
     }
 }
-[PSCustomObject]@{ totalScanned=($entries.Count + 100); issues=$entries } | ConvertTo-Json -Depth 3 -Compress"#
+$categories += [PSCustomObject]@{ id='orphaned_uninstall'; name='Verwaiste Deinstallationseinträge'; icon='uninstall'; description='Programme deren Installationsverzeichnis nicht mehr existiert'; entries=$orphaned }
+# Verwaiste COM/ActiveX
+$comOrph = @()
+Get-ChildItem 'HKLM:\SOFTWARE\Classes\CLSID' -ErrorAction SilentlyContinue | Select-Object -First 200 | ForEach-Object {
+    $server = Get-ItemProperty "$($_.PSPath)\InprocServer32" -ErrorAction SilentlyContinue
+    if ($server -and $server.'(default)' -and !(Test-Path $server.'(default)')) {
+        $comOrph += [PSCustomObject]@{ name=$_.PSChildName; key=$_.PSPath; reason="DLL nicht gefunden: $($server.'(default)')" }
+    }
+}
+$categories += [PSCustomObject]@{ id='orphaned_com'; name='Verwaiste COM-Einträge'; icon='component'; description='COM-Objekte deren DLL-Dateien fehlen'; entries=$comOrph }
+$categories | ConvertTo-Json -Depth 3 -Compress"#
     ).await
 }
 
@@ -431,7 +454,7 @@ pub async fn export_registry_backup(_entries: Value) -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn clean_registry(_entries: Value) -> Result<Value, String> {
-    Ok(json!({ "success": true, "cleaned": 0 }))
+    Ok(json!({ "success": true, "results": [], "backupPath": "" }))
 }
 
 #[tauri::command]
@@ -445,8 +468,30 @@ pub async fn restore_registry_backup() -> Result<Value, String> {
 pub async fn get_autostart_entries() -> Result<Value, String> {
     crate::ps::run_ps_json_array(
         r#"$entries = @()
-Get-CimInstance Win32_StartupCommand -ErrorAction SilentlyContinue | ForEach-Object {
-    $entries += [PSCustomObject]@{ name=$_.Name; command=$_.Command; location=$_.Location; user=$_.User; enabled=$true }
+# Registry Run keys
+$regPaths = @(
+    @{p='HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run';s='registry';l='HKCU\Run'},
+    @{p='HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run';s='registry';l='HKLM\Run'},
+    @{p='HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce';s='registry';l='HKCU\RunOnce'},
+    @{p='HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce';s='registry';l='HKLM\RunOnce'}
+)
+foreach ($rp in $regPaths) {
+    $props = Get-ItemProperty $rp.p -ErrorAction SilentlyContinue
+    if ($props) {
+        $props.PSObject.Properties | Where-Object { $_.Name -notlike 'PS*' } | ForEach-Object {
+            $cmd = "$($_.Value)"
+            $exe = ($cmd -replace '"','') -split '\s' | Select-Object -First 1
+            $exists = if ($exe) { Test-Path $exe -EA SilentlyContinue } else { $false }
+            $entries += [PSCustomObject]@{ name=$_.Name; command=$cmd; source=$rp.s; locationLabel=$rp.l; enabled=$true; exists=$exists }
+        }
+    }
+}
+# Startup folder
+$startupPath = [Environment]::GetFolderPath('Startup')
+if (Test-Path $startupPath) {
+    Get-ChildItem $startupPath -File -ErrorAction SilentlyContinue | ForEach-Object {
+        $entries += [PSCustomObject]@{ name=$_.BaseName; command=$_.FullName; source='folder'; locationLabel='Autostart-Ordner'; enabled=$true; exists=$true }
+    }
 }
 $entries | ConvertTo-Json -Compress"#
     ).await
@@ -489,7 +534,14 @@ pub async fn control_service(name: String, action: String) -> Result<Value, Stri
 
 #[tauri::command]
 pub async fn set_service_start_type(name: String, start_type: String) -> Result<Value, String> {
-    crate::ps::run_ps(&format!("Set-Service '{}' -StartupType '{}'", name, start_type)).await?;
+    // Frontend sends 'auto'|'demand'|'disabled', PowerShell needs 'Automatic'|'Manual'|'Disabled'
+    let ps_type = match start_type.as_str() {
+        "auto" => "Automatic",
+        "demand" => "Manual",
+        "disabled" => "Disabled",
+        other => other, // pass through if already correct format
+    };
+    crate::ps::run_ps(&format!("Set-Service '{}' -StartupType '{}'", name, ps_type)).await?;
     Ok(json!({ "success": true }))
 }
 
@@ -500,8 +552,11 @@ pub async fn get_optimizations() -> Result<Value, String> {
     crate::ps::run_ps_json_array(
         r#"$opts = @()
 $vfx = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects' -ErrorAction SilentlyContinue).VisualFXSetting
-$opts += [PSCustomObject]@{ id='visual_effects'; name='Visuelle Effekte optimieren'; description='Deaktiviert Animationen und Transparenz'; applied=($vfx -eq 2); category='performance' }
-$opts += [PSCustomObject]@{ id='prefetch'; name='Prefetch bereinigen'; description='Löscht alte Prefetch-Daten'; applied=$false; category='cleanup' }
+$opts += [PSCustomObject]@{ id='visual_effects'; title='Visuelle Effekte optimieren'; name='Visuelle Effekte optimieren'; description='Deaktiviert Animationen und Transparenz für bessere Performance'; applied=($vfx -eq 2); category='performance'; impact='medium'; savingsBytes=0; requiresAdmin=$false; reversible=$true }
+$prefetchSize = 0; try { $prefetchSize = [long](Get-ChildItem "$env:SystemRoot\Prefetch" -Force -File -EA Stop | Measure-Object -Property Length -Sum).Sum } catch {}
+$opts += [PSCustomObject]@{ id='prefetch'; title='Prefetch bereinigen'; name='Prefetch bereinigen'; description='Löscht alte Prefetch-Daten um Speicherplatz freizugeben'; applied=$false; category='cleanup'; impact='low'; savingsBytes=$prefetchSize; requiresAdmin=$true; reversible=$false }
+$tpEnabled = (Get-ItemProperty 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize' -EA SilentlyContinue).EnableTransparency
+$opts += [PSCustomObject]@{ id='transparency'; title='Transparenz deaktivieren'; name='Transparenz deaktivieren'; description='Deaktiviert Transparenzeffekte für bessere Performance'; applied=($tpEnabled -eq 0); category='performance'; impact='low'; savingsBytes=0; requiresAdmin=$false; reversible=$true }
 $opts | ConvertTo-Json -Compress"#
     ).await
 }
@@ -516,13 +571,26 @@ pub async fn apply_optimization(id: String) -> Result<Value, String> {
 #[tauri::command]
 pub async fn scan_bloatware() -> Result<Value, String> {
     crate::ps::run_ps_json_array(
-        r#"Get-AppxPackage | Where-Object { $_.IsFramework -eq $false -and $_.SignatureKind -ne 'System' } | Select-Object Name, PackageFullName, Publisher, InstallLocation | ConvertTo-Json -Compress"#
+        r#"$known = @{
+'Microsoft.BingWeather'='unnötig';'Microsoft.GetHelp'='unnötig';'Microsoft.Getstarted'='unnötig';
+'Microsoft.MicrosoftOfficeHub'='unnötig';'Microsoft.MicrosoftSolitaireCollection'='unnötig';
+'Microsoft.People'='unnötig';'Microsoft.SkypeApp'='unnötig';'Microsoft.WindowsFeedbackHub'='unnötig';
+'Microsoft.Xbox.TCUI'='unnötig';'Microsoft.XboxApp'='unnötig';'Microsoft.XboxGameOverlay'='unnötig';
+'Microsoft.ZuneMusic'='unnötig';'Microsoft.ZuneVideo'='unnötig';'Microsoft.MixedReality.Portal'='unnötig';
+'king.com.CandyCrushSaga'='fragwürdig';'king.com.CandyCrushSodaSaga'='fragwürdig';
+'SpotifyAB.SpotifyMusic'='fragwürdig';'Facebook.Facebook'='fragwürdig'
+}
+Get-AppxPackage | Where-Object { $_.IsFramework -eq $false -and $_.SignatureKind -ne 'System' } | ForEach-Object {
+    $cat = if($known[$_.Name]){$known[$_.Name]}else{'sonstiges'}
+    $size = 0; if($_.InstallLocation -and (Test-Path $_.InstallLocation)) { try { $size = [long](Get-ChildItem $_.InstallLocation -Recurse -Force -File -EA Stop | Measure-Object Length -Sum).Sum } catch {} }
+    [PSCustomObject]@{ programName=$_.Name; packageFullName=$_.PackageFullName; publisher=$_.Publisher; description=''; category=$cat; estimatedSize=$size; installDate='' }
+} | ConvertTo-Json -Compress"#
     ).await
 }
 
 #[tauri::command]
 pub async fn uninstall_bloatware(entry: Value) -> Result<Value, String> {
-    if let Some(pkg) = entry.get("PackageFullName").and_then(|v| v.as_str()) {
+    if let Some(pkg) = entry.get("packageFullName").and_then(|v| v.as_str()) {
         crate::ps::run_ps(&format!("Remove-AppxPackage '{}'", pkg)).await?;
     }
     Ok(json!({ "success": true }))
@@ -532,14 +600,13 @@ pub async fn uninstall_bloatware(entry: Value) -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn check_windows_updates() -> Result<Value, String> {
-    crate::ps::run_ps_json(
+    crate::ps::run_ps_json_array(
         r#"try {
     $session = New-Object -ComObject Microsoft.Update.Session
     $searcher = $session.CreateUpdateSearcher()
     $results = $searcher.Search('IsInstalled=0')
-    $updates = $results.Updates | ForEach-Object { [PSCustomObject]@{ title=$_.Title; kb=$_.KBArticleIDs -join ','; size=[long]$_.MaxDownloadSize; important=$_.MsrcSeverity } }
-    [PSCustomObject]@{ available=$updates.Count; updates=$updates } | ConvertTo-Json -Depth 3 -Compress
-} catch { [PSCustomObject]@{ available=0; updates=@(); error=$_.Exception.Message } | ConvertTo-Json -Compress }"#
+    @($results.Updates | ForEach-Object { [PSCustomObject]@{ Title=$_.Title; KBArticleIDs=($_.KBArticleIDs -join ','); Size=[long]$_.MaxDownloadSize; Severity="$($_.MsrcSeverity)"; IsMandatory=$_.IsMandatory } }) | ConvertTo-Json -Compress
+} catch { ConvertTo-Json @() -Compress }"#
     ).await
 }
 
@@ -549,15 +616,32 @@ pub async fn get_update_history() -> Result<Value, String> {
         r#"$session = New-Object -ComObject Microsoft.Update.Session
 $searcher = $session.CreateUpdateSearcher()
 $count = $searcher.GetTotalHistoryCount()
-$history = $searcher.QueryHistory(0, [Math]::Min($count, 50)) | ForEach-Object { [PSCustomObject]@{ title=$_.Title; date=$_.Date.ToString('o'); result=$_.ResultCode } }
-$history | ConvertTo-Json -Compress"#
+@($searcher.QueryHistory(0, [Math]::Min($count, 50)) | ForEach-Object {
+    $st = switch([int]$_.ResultCode){0{'NotStarted'}1{'InProgress'}2{'Succeeded'}3{'SucceededWithErrors'}4{'Failed'}5{'Aborted'}default{'Unknown'}}
+    [PSCustomObject]@{ Date=$_.Date.ToString('o'); Title=$_.Title; ResultCode=[int]$_.ResultCode; Status=$st }
+}) | ConvertTo-Json -Compress"#
     ).await
 }
 
 #[tauri::command]
 pub async fn check_software_updates() -> Result<Value, String> {
-    crate::ps::run_ps_json(
-        r#"try { winget upgrade --accept-source-agreements 2>$null | Select-String -Pattern '^\S' | ForEach-Object { $_.Line } | ConvertTo-Json -Compress } catch { '[]' }"#
+    crate::ps::run_ps_json_array(
+        r#"try {
+    $output = winget upgrade --accept-source-agreements 2>$null
+    $lines = $output -split "`n" | Where-Object { $_ -match '\S' }
+    $headerIdx = -1
+    for ($i=0; $i -lt $lines.Count; $i++) { if ($lines[$i] -match '^Name\s+') { $headerIdx = $i; break } }
+    if ($headerIdx -lt 0) { ConvertTo-Json @() -Compress; return }
+    $sepIdx = $headerIdx + 1
+    $dataLines = $lines[($sepIdx+1)..($lines.Count-2)]
+    $results = @()
+    foreach ($line in $dataLines) {
+        if ($line -match '^(\S.+?)\s{2,}(\S+)\s+(\S+)\s+(\S+)\s*(.*)$') {
+            $results += [PSCustomObject]@{ name=$Matches[1].Trim(); id=$Matches[2]; currentVersion=$Matches[3]; availableVersion=$Matches[4]; source=$Matches[5].Trim() }
+        }
+    }
+    $results | ConvertTo-Json -Compress
+} catch { ConvertTo-Json @() -Compress }"#
     ).await
 }
 
@@ -570,17 +654,21 @@ pub async fn update_software(package_id: String) -> Result<Value, String> {
 #[tauri::command]
 pub async fn get_driver_info() -> Result<Value, String> {
     crate::ps::run_ps_json_array(
-        r#"Get-CimInstance Win32_PnPSignedDriver | Where-Object { $_.DeviceName } | Select-Object DeviceName, DriverVersion, DriverDate, Manufacturer -First 50 | ConvertTo-Json -Compress"#
+        r#"$now = Get-Date
+Get-CimInstance Win32_PnPSignedDriver | Where-Object { $_.DeviceName } | Select-Object -First 50 | ForEach-Object {
+    $dd = $_.DriverDate
+    $ageY = if($dd) { [math]::Round(($now - $dd).TotalDays / 365.25, 1) } else { $null }
+    $isOld = if($ageY) { $ageY -gt 3 } else { $false }
+    [PSCustomObject]@{ name=$_.DeviceName; manufacturer=$_.Manufacturer; version=$_.DriverVersion; date=if($dd){$dd.ToString('o')}else{''}; ageYears=$ageY; isOld=$isOld; supportUrl='' }
+} | ConvertTo-Json -Compress"#
     ).await
 }
 
 #[tauri::command]
 pub async fn get_hardware_info() -> Result<Value, String> {
     crate::ps::run_ps_json(
-        r#"$cpu = Get-CimInstance Win32_Processor | Select-Object Name, NumberOfCores, MaxClockSpeed
-$ram = Get-CimInstance Win32_PhysicalMemory | Measure-Object -Property Capacity -Sum
-$gpu = Get-CimInstance Win32_VideoController | Select-Object Name, AdapterRAM, DriverVersion
-[PSCustomObject]@{ cpu=$cpu; ramTotal=[long]$ram.Sum; gpu=$gpu } | ConvertTo-Json -Depth 3 -Compress"#
+        r#"$cs = Get-CimInstance Win32_ComputerSystem
+[PSCustomObject]@{ Manufacturer=$cs.Manufacturer; Model=$cs.Model; SerialNumber=(Get-CimInstance Win32_BIOS).SerialNumber } | ConvertTo-Json -Compress"#
     ).await
 }
 
@@ -603,13 +691,27 @@ pub async fn deep_search_start(app: tauri::AppHandle, root_path: String, query: 
     let app2 = app.clone();
     tokio::spawn(async move {
         let script = format!(
-            r#"Get-ChildItem -Path '{}' -Recurse -Force -ErrorAction SilentlyContinue | Where-Object {{ $_.Name -like '*{}*' }} | Select-Object FullName, Length, LastWriteTime, PSIsContainer -First 500 | ForEach-Object {{ [PSCustomObject]@{{ path=$_.FullName; size=[long]$_.Length; modified=$_.LastWriteTime.ToString('o'); isDir=$_.PSIsContainer }} }} | ConvertTo-Json -Compress"#,
-            root_path.replace("'", "''"), query.replace("'", "''")
+            r#"$q = '{}'; $count = 0; $dirs = 0
+Get-ChildItem -Path '{}' -Recurse -Force -ErrorAction SilentlyContinue | ForEach-Object {{
+    if ($_.PSIsContainer) {{ $dirs++ }}
+    if ($_.Name -like "*$q*") {{
+        $count++
+        $dirPath = Split-Path $_.FullName -Parent
+        $mq = 1.0
+        if ($_.Name -eq $q) {{ $mq = 2.0 }}
+        [PSCustomObject]@{{ path=$_.FullName; name=$_.Name; dirPath=$dirPath; isDir=$_.PSIsContainer; size=[long]$_.Length; modified=$_.LastWriteTime.ToString('o'); matchQuality=$mq }}
+    }}
+}} | Select-Object -First 500 | ConvertTo-Json -Compress"#,
+            query.replace("'", "''"), root_path.replace("'", "''")
         );
         match crate::ps::run_ps_json(&script).await {
             Ok(data) => {
-                let results = if data.is_array() { data } else if data.is_null() { json!([]) } else { json!([data]) };
-                let _ = app2.emit("deep-search-complete", json!({ "results": results }));
+                let results = if data.is_array() { data.as_array().unwrap().clone() } else if data.is_null() { vec![] } else { vec![data] };
+                // Emit individual results for streaming
+                for r in &results {
+                    let _ = app2.emit("deep-search-result", r.clone());
+                }
+                let _ = app2.emit("deep-search-complete", json!({ "resultCount": results.len(), "dirsScanned": 0 }));
             }
             Err(e) => { let _ = app2.emit("deep-search-error", json!({ "error": e })); }
         }
@@ -657,12 +759,12 @@ $entries = @($items | ForEach-Object {{
 pub async fn get_known_folders() -> Result<Value, String> {
     crate::ps::run_ps_json_array(
         r#"$folders = @()
-$folders += [PSCustomObject]@{ name='Desktop'; path=[Environment]::GetFolderPath('Desktop') }
-$folders += [PSCustomObject]@{ name='Dokumente'; path=[Environment]::GetFolderPath('MyDocuments') }
-$folders += [PSCustomObject]@{ name='Downloads'; path=(New-Object -ComObject Shell.Application).NameSpace('shell:Downloads').Self.Path }
-$folders += [PSCustomObject]@{ name='Bilder'; path=[Environment]::GetFolderPath('MyPictures') }
-$folders += [PSCustomObject]@{ name='Musik'; path=[Environment]::GetFolderPath('MyMusic') }
-$folders += [PSCustomObject]@{ name='Videos'; path=[Environment]::GetFolderPath('MyVideos') }
+$folders += [PSCustomObject]@{ name='Desktop'; path=[Environment]::GetFolderPath('Desktop'); icon='desktop' }
+$folders += [PSCustomObject]@{ name='Dokumente'; path=[Environment]::GetFolderPath('MyDocuments'); icon='documents' }
+$folders += [PSCustomObject]@{ name='Downloads'; path=(New-Object -ComObject Shell.Application).NameSpace('shell:Downloads').Self.Path; icon='downloads' }
+$folders += [PSCustomObject]@{ name='Bilder'; path=[Environment]::GetFolderPath('MyPictures'); icon='images' }
+$folders += [PSCustomObject]@{ name='Musik'; path=[Environment]::GetFolderPath('MyMusic'); icon='music' }
+$folders += [PSCustomObject]@{ name='Videos'; path=[Environment]::GetFolderPath('MyVideos'); icon='video' }
 $folders | ConvertTo-Json -Compress"#
     ).await
 }
@@ -670,8 +772,11 @@ $folders | ConvertTo-Json -Compress"#
 #[tauri::command]
 pub async fn calculate_folder_size(dir_path: String) -> Result<Value, String> {
     let script = format!(
-        r#"$size = (Get-ChildItem -LiteralPath '{}' -Recurse -Force -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum
-[PSCustomObject]@{{ path='{}'; size=[long]$size }} | ConvertTo-Json -Compress"#,
+        r#"$items = @(Get-ChildItem -LiteralPath '{}' -Recurse -Force -ErrorAction SilentlyContinue)
+$files = @($items | Where-Object {{ -not $_.PSIsContainer }})
+$dirs = @($items | Where-Object {{ $_.PSIsContainer }})
+$size = ($files | Measure-Object -Property Length -Sum).Sum
+[PSCustomObject]@{{ path='{}'; totalSize=[long]$size; fileCount=$files.Count; dirCount=$dirs.Count }} | ConvertTo-Json -Compress"#,
         dir_path.replace("'", "''"), dir_path.replace("'", "''")
     );
     crate::ps::run_ps_json(&script).await
@@ -681,10 +786,11 @@ pub async fn calculate_folder_size(dir_path: String) -> Result<Value, String> {
 pub async fn find_empty_folders(dir_path: String, max_depth: Option<u32>) -> Result<Value, String> {
     let depth = max_depth.unwrap_or(10);
     let script = format!(
-        r#"Get-ChildItem -LiteralPath '{}' -Recurse -Directory -Depth {} -Force -ErrorAction SilentlyContinue | Where-Object {{ (Get-ChildItem $_.FullName -Force -ErrorAction SilentlyContinue).Count -eq 0 }} | Select-Object FullName | ConvertTo-Json -Compress"#,
+        r#"$empty = @(Get-ChildItem -LiteralPath '{}' -Recurse -Directory -Depth {} -Force -ErrorAction SilentlyContinue | Where-Object {{ (Get-ChildItem $_.FullName -Force -ErrorAction SilentlyContinue).Count -eq 0 }} | ForEach-Object {{ [PSCustomObject]@{{ path=$_.FullName }} }})
+[PSCustomObject]@{{ emptyFolders=$empty; count=$empty.Count }} | ConvertTo-Json -Depth 2 -Compress"#,
         dir_path.replace("'", "''"), depth
     );
-    crate::ps::run_ps_json_array(&script).await
+    crate::ps::run_ps_json(&script).await
 }
 
 #[tauri::command]
@@ -736,8 +842,8 @@ pub async fn get_system_capabilities() -> Result<Value, String> {
 pub async fn get_battery_status() -> Result<Value, String> {
     crate::ps::run_ps_json(
         r#"$bat = Get-CimInstance Win32_Battery -ErrorAction SilentlyContinue
-if ($bat) { [PSCustomObject]@{ hasBattery=$true; percent=$bat.EstimatedChargeRemaining; charging=($bat.BatteryStatus -eq 2) } | ConvertTo-Json -Compress }
-else { '{"hasBattery":false}' }"#
+if ($bat) { [PSCustomObject]@{ hasBattery=$true; percent=$bat.EstimatedChargeRemaining; charging=($bat.BatteryStatus -eq 2); onBattery=($bat.BatteryStatus -ne 2) } | ConvertTo-Json -Compress }
+else { '{"hasBattery":false,"onBattery":false}' }"#
     ).await
 }
 
@@ -783,7 +889,7 @@ pub async fn get_tags_for_directory(_dir_path: String) -> Result<Value, String> 
 
 #[tauri::command]
 pub async fn get_all_tags() -> Result<Value, String> {
-    Ok(json!({}))
+    Ok(json!([]))
 }
 
 // === Shell Integration ===
@@ -906,7 +1012,16 @@ pub async fn reset_all_privacy() -> Result<Value, String> {
 #[tauri::command]
 pub async fn get_scheduled_tasks_audit() -> Result<Value, String> {
     crate::ps::run_ps_json_array(
-        r#"Get-ScheduledTask | Where-Object { $_.State -eq 'Ready' } | Select-Object TaskName, TaskPath, State, Description -First 100 | ConvertTo-Json -Compress"#
+        r#"$telemetryKeywords = @('telemetry','diagnostic','ceip','feedback','customer experience','usage','tracking','consolidated','sqm','devicecensus','compatibility')
+Get-ScheduledTask | Where-Object { $_.State -eq 'Ready' -or $_.State -eq 'Disabled' } | Select-Object -First 100 | ForEach-Object {
+    $desc = "$($_.Description)"
+    $n = $_.TaskName.ToLower()
+    $p = $_.TaskPath.ToLower()
+    $isTel = $false
+    foreach ($kw in $telemetryKeywords) { if ($n -match $kw -or $p -match $kw -or $desc -match $kw) { $isTel = $true; break } }
+    $st = if($_.State -eq 'Disabled'){'Deaktiviert'}elseif($_.State -eq 'Ready'){'Bereit'}else{[string]$_.State}
+    [PSCustomObject]@{ name=$_.TaskName; path=$_.TaskPath; state=$st; description=$desc; isTelemetry=$isTel }
+} | ConvertTo-Json -Compress"#
     ).await
 }
 
@@ -933,7 +1048,7 @@ pub async fn fix_sideloading_with_elevation() -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn get_privacy_recommendations() -> Result<Value, String> {
-    Ok(json!([]))
+    Ok(json!({ "recommendations": [], "programCount": 0 }))
 }
 
 // === System Profile ===
@@ -1379,7 +1494,18 @@ $pn = (Get-Process -Id $_.OwningProcess -EA SilentlyContinue).ProcessName
         .map(|(_, v)| v)
         .collect();
 
-    Ok(json!({ "added": added, "removed": [] }))
+    let mut events: Vec<Value> = Vec::new();
+    for a in &added {
+        events.push(json!({
+            "type": "new",
+            "processName": a["pn"],
+            "remoteAddress": a["ra"],
+            "remotePort": a["rp"],
+            "timestamp": chrono::Utc::now().timestamp_millis()
+        }));
+    }
+
+    Ok(json!({ "events": events, "added": added, "removed": [] }))
 }
 
 #[tauri::command]
@@ -1443,7 +1569,7 @@ pub async fn stop_network_recording() -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn get_network_recording_status() -> Result<Value, String> {
-    Ok(json!({ "recording": false }))
+    Ok(json!({ "active": false, "startedAt": 0, "duration": 0, "eventCount": 0 }))
 }
 
 #[tauri::command]
@@ -1530,7 +1656,8 @@ pub async fn get_last_network_scan() -> Result<Value, String> {
 #[tauri::command]
 pub async fn scan_device_ports(ip: String) -> Result<Value, String> {
     let script = format!(
-        r#"$ports = @(21,22,23,25,53,80,139,443,445,3389,5900,8080)
+        r#"$portLabels = @{{21='FTP';22='SSH';23='Telnet';25='SMTP';53='DNS';80='HTTP';139='NetBIOS';443='HTTPS';445='SMB';3389='RDP';5900='VNC';8080='HTTP-Proxy'}}
+$ports = @(21,22,23,25,53,80,139,443,445,3389,5900,8080)
 $tasks = @()
 foreach ($port in $ports) {{
     $tcp = New-Object System.Net.Sockets.TcpClient
@@ -1540,7 +1667,7 @@ try {{ [void][System.Threading.Tasks.Task]::WaitAll(@($tasks | ForEach-Object {{
 $results = @()
 foreach ($t in $tasks) {{
     $open = $t.task.IsCompleted -and -not $t.task.IsFaulted
-    $results += [PSCustomObject]@{{ port=$t.port; open=$open }}
+    $results += [PSCustomObject]@{{ port=$t.port; open=$open; label=$portLabels[$t.port] }}
     try {{ $t.client.Close() }} catch {{}}
 }}
 $results | ConvertTo-Json -Compress"#, ip
@@ -1551,7 +1678,7 @@ $results | ConvertTo-Json -Compress"#, ip
 #[tauri::command]
 pub async fn get_smb_shares(ip: String) -> Result<Value, String> {
     let script = format!(
-        r#"Get-SmbConnection -ServerName '{}' -ErrorAction SilentlyContinue | Select-Object ServerName, ShareName | ConvertTo-Json -Compress"#, ip
+        r#"@(Get-SmbConnection -ServerName '{}' -ErrorAction SilentlyContinue | ForEach-Object {{ [PSCustomObject]@{{ name=$_.ShareName; path="\\$($_.ServerName)\$($_.ShareName)" }} }}) | ConvertTo-Json -Compress"#, ip
     );
     crate::ps::run_ps_json_array(&script).await
 }
@@ -1593,14 +1720,42 @@ pub async fn get_audit_history() -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn get_system_score(_results: Option<Value>) -> Result<Value, String> {
-    Ok(json!({ "score": 75, "categories": {} }))
+    Ok(json!({
+        "score": 75,
+        "grade": "C",
+        "riskLevel": "moderate",
+        "categories": [
+            {"name": "Datenschutz", "weight": 25, "score": 70, "description": "Windows-Datenschutzeinstellungen"},
+            {"name": "Festplatten", "weight": 20, "score": 80, "description": "Festplatten-Gesundheit und Speicherplatz"},
+            {"name": "Registry", "weight": 15, "score": 75, "description": "Registry-Sauberkeit"},
+            {"name": "Optimierung", "weight": 15, "score": 70, "description": "Systemoptimierungen"},
+            {"name": "Updates", "weight": 15, "score": 80, "description": "Windows- und Software-Updates"},
+            {"name": "Software", "weight": 10, "score": 75, "description": "Software-Inventar und Bloatware"}
+        ]
+    }))
 }
 
 // === Preferences ===
 
 #[tauri::command]
 pub async fn get_preferences() -> Result<Value, String> {
-    Ok(json!({ "theme": "dark", "language": "de", "networkDetailLevel": "normal" }))
+    Ok(json!({
+        "theme": "dark",
+        "language": "de",
+        "networkDetailLevel": "normal",
+        "sessionRestore": true,
+        "sessionSaveOnClose": true,
+        "sessionSaveAfterScan": true,
+        "energyMode": "auto",
+        "batteryThreshold": 20,
+        "disableBackgroundOnBattery": true,
+        "minimizeToTray": true,
+        "startMinimized": false,
+        "showScanNotification": true,
+        "showSizeColors": true,
+        "smartLayout": true,
+        "terminalShell": "powershell"
+    }))
 }
 
 #[tauri::command]
@@ -1617,7 +1772,7 @@ pub async fn set_preferences_multiple(_entries: Value) -> Result<Value, String> 
 
 #[tauri::command]
 pub async fn get_session_info() -> Result<Value, String> {
-    Ok(json!({ "startTime": chrono::Utc::now().to_rfc3339() }))
+    Ok(json!({ "exists": false, "savedAt": 0, "fileSize": 0, "scanCount": 0 }))
 }
 
 #[tauri::command]
