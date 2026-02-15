@@ -1001,6 +1001,11 @@ function register(mainWindow) {
         return network.isNpcapInstalled();
     });
 
+    ipcMain.handle('install-npcap', async () => {
+        const network = require('./network');
+        return network.installNpcap();
+    });
+
     // === Network Recording ===
     ipcMain.handle('start-network-recording', async () => {
         const recording = require('./network-recording');

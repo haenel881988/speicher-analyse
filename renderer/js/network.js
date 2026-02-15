@@ -38,6 +38,8 @@ export class NetworkView {
         this._recordings = [];              // Liste gespeicherter Aufzeichnungen
         this._npcapInstalled = null;        // null = unbekannt, true/false = geprüft
         this._isAdmin = null;               // Admin-Status
+        this._cardFilter = null;            // Aktiver Metrikkarten-Filter (z.B. 'established', 'tracker')
+        this._npcapInstalling = false;      // Npcap-Installation läuft
         this._setupScanProgressListener();
     }
 
@@ -248,33 +250,34 @@ export class NetworkView {
         const highRiskCount = this.groupedData.filter(g => g.hasHighRisk).length;
         const trackerCount = this.groupedData.filter(g => g.hasTrackers).length;
 
+        const cf = this._cardFilter;
         return `<div class="network-merged">
             <div class="network-overview-cards">
-                <div class="network-card">
+                <div class="network-card network-card-clickable ${cf === null ? 'network-card-active' : ''}" data-card-filter="all">
                     <div class="network-card-value">${s.totalConnections || 0}</div>
                     <div class="network-card-label">Verbindungen</div>
                 </div>
-                <div class="network-card">
+                <div class="network-card network-card-clickable ${cf === 'established' ? 'network-card-active' : ''}" data-card-filter="established">
                     <div class="network-card-value">${s.establishedCount || 0}</div>
                     <div class="network-card-label">Aktiv</div>
                 </div>
-                <div class="network-card">
+                <div class="network-card network-card-clickable ${cf === 'listening' ? 'network-card-active' : ''}" data-card-filter="listening">
                     <div class="network-card-value">${s.listeningCount || 0}</div>
                     <div class="network-card-label">Lauschend</div>
                 </div>
-                <div class="network-card">
+                <div class="network-card network-card-clickable ${cf === 'remoteips' ? 'network-card-active' : ''}" data-card-filter="remoteips">
                     <div class="network-card-value">${s.uniqueRemoteIPs || 0}</div>
                     <div class="network-card-label">Remote-IPs</div>
                 </div>
-                <div class="network-card">
+                <div class="network-card network-card-clickable ${cf === 'firmen' ? 'network-card-active' : ''}" data-card-filter="firmen">
                     <div class="network-card-value">${totalCompanies}</div>
                     <div class="network-card-label">Firmen</div>
                 </div>
-                ${trackerCount > 0 ? `<div class="network-card network-card-warn">
+                ${trackerCount > 0 ? `<div class="network-card network-card-warn network-card-clickable ${cf === 'tracker' ? 'network-card-active' : ''}" data-card-filter="tracker">
                     <div class="network-card-value">${trackerCount}</div>
                     <div class="network-card-label">Tracker</div>
                 </div>` : ''}
-                ${highRiskCount > 0 ? `<div class="network-card network-card-danger">
+                ${highRiskCount > 0 ? `<div class="network-card network-card-danger network-card-clickable ${cf === 'highrisk' ? 'network-card-active' : ''}" data-card-filter="highrisk">
                     <div class="network-card-value">${highRiskCount}</div>
                     <div class="network-card-label">Hochrisiko</div>
                 </div>` : ''}
@@ -284,6 +287,11 @@ export class NetworkView {
                 <h3 class="network-section-title">Netzwerkadapter</h3>
                 ${this._renderBandwidth()}
             </div>
+
+            ${cf ? `<div class="network-filter-indicator">
+                <span>Filter: <strong>${this._cardFilterLabel(cf)}</strong></span>
+                <button class="network-btn-small" data-card-filter="all">&#10005; Zurücksetzen</button>
+            </div>` : ''}
 
             ${this._renderGroupedConnections()}
         </div>`;
@@ -304,6 +312,18 @@ export class NetworkView {
             return b.connectionCount - a.connectionCount;
         });
 
+        // Card-Filter anwenden (klickbare Metrikkarten)
+        if (this._cardFilter) {
+            switch (this._cardFilter) {
+                case 'established': groups = groups.filter(g => g.states.Established > 0); break;
+                case 'listening':   groups = groups.filter(g => g.states.Listen > 0); break;
+                case 'tracker':     groups = groups.filter(g => g.hasTrackers); break;
+                case 'highrisk':    groups = groups.filter(g => g.hasHighRisk); break;
+                case 'firmen':      groups = groups.filter(g => (g.resolvedCompanies || []).length > 0); break;
+                case 'remoteips':   groups = groups.filter(g => g.uniqueIPCount > 0); break;
+            }
+        }
+
         if (this.filter) {
             const q = this.filter.toLowerCase();
             groups = groups.filter(g =>
@@ -321,9 +341,11 @@ export class NetworkView {
                 const ghostWarning = !g.isRunning && g.connectionCount > 0;
                 const expanded = this._expandedGroups.has(g.processName);
 
-                const companySummary = g.resolvedCompanies?.length
-                    ? g.resolvedCompanies.slice(0, 3).join(', ') + (g.resolvedCompanies.length > 3 ? ', ...' : '')
+                const allCompanies = g.resolvedCompanies || [];
+                const companySummary = allCompanies.length
+                    ? allCompanies.slice(0, 3).join(', ') + (allCompanies.length > 3 ? ` +${allCompanies.length - 3}` : '')
                     : '';
+                const companyTooltip = allCompanies.length > 3 ? allCompanies.join(', ') : '';
 
                 return `<div class="network-group ${ghostWarning ? 'network-group-ghost' : ''}" data-process="${this._esc(g.processName)}">
                     <div class="network-group-header" data-toggle="${this._esc(g.processName)}">
@@ -331,13 +353,14 @@ export class NetworkView {
                         <span class="network-status-dot network-status-${statusColor}"></span>
                         <strong class="network-group-name">${this._esc(g.processName)}</strong>
                         <span class="network-group-badge">${g.connectionCount}</span>
-                        <span class="network-group-ips">${g.uniqueIPCount} IP${g.uniqueIPCount !== 1 ? 's' : ''}${companySummary ? ' (' + this._esc(companySummary) + ')' : ''}</span>
+                        <span class="network-group-ips"${companyTooltip ? ` title="${this._esc(companyTooltip)}"` : ''}>${g.uniqueIPCount} IP${g.uniqueIPCount !== 1 ? 's' : ''}${companySummary ? ' (' + this._esc(companySummary) + ')' : ''}</span>
                         ${g.hasTrackers ? '<span class="network-tracker-badge">Tracker</span>' : ''}
                         ${g.hasHighRisk ? '<span class="network-highrisk-badge">&#9888; Hochrisiko</span>' : ''}
                         <span class="network-group-states">
-                            ${Object.entries(g.states).map(([state, count]) =>
-                                `<span class="network-state-pill">${state}: ${count}</span>`
-                            ).join('')}
+                            ${Object.entries(g.states).map(([state, count]) => {
+                                const cls = state === 'Established' ? 'pill-established' : state === 'Listen' ? 'pill-listen' : (state === 'TimeWait' || state === 'CloseWait') ? 'pill-closing' : '';
+                                return `<span class="network-state-pill ${cls}">${state}: ${count}</span>`;
+                            }).join('')}
                         </span>
                         ${ghostWarning ? '<span class="network-ghost-warning">Hintergrund-Aktivität!</span>' : ''}
                         ${g.processPath ? `<button class="network-btn-small" data-block="${this._esc(g.processName)}" data-path="${this._esc(g.processPath)}">Blockieren</button>` : ''}
@@ -381,7 +404,7 @@ export class NetworkView {
                 <td class="network-ip">${this._esc(ip)}</td>
                 <td class="network-company ${isHighRisk ? 'network-highrisk' : isTracker ? 'network-tracker' : ''}">${flag ? flag + ' ' : ''}${this._esc(info.org || 'Unbekannt')}${isHighRisk ? ' &#9888;' : isTracker ? ' &#128065;' : ''}${isHighRisk ? ` <span class="network-highrisk-label">${this._esc(info.country)}</span>` : ''}</td>
                 <td class="network-isp" title="${this._esc(info.isp || '')}">${this._esc(info.isp && info.isp !== info.org ? info.isp : '')}</td>
-                <td>${ports.join(', ') || '-'}</td>
+                <td>${ports.map(p => { const label = this._portLabel(p); return label ? `<span title="${label}">${p}</span>` : p; }).join(', ') || '-'}</td>
                 <td>${connections.length}</td>
                 <td><span class="network-state-pills">${stateStr}</span></td>
             </tr>`;
@@ -673,22 +696,26 @@ export class NetworkView {
                 const rxTotal = this._formatBytes(b.receivedBytes);
                 const txTotal = this._formatBytes(b.sentBytes);
 
+                const linkLabel = this._formatLinkSpeed(b.linkSpeed);
+                const totalPackets = ((b.receivedPackets || 0) + (b.sentPackets || 0));
+
                 return `<div class="network-adapter-card ${isDown ? 'network-adapter-down' : ''}">
                     <div class="network-adapter-name">${this._esc(b.name)}</div>
-                    <div class="network-adapter-desc">${this._esc(b.description || '')}</div>
-                    <div class="network-adapter-speed">${b.linkSpeed || '-'}</div>
+                    <div class="network-adapter-desc">${this._esc(b.description || '')}${linkLabel !== '\u2014' ? ` \u2014 ${linkLabel}` : ''}</div>
                     <div class="network-adapter-stats">
                         <div class="network-adapter-stat">
                             <span class="network-stat-label">\u2193 Empfangen</span>
-                            <span class="network-stat-value ${hasSpeed && rxSpeed > 0 ? 'network-stat-active' : ''}" title="Gesamt: ${rxTotal}">${rxLabel}</span>
+                            <span class="network-stat-value ${hasSpeed && rxSpeed > 0 ? 'network-stat-active' : ''}">${rxLabel}</span>
+                            <span class="network-stat-total" title="Gesamt empfangen">${rxTotal}</span>
                         </div>
                         <div class="network-adapter-stat">
                             <span class="network-stat-label">\u2191 Gesendet</span>
-                            <span class="network-stat-value ${hasSpeed && txSpeed > 0 ? 'network-stat-active' : ''}" title="Gesamt: ${txTotal}">${txLabel}</span>
+                            <span class="network-stat-value ${hasSpeed && txSpeed > 0 ? 'network-stat-active' : ''}">${txLabel}</span>
+                            <span class="network-stat-total" title="Gesamt gesendet">${txTotal}</span>
                         </div>
                         <div class="network-adapter-stat">
                             <span class="network-stat-label">Pakete</span>
-                            <span class="network-stat-value">${(b.receivedPackets || 0).toLocaleString('de')}</span>
+                            <span class="network-stat-value">${totalPackets.toLocaleString('de')}</span>
                         </div>
                     </div>
                 </div>`;
@@ -696,9 +723,9 @@ export class NetworkView {
         </div>`;
     }
 
-    /** Formatiert Bytes/s als lesbare Geschwindigkeit */
+    /** Formatiert Bytes/s als lesbare Geschwindigkeit (einheitlich KB/s, MB/s, GB/s) */
     _formatSpeed(bytesPerSec) {
-        if (bytesPerSec <= 0) return '0 KB/s';
+        if (bytesPerSec <= 0) return '0 B/s';
         if (bytesPerSec < 1024) return `${Math.round(bytesPerSec)} B/s`;
         if (bytesPerSec < 1024 * 1024) return `${(bytesPerSec / 1024).toFixed(1)} KB/s`;
         return `${(bytesPerSec / (1024 * 1024)).toFixed(1)} MB/s`;
@@ -711,6 +738,34 @@ export class NetworkView {
         if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
         if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
         return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+    }
+
+    /** Normalisiert Link-Speed von PowerShell (z.B. "1 Gbps", "100 Mbps") zu einheitlichem Format */
+    _formatLinkSpeed(speedStr) {
+        if (!speedStr || speedStr === '-') return '\u2014';
+        const match = speedStr.match(/([\d.]+)\s*(Gbps|Mbps|Kbps|bps)/i);
+        if (!match) return speedStr;
+        let mbits = parseFloat(match[1]);
+        const unit = match[2].toLowerCase();
+        if (unit === 'gbps') mbits *= 1000;
+        else if (unit === 'kbps') mbits /= 1000;
+        else if (unit === 'bps') mbits /= 1000000;
+        // Einheitlich als Mbit/s oder Gbit/s
+        if (mbits >= 1000) return `${(mbits / 1000).toFixed(mbits % 1000 === 0 ? 0 : 1)} Gbit/s`;
+        if (mbits >= 1) return `${mbits % 1 === 0 ? mbits.toFixed(0) : mbits.toFixed(1)} Mbit/s`;
+        return `${(mbits * 1000).toFixed(0)} Kbit/s`;
+    }
+
+    /** Label für aktiven Karten-Filter */
+    _cardFilterLabel(filter) {
+        const labels = { established: 'Aktive Verbindungen', listening: 'Lauschende Ports', tracker: 'Tracker-Prozesse', highrisk: 'Hochrisiko-Prozesse', firmen: 'Prozesse mit Firmenzuordnung', remoteips: 'Prozesse mit Remote-IPs' };
+        return labels[filter] || filter;
+    }
+
+    /** Bekannte Port-Protokolle */
+    _portLabel(port) {
+        const known = { 21: 'FTP', 22: 'SSH', 25: 'SMTP', 53: 'DNS', 80: 'HTTP', 110: 'POP3', 143: 'IMAP', 443: 'HTTPS', 445: 'SMB', 993: 'IMAPS', 995: 'POP3S', 3306: 'MySQL', 3389: 'RDP', 5432: 'PostgreSQL', 5900: 'VNC', 8080: 'HTTP-Alt', 8443: 'HTTPS-Alt', 9090: 'Mgmt' };
+        return known[port] || null;
     }
 
     _renderSecurityOverview() {
@@ -810,10 +865,17 @@ export class NetworkView {
 
         // npcap-Info-Leiste
         let npcapInfoHtml = '';
-        if (this._npcapInstalled === false) {
+        if (this._npcapInstalling) {
+            npcapInfoHtml = `<div class="network-npcap-info network-npcap-installing">
+                <span class="network-npcap-icon">\u23f3</span>
+                <span>Npcap wird heruntergeladen und installiert... Bitte UAC-Abfrage bestätigen.</span>
+            </div>`;
+        } else if (this._npcapInstalled === false) {
             npcapInfoHtml = `<div class="network-npcap-info network-npcap-install">
                 <span class="network-npcap-icon">\u{1f4e6}</span>
-                <span>Für erweiterte Paketanalyse (DNS-Abfragen, HTTP-Requests, Protokolle): <a href="#" id="network-npcap-link" class="network-npcap-link">Npcap installieren</a> (kostenlos, npcap.com)</span>
+                <span>Für erweiterte Paketanalyse (DNS-Abfragen, HTTP-Requests, Protokolle):</span>
+                <button class="network-btn network-btn-small network-btn-npcap" id="network-npcap-install">Npcap jetzt installieren</button>
+                <span style="font-size:11px;color:var(--text-muted)">(kostenlos, wird automatisch heruntergeladen)</span>
             </div>`;
         } else if (this._npcapInstalled === true && this._isAdmin === false) {
             npcapInfoHtml = `<div class="network-npcap-info network-npcap-admin">
@@ -1023,14 +1085,36 @@ export class NetworkView {
         } catch { this._recordings = []; }
     }
 
-    /** Prüft npcap-Installation und Admin-Status (einmalig). */
-    async _checkNpcapStatus() {
-        if (this._npcapInstalled !== null) return; // Bereits geprüft
+    /** Prüft npcap-Installation und Admin-Status. */
+    async _checkNpcapStatus(forceRecheck = false) {
+        if (this._npcapInstalled !== null && !forceRecheck) return;
         try {
             this._npcapInstalled = await window.api.isNpcapInstalled();
             this._isAdmin = await window.api.isAdmin();
             if (this.activeSubTab === 'livefeed') this.render();
         } catch { /* ignorieren */ }
+    }
+
+    /** Lädt Npcap automatisch herunter und installiert es. */
+    async _installNpcap() {
+        if (this._npcapInstalling) return;
+        this._npcapInstalling = true;
+        this.render();
+        try {
+            const result = await window.api.installNpcap();
+            this._npcapInstalling = false;
+            if (result.success) {
+                showToast(result.message || 'Npcap erfolgreich installiert!', 'success');
+                this._npcapInstalled = null; // Reset für Recheck
+                await this._checkNpcapStatus(true);
+            } else {
+                showToast(result.error || 'Installation fehlgeschlagen', 'error');
+            }
+        } catch (err) {
+            this._npcapInstalling = false;
+            showToast('Npcap-Installation fehlgeschlagen: ' + err.message, 'error');
+        }
+        this.render();
     }
 
     _renderHistory() {
@@ -1207,13 +1291,23 @@ export class NetworkView {
                 await window.api.openNetworkRecordingsDir();
             };
         }
-        // npcap controls
-        const npcapLink = this.container.querySelector('#network-npcap-link');
-        if (npcapLink) {
-            npcapLink.onclick = (e) => {
-                e.preventDefault();
-                window.api.openExternal('https://npcap.com/#download');
+        // Card-Filter-Klick (klickbare Metrikkarten)
+        this.container.querySelectorAll('[data-card-filter]').forEach(card => {
+            card.onclick = () => {
+                const filterType = card.dataset.cardFilter;
+                if (filterType === 'all' || this._cardFilter === filterType) {
+                    this._cardFilter = null; // Reset → alle anzeigen
+                } else {
+                    this._cardFilter = filterType;
+                }
+                this.render();
             };
+        });
+
+        // npcap controls
+        const npcapInstallBtn = this.container.querySelector('#network-npcap-install');
+        if (npcapInstallBtn) {
+            npcapInstallBtn.onclick = () => this._installNpcap();
         }
         const npcapElevateBtn = this.container.querySelector('#network-npcap-elevate');
         if (npcapElevateBtn) {

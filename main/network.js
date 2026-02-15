@@ -938,6 +938,105 @@ function isNpcapInstalled() {
     }
 }
 
+// ---------------------------------------------------------------------------
+// 12) installNpcap – Npcap automatisch herunterladen und installieren
+// ---------------------------------------------------------------------------
+async function installNpcap() {
+    if (isNpcapInstalled()) return { success: true, message: 'Npcap ist bereits installiert.' };
+
+    const os = require('os');
+    const tempDir = os.tmpdir();
+    const installerPath = path.join(tempDir, 'npcap-installer.exe');
+
+    // Schritt 1: Neueste Version von npcap.com ermitteln und herunterladen
+    const psDownload = `
+        $ErrorActionPreference = 'Stop'
+        $ProgressPreference = 'SilentlyContinue'
+        try {
+            $page = Invoke-WebRequest -Uri 'https://npcap.com' -UseBasicParsing -TimeoutSec 20
+            $match = [regex]::Match($page.Content, 'npcap-([\\d.]+)\\.exe')
+            if ($match.Success) {
+                $version = $match.Groups[1].Value
+                $url = "https://npcap.com/dist/npcap-$version.exe"
+            } else {
+                Write-Output 'ERR:Konnte Npcap-Version nicht ermitteln'
+                exit
+            }
+        } catch {
+            Write-Output "ERR:Download-Seite nicht erreichbar: $($_.Exception.Message)"
+            exit
+        }
+        Write-Output "VERSION:$version"
+        Write-Output "URL:$url"
+        try {
+            Invoke-WebRequest -Uri $url -OutFile '${installerPath.replace(/\\/g, '\\\\')}' -TimeoutSec 120
+            if (Test-Path '${installerPath.replace(/\\/g, '\\\\')}') {
+                Write-Output 'DOWNLOAD:OK'
+            } else {
+                Write-Output 'ERR:Datei wurde nicht erstellt'
+            }
+        } catch {
+            Write-Output "ERR:Download fehlgeschlagen: $($_.Exception.Message)"
+        }
+    `.trim();
+
+    log.info('Npcap-Download gestartet...');
+    let dlResult;
+    try {
+        dlResult = await runPS(psDownload, { timeout: 180000 }); // 3 min für Download
+    } catch (err) {
+        return { success: false, error: `Download fehlgeschlagen: ${err.message}` };
+    }
+
+    const dlOut = dlResult.stdout || '';
+    if (dlOut.includes('ERR:')) {
+        const errMsg = dlOut.split('\n').find(l => l.startsWith('ERR:'))?.replace('ERR:', '') || 'Unbekannter Fehler';
+        return { success: false, error: errMsg };
+    }
+    if (!dlOut.includes('DOWNLOAD:OK')) {
+        return { success: false, error: 'Download fehlgeschlagen. Bitte Internetverbindung prüfen.' };
+    }
+
+    const version = (dlOut.match(/VERSION:(.+)/)?.[1] || '').trim();
+    log.info(`Npcap ${version} heruntergeladen, starte Installation...`);
+
+    // Schritt 2: Installer mit Admin-Elevation ausführen (UAC-Prompt für den User)
+    const psInstall = `
+        try {
+            Start-Process -FilePath '${installerPath.replace(/\\/g, '\\\\')}' -Verb RunAs -Wait
+            Write-Output 'INSTALL:DONE'
+        } catch {
+            Write-Output "ERR:Installation abgebrochen: $($_.Exception.Message)"
+        } finally {
+            Remove-Item '${installerPath.replace(/\\/g, '\\\\')}' -Force -ErrorAction SilentlyContinue
+        }
+    `.trim();
+
+    try {
+        const instResult = await runPS(psInstall, { timeout: 300000 }); // 5 min für Installation
+        const instOut = instResult.stdout || '';
+        if (instOut.includes('ERR:')) {
+            const errMsg = instOut.split('\n').find(l => l.startsWith('ERR:'))?.replace('ERR:', '') || 'Installation fehlgeschlagen';
+            return { success: false, error: errMsg };
+        }
+    } catch (err) {
+        // Aufräumen
+        try { fs.unlinkSync(installerPath); } catch { /* ignore */ }
+        return { success: false, error: `Installation fehlgeschlagen: ${err.message}` };
+    }
+
+    // Schritt 3: Prüfen ob Installation erfolgreich war
+    const installed = isNpcapInstalled();
+    log.info(`Npcap-Installation ${installed ? 'erfolgreich' : 'fehlgeschlagen'} (${version})`);
+    return {
+        success: installed,
+        version: version || null,
+        message: installed
+            ? `Npcap ${version} wurde erfolgreich installiert.`
+            : 'Npcap-Installer wurde gestartet, aber die Installation scheint nicht abgeschlossen. Bitte erneut versuchen.',
+    };
+}
+
 module.exports = {
     getConnections,
     getBandwidth,
@@ -949,6 +1048,7 @@ module.exports = {
     getPollingData,
     getConnectionDiff,
     isNpcapInstalled,
+    installNpcap,
     resolveIPs,
     lookupIPs,
 };
