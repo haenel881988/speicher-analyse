@@ -596,6 +596,11 @@ async function runPostScanAnalysis(switchToDashboard = true) {
 }
 
 function switchToTab(tabName) {
+    // Auto-Live: Netzwerk-Polling stoppen wenn der Tab verlassen wird
+    if (state.activeTab === 'network' && tabName !== 'network') {
+        networkView.deactivate();
+    }
+
     state.activeTab = tabName;
 
     // Update sidebar nav button highlights
@@ -621,6 +626,11 @@ function switchToTab(tabName) {
 
     // Auto-load data when tab is clicked
     autoLoadTab(tabName);
+
+    // Auto-Live: Netzwerk-Polling starten wenn der Tab betreten wird (bereits geladen)
+    if (tabName === 'network' && tabLoaded.network) {
+        networkView.activate();
+    }
 
     // Push UI state to main process for session persistence
     pushUiState();
@@ -706,6 +716,7 @@ async function autoLoadTab(tabName) {
             await networkView.init();
             tabLoaded.network = true;
             setStatus('Bereit');
+            networkView.activate(); // Auto-Live: Polling starten nach erstem Laden
             break;
         case 'system-profil':
             tabLoaded['system-profil'] = true;

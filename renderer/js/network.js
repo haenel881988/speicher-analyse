@@ -13,7 +13,6 @@ export class NetworkView {
         this.pollInterval = null;
         this.activeSubTab = 'overview';
         this.filter = '';
-        this.snapshotMode = true;
         this._expandedGroups = new Set();
         this._lastRefreshTime = null;
         this._loaded = false;
@@ -50,7 +49,6 @@ export class NetworkView {
     async init() {
         this.container.innerHTML = '<div class="loading-state">Netzwerk wird analysiert...</div>';
         this._errorCount = 0;
-        this.snapshotMode = true;
         this.stopPolling();
 
         // Letztes Scan-Ergebnis aus dem Backend wiederherstellen (überlebt Page-Reloads)
@@ -65,6 +63,18 @@ export class NetworkView {
         }
 
         await this.refresh();
+    }
+
+    /** Aktiviert Auto-Live (Bandwidth-Polling) wenn der Netzwerk-Tab sichtbar wird. */
+    activate() {
+        if (!this._loaded) return;
+        this.startPolling(5000);
+        this._pollBandwidth();
+    }
+
+    /** Stoppt Auto-Live wenn der User den Netzwerk-Tab verlässt. */
+    deactivate() {
+        this.stopPolling();
     }
 
     async refresh(usePollingEndpoint = false) {
@@ -179,14 +189,9 @@ export class NetworkView {
                 <div class="network-header">
                     <h2>Netzwerk-Monitor</h2>
                     <div class="network-header-controls">
-                        <label class="network-toggle-label">
-                            <input type="checkbox" id="network-realtime-toggle" ${!this.snapshotMode ? 'checked' : ''}>
-                            <span class="network-toggle-slider"></span>
-                            <span>Echtzeit</span>
-                        </label>
                         <button class="network-btn" id="network-refresh" title="Netzwerkdaten neu laden">&#8635; Aktualisieren</button>
                         ${timeStr ? `<span class="network-timestamp">Stand: ${timeStr}</span>` : ''}
-                        ${!this.snapshotMode && this.pollInterval ? `<span class="network-live-indicator"><span class="network-live-dot"></span> Live</span>` : ''}
+                        ${this.pollInterval ? `<span class="network-live-indicator"><span class="network-live-dot"></span> Live</span>` : ''}
                     </div>
                 </div>
                 <div class="network-tabs">
@@ -884,21 +889,7 @@ export class NetworkView {
             };
         }
 
-        // Echtzeit-Toggle (5s Intervall für sichtbare Bandbreiten-Updates)
-        const realtimeToggle = this.container.querySelector('#network-realtime-toggle');
-        if (realtimeToggle) {
-            realtimeToggle.onchange = () => {
-                this.snapshotMode = !realtimeToggle.checked;
-                if (!this.snapshotMode) {
-                    this.render();           // Live-Indikator sofort zeigen
-                    this.startPolling(5000); // Danach alle 5s aktualisieren
-                    this._pollBandwidth();   // Sofort ersten Abruf starten (~2-3s)
-                } else {
-                    this.stopPolling();
-                    this.render();
-                }
-            };
-        }
+        // Auto-Live: kein manueller Toggle mehr — Polling wird durch activate()/deactivate() gesteuert
 
         // Group toggle (aufklappen/zuklappen)
         this.container.querySelectorAll('[data-toggle]').forEach(header => {
