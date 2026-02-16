@@ -395,8 +395,14 @@ pub async fn show_in_explorer(file_path: String) -> Result<Value, String> {
 // === Context Menu ===
 
 #[tauri::command]
-pub async fn show_context_menu(_menu_type: String, _context: Option<Value>) -> Result<Value, String> {
-    Ok(json!(null))
+pub async fn show_context_menu(app: tauri::AppHandle, menu_type: String, context: Option<Value>) -> Result<Value, String> {
+    // Context menus are handled by the frontend in Tauri v2 (native menus require window handle)
+    // We emit an event so the frontend can show a custom context menu
+    let _ = app.emit("context-menu-request", json!({
+        "menuType": menu_type,
+        "context": context
+    }));
+    Ok(json!({ "success": true }))
 }
 
 // === Dialog ===
@@ -438,20 +444,194 @@ pub async fn get_old_files(scan_id: String, threshold_days: Option<u32>, min_siz
 
 // === Duplicate Finder ===
 
+static DUPLICATE_CANCEL: std::sync::LazyLock<std::sync::atomic::AtomicBool> =
+    std::sync::LazyLock::new(|| std::sync::atomic::AtomicBool::new(false));
+
 #[tauri::command]
-pub async fn start_duplicate_scan(app: tauri::AppHandle, scan_id: String, _options: Option<Value>) -> Result<Value, String> {
-    let _ = app.emit("duplicate-complete", json!({ "scanId": scan_id, "groups": [] }));
+pub async fn start_duplicate_scan(app: tauri::AppHandle, scan_id: String, options: Option<Value>) -> Result<Value, String> {
+    tracing::debug!(scan_id = %scan_id, "Starte Duplikat-Scan");
+    DUPLICATE_CANCEL.store(false, std::sync::atomic::Ordering::Relaxed);
+
+    let min_size = options.as_ref()
+        .and_then(|o| o.get("minSize"))
+        .and_then(|v| v.as_u64())
+        .unwrap_or(1024); // 1KB minimum
+
+    let sid = scan_id.clone();
+    let app2 = app.clone();
+
+    // Run duplicate detection in background
+    tokio::task::spawn_blocking(move || {
+        use std::collections::HashMap;
+
+        // Phase 1: Group files by size from scan data
+        let size_groups: Option<HashMap<u64, Vec<(String, String)>>> = crate::scan::with_scan(&sid, |data| {
+            let mut groups: HashMap<u64, Vec<(String, String)>> = HashMap::new();
+            for f in &data.files {
+                if f.size >= min_size {
+                    groups.entry(f.size).or_default().push((f.path.clone(), f.name.clone()));
+                }
+            }
+            groups
+        });
+
+        let size_groups = match size_groups {
+            Some(g) => g,
+            None => {
+                let _ = app2.emit("duplicate-error", json!({ "scanId": sid, "error": "Scan-Daten nicht gefunden" }));
+                return;
+            }
+        };
+
+        // Filter to only groups with 2+ files of same size
+        let candidate_groups: Vec<(u64, Vec<(String, String)>)> = size_groups.into_iter()
+            .filter(|(_, files)| files.len() >= 2)
+            .collect();
+
+        let total_candidates: usize = candidate_groups.iter().map(|(_, f)| f.len()).sum();
+        let _ = app2.emit("duplicate-progress", json!({
+            "scanId": sid,
+            "phase": "hashing",
+            "totalCandidates": total_candidates,
+            "processed": 0
+        }));
+
+        // Phase 2: Hash files within same-size groups to find true duplicates
+        let mut result_groups = Vec::new();
+        let mut processed = 0u64;
+
+        for (size, files) in &candidate_groups {
+            if DUPLICATE_CANCEL.load(std::sync::atomic::Ordering::Relaxed) {
+                let _ = app2.emit("duplicate-complete", json!({ "scanId": sid, "groups": result_groups, "cancelled": true }));
+                return;
+            }
+
+            let mut hash_groups: HashMap<String, Vec<&(String, String)>> = HashMap::new();
+            for file_info in files {
+                // Compute partial hash (first 8KB + last 8KB) for speed
+                let hash = match compute_partial_hash(&file_info.0) {
+                    Some(h) => h,
+                    None => { processed += 1; continue; }
+                };
+                hash_groups.entry(hash).or_default().push(file_info);
+                processed += 1;
+            }
+
+            // Emit progress periodically
+            if processed % 100 == 0 {
+                let _ = app2.emit("duplicate-progress", json!({
+                    "scanId": sid, "phase": "hashing",
+                    "totalCandidates": total_candidates, "processed": processed
+                }));
+            }
+
+            for (hash, dup_files) in hash_groups {
+                if dup_files.len() >= 2 {
+                    let files_json: Vec<Value> = dup_files.iter().map(|(path, name)| {
+                        json!({ "path": path, "name": name, "size": size })
+                    }).collect();
+                    result_groups.push(json!({
+                        "hash": hash,
+                        "size": size,
+                        "count": dup_files.len(),
+                        "saveable": size * (dup_files.len() as u64 - 1),
+                        "files": files_json
+                    }));
+                }
+            }
+        }
+
+        // Sort by saveable space descending
+        result_groups.sort_by(|a, b| {
+            b["saveable"].as_u64().unwrap_or(0).cmp(&a["saveable"].as_u64().unwrap_or(0))
+        });
+
+        let _ = app2.emit("duplicate-complete", json!({
+            "scanId": sid,
+            "groups": result_groups
+        }));
+    });
+
     Ok(json!({ "started": true }))
+}
+
+fn compute_partial_hash(path: &str) -> Option<String> {
+    use std::io::Read;
+    let mut file = std::fs::File::open(path).ok()?;
+    let meta = file.metadata().ok()?;
+    let size = meta.len();
+
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    use std::hash::Hasher;
+
+    // Hash first 8KB
+    let mut buf = [0u8; 8192];
+    let n = file.read(&mut buf).ok()?;
+    hasher.write(&buf[..n]);
+
+    // Hash last 8KB if file is large enough
+    if size > 16384 {
+        use std::io::Seek;
+        file.seek(std::io::SeekFrom::End(-8192)).ok()?;
+        let n = file.read(&mut buf).ok()?;
+        hasher.write(&buf[..n]);
+    }
+
+    // Include file size in hash to reduce collisions
+    hasher.write_u64(size);
+
+    Some(format!("{:016x}", hasher.finish()))
 }
 
 #[tauri::command]
 pub async fn cancel_duplicate_scan(_scan_id: String) -> Result<Value, String> {
+    DUPLICATE_CANCEL.store(true, std::sync::atomic::Ordering::Relaxed);
     Ok(json!({ "cancelled": true }))
 }
 
 #[tauri::command]
-pub async fn get_size_duplicates(_scan_id: String, _min_size: Option<u64>) -> Result<Value, String> {
-    Ok(json!({ "totalGroups": 0, "totalDuplicates": 0, "totalSaveable": 0, "totalFiles": 0, "groups": [] }))
+pub async fn get_size_duplicates(scan_id: String, min_size: Option<u64>) -> Result<Value, String> {
+    let ms = min_size.unwrap_or(1024);
+    let result = crate::scan::with_scan(&scan_id, |data| {
+        let mut groups: HashMap<u64, Vec<(&str, &str)>> = HashMap::new();
+        for f in &data.files {
+            if f.size >= ms {
+                groups.entry(f.size).or_default().push((&f.path, &f.name));
+            }
+        }
+
+        let mut dup_groups = Vec::new();
+        let mut total_duplicates = 0u64;
+        let mut total_saveable = 0u64;
+        let mut total_files = 0u64;
+
+        for (size, files) in &groups {
+            if files.len() >= 2 {
+                let saveable = size * (files.len() as u64 - 1);
+                let files_json: Vec<Value> = files.iter().map(|(p, n)| json!({"path": p, "name": n, "size": size})).collect();
+                total_duplicates += files.len() as u64;
+                total_saveable += saveable;
+                total_files += files.len() as u64;
+                dup_groups.push(json!({
+                    "size": size,
+                    "count": files.len(),
+                    "saveable": saveable,
+                    "files": files_json
+                }));
+            }
+        }
+        dup_groups.sort_by(|a, b| b["saveable"].as_u64().unwrap_or(0).cmp(&a["saveable"].as_u64().unwrap_or(0)));
+
+        json!({
+            "totalGroups": dup_groups.len(),
+            "totalDuplicates": total_duplicates,
+            "totalSaveable": total_saveable,
+            "totalFiles": total_files,
+            "groups": dup_groups
+        })
+    });
+
+    Ok(result.unwrap_or(json!({ "totalGroups": 0, "totalDuplicates": 0, "totalSaveable": 0, "totalFiles": 0, "groups": [] })))
 }
 
 // === Memory ===
@@ -628,7 +808,39 @@ pub async fn clean_registry(entries: Value) -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn restore_registry_backup() -> Result<Value, String> {
-    Ok(json!({ "stub": true, "message": "Registry-Backup wiederherstellen ist noch nicht implementiert" }))
+    // List available backups and let the user select
+    let backup_dir = get_data_dir().join("registry-backups");
+    let mut backups = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(&backup_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().map(|e| e == "json").unwrap_or(false) {
+                let filename = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+                let meta = std::fs::metadata(&path).ok();
+                let file_size = meta.as_ref().map(|m| m.len()).unwrap_or(0);
+                let modified = meta.and_then(|m| m.modified().ok())
+                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map(|d| d.as_millis() as i64)
+                    .unwrap_or(0);
+
+                // Try to read backup to count entries
+                let entry_count = std::fs::read_to_string(&path).ok()
+                    .and_then(|c| serde_json::from_str::<Value>(&c).ok())
+                    .and_then(|v| v.get("entries").and_then(|e| e.as_array().map(|a| a.len())))
+                    .unwrap_or(0);
+
+                backups.push(json!({
+                    "filename": filename,
+                    "path": path.to_string_lossy().to_string(),
+                    "fileSize": file_size,
+                    "modified": modified,
+                    "entryCount": entry_count
+                }));
+            }
+        }
+    }
+    backups.sort_by(|a, b| b["modified"].as_i64().cmp(&a["modified"].as_i64()));
+    Ok(json!({ "backups": backups }))
 }
 
 // === Autostart ===
@@ -1096,12 +1308,48 @@ pub async fn is_admin() -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn restart_as_admin() -> Result<Value, String> {
-    Ok(json!({ "success": false, "error": "Admin elevation not yet implemented in Tauri" }))
+    let exe = std::env::current_exe()
+        .map_err(|e| format!("Exe-Pfad konnte nicht ermittelt werden: {}", e))?;
+    let exe_path = exe.to_string_lossy().replace("'", "''");
+
+    // Save current session before elevation
+    let mut session = read_json_file("session.json");
+    if let Some(obj) = session.as_object_mut() {
+        obj.insert("pendingElevation".to_string(), json!(true));
+    }
+    let _ = write_json_file("session.json", &session);
+
+    tracing::info!("Starte Anwendung als Administrator: {}", exe_path);
+
+    // Use PowerShell Start-Process with -Verb RunAs for UAC elevation
+    let script = format!(
+        "Start-Process -FilePath '{}' -Verb RunAs",
+        exe_path
+    );
+    match crate::ps::run_ps(&script).await {
+        Ok(_) => {
+            // Exit the current (non-admin) instance
+            Ok(json!({ "success": true, "message": "Neustart als Administrator wird durchgeführt" }))
+        }
+        Err(e) => {
+            // UAC was cancelled or elevation failed
+            if let Some(obj) = session.as_object_mut() {
+                obj.remove("pendingElevation");
+                let _ = write_json_file("session.json", &session);
+            }
+            Ok(json!({ "success": false, "error": format!("Elevation fehlgeschlagen: {}", e) }))
+        }
+    }
 }
 
 #[tauri::command]
 pub async fn get_restored_session() -> Result<Value, String> {
-    Ok(json!(null))
+    let session = read_json_file("session.json");
+    if session.as_object().map(|o| o.is_empty()).unwrap_or(true) {
+        return Ok(json!(null));
+    }
+    // Return the saved uiState so the frontend can restore the previous session
+    Ok(session.get("uiState").cloned().unwrap_or(json!(null)))
 }
 
 // === System ===
@@ -1262,34 +1510,134 @@ pub async fn set_global_hotkey(_accelerator: String) -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn get_global_hotkey() -> Result<Value, String> {
-    Ok(json!("Ctrl+Shift+S"))
+    let prefs = read_json_file("preferences.json");
+    let hotkey = prefs.get("globalHotkey")
+        .and_then(|v| v.as_str())
+        .unwrap_or("Ctrl+Shift+S");
+    Ok(json!(hotkey))
 }
 
 // === Terminal (stubs — needs native PTY) ===
 
 #[tauri::command]
 pub async fn terminal_get_shells() -> Result<Value, String> {
-    Ok(json!([{ "id": "powershell", "name": "PowerShell", "path": "powershell.exe" }]))
+    // Dynamically detect available shells
+    let mut shells = Vec::new();
+
+    // PowerShell Core (pwsh)
+    if which_exists("pwsh.exe") {
+        shells.push(json!({ "id": "pwsh", "name": "PowerShell 7", "path": "pwsh.exe" }));
+    }
+    // Windows PowerShell
+    shells.push(json!({ "id": "powershell", "name": "Windows PowerShell", "path": "powershell.exe" }));
+    // CMD
+    shells.push(json!({ "id": "cmd", "name": "Eingabeaufforderung", "path": "cmd.exe" }));
+    // Git Bash
+    let git_bash = r"C:\Program Files\Git\bin\bash.exe";
+    if Path::new(git_bash).exists() {
+        shells.push(json!({ "id": "git-bash", "name": "Git Bash", "path": git_bash }));
+    }
+    // WSL
+    if which_exists("wsl.exe") {
+        shells.push(json!({ "id": "wsl", "name": "WSL", "path": "wsl.exe" }));
+    }
+
+    Ok(json!(shells))
+}
+
+fn which_exists(name: &str) -> bool {
+    std::process::Command::new("where")
+        .arg(name)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
+// Terminal sessions: piped stdin/stdout processes
+static TERMINAL_SESSIONS: std::sync::LazyLock<Mutex<HashMap<String, TerminalSession>>> =
+    std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
+
+struct TerminalSession {
+    child: std::process::Child,
+    stdin: Option<std::process::ChildStdin>,
 }
 
 #[tauri::command]
-pub async fn terminal_create(_cwd: Option<String>, _shell_type: Option<String>, _cols: Option<u32>, _rows: Option<u32>) -> Result<Value, String> {
-    Ok(json!({ "id": "stub-terminal", "error": "Terminal not yet available in Tauri" }))
+pub async fn terminal_create(cwd: Option<String>, shell_type: Option<String>, _cols: Option<u32>, _rows: Option<u32>) -> Result<Value, String> {
+    let shell = shell_type.unwrap_or_else(|| "powershell".to_string());
+    let dir = cwd.unwrap_or_else(|| std::env::var("USERPROFILE").unwrap_or_else(|_| "C:\\".to_string()));
+
+    let shell_path = match shell.as_str() {
+        "pwsh" => "pwsh.exe".to_string(),
+        "cmd" => "cmd.exe".to_string(),
+        "git-bash" => r"C:\Program Files\Git\bin\bash.exe".to_string(),
+        "wsl" => "wsl.exe".to_string(),
+        _ => "powershell.exe".to_string(),
+    };
+
+    let mut cmd = std::process::Command::new(&shell_path);
+    cmd.current_dir(&dir)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped());
+
+    // Hide console window on Windows
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+
+    match cmd.spawn() {
+        Ok(mut child) => {
+            let id = format!("term-{}", child.id());
+            let stdin = child.stdin.take();
+            let mut sessions = TERMINAL_SESSIONS.lock().unwrap();
+            sessions.insert(id.clone(), TerminalSession { child, stdin });
+            tracing::debug!(id = %id, shell = %shell_path, "Terminal erstellt");
+            Ok(json!({ "id": id, "shell": shell_path, "cwd": dir }))
+        }
+        Err(e) => Ok(json!({ "id": null, "error": format!("Terminal konnte nicht erstellt werden: {}", e) }))
+    }
 }
 
 #[tauri::command]
-pub async fn terminal_write(_id: String, _data: String) -> Result<Value, String> {
-    Ok(json!({ "success": false }))
+pub async fn terminal_write(id: String, data: String) -> Result<Value, String> {
+    let mut sessions = TERMINAL_SESSIONS.lock().unwrap();
+    if let Some(session) = sessions.get_mut(&id) {
+        if let Some(ref mut stdin) = session.stdin {
+            use std::io::Write;
+            match stdin.write_all(data.as_bytes()) {
+                Ok(_) => { let _ = stdin.flush(); Ok(json!({ "success": true })) }
+                Err(e) => Ok(json!({ "success": false, "error": e.to_string() }))
+            }
+        } else {
+            Ok(json!({ "success": false, "error": "stdin nicht verfügbar" }))
+        }
+    } else {
+        Ok(json!({ "success": false, "error": "Terminal nicht gefunden" }))
+    }
 }
 
 #[tauri::command]
 pub async fn terminal_resize(_id: String, _cols: u32, _rows: u32) -> Result<Value, String> {
-    Ok(json!({ "success": false }))
+    // Piped terminals don't support resize — would need ConPTY/portable-pty for true PTY
+    Ok(json!({ "success": true }))
 }
 
 #[tauri::command]
-pub async fn terminal_destroy(_id: String) -> Result<Value, String> {
-    Ok(json!({ "success": true }))
+pub async fn terminal_destroy(id: String) -> Result<Value, String> {
+    let mut sessions = TERMINAL_SESSIONS.lock().unwrap();
+    if let Some(mut session) = sessions.remove(&id) {
+        let _ = session.child.kill();
+        let _ = session.child.wait();
+        tracing::debug!(id = %id, "Terminal beendet");
+        Ok(json!({ "success": true }))
+    } else {
+        Ok(json!({ "success": false, "error": "Terminal nicht gefunden" }))
+    }
 }
 
 #[tauri::command]
@@ -1494,7 +1842,44 @@ pub async fn fix_sideloading_with_elevation() -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn get_privacy_recommendations() -> Result<Value, String> {
-    Ok(json!({ "recommendations": [], "programCount": 0 }))
+    let script = r#"
+$recommendations = @()
+$programs = @(Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
+    'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*',
+    'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*' -EA SilentlyContinue |
+    Where-Object { $_.DisplayName } | Select-Object DisplayName, Publisher, InstallLocation)
+
+# Check for known telemetry-heavy programs
+$telemetryApps = @{
+    'Google Chrome' = 'Sendet Nutzungsdaten an Google. Einstellungen > Datenschutz > Nutzungsstatistiken deaktivieren.'
+    'Microsoft Edge' = 'Sendet Diagnosedaten an Microsoft. Einstellungen > Datenschutz > Diagnosedaten deaktivieren.'
+    'Cortana' = 'Sammelt Sprach- und Suchdaten. In den Windows-Einstellungen deaktivieren.'
+    'OneDrive' = 'Synchronisiert Dateien in die Cloud. Nur bei Bedarf aktivieren.'
+    'CCleaner' = 'Seit Avast-Uebernahme mit Telemetrie. Alternativen in Betracht ziehen.'
+    'Avast' = 'Verkauft Nutzungsdaten ueber Tochter Jumpshot. Alternativen in Betracht ziehen.'
+    'AVG' = 'Gehoert zu Avast, gleiche Datenschutzbedenken.'
+}
+
+foreach ($prog in $programs) {
+    foreach ($key in $telemetryApps.Keys) {
+        if ($prog.DisplayName -like "*$key*") {
+            $recommendations += [PSCustomObject]@{
+                program = $prog.DisplayName
+                publisher = $prog.Publisher
+                recommendation = $telemetryApps[$key]
+                severity = 'medium'
+            }
+            break
+        }
+    }
+}
+
+[PSCustomObject]@{
+    recommendations = $recommendations
+    programCount = $programs.Count
+} | ConvertTo-Json -Depth 3 -Compress"#;
+
+    crate::ps::run_ps_json(script).await
 }
 
 // === System Profile ===
@@ -1613,13 +1998,97 @@ $programs | Sort-Object name | ConvertTo-Json -Depth 2 -Compress"#
 }
 
 #[tauri::command]
-pub async fn correlate_software(_program: Value) -> Result<Value, String> {
-    Ok(json!({ "files": [], "registry": [], "services": [], "stub": true, "message": "Software-Korrelation ist noch nicht implementiert" }))
+pub async fn correlate_software(program: Value) -> Result<Value, String> {
+    let install_location = program.get("installLocation").and_then(|v| v.as_str()).unwrap_or("");
+    let display_name = program.get("displayName").and_then(|v| v.as_str()).unwrap_or("");
+    let publisher = program.get("publisher").and_then(|v| v.as_str()).unwrap_or("");
+
+    if install_location.is_empty() && display_name.is_empty() {
+        return Ok(json!({ "files": [], "registry": [], "services": [] }));
+    }
+
+    let install_escaped = install_location.replace("'", "''");
+    let name_escaped = display_name.replace("'", "''");
+    let publisher_escaped = publisher.replace("'", "''");
+
+    let script = format!(r#"
+$result = @{{ files=@(); registry=@(); services=@() }}
+
+# Files in install directory
+$installLoc = '{install_loc}'
+if ($installLoc -and (Test-Path $installLoc -EA SilentlyContinue)) {{
+    $files = @(Get-ChildItem -Path $installLoc -Recurse -File -EA SilentlyContinue | Select-Object -First 50)
+    foreach ($f in $files) {{
+        $result.files += [PSCustomObject]@{{ path=$f.FullName; name=$f.Name; size=$f.Length; extension=$f.Extension }}
+    }}
+}}
+
+# Related registry keys
+$displayName = '{name}'
+if ($displayName) {{
+    $regPaths = @(
+        'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall',
+        'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall',
+        'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall'
+    )
+    foreach ($rp in $regPaths) {{
+        Get-ChildItem $rp -EA SilentlyContinue | ForEach-Object {{
+            $props = Get-ItemProperty $_.PSPath -EA SilentlyContinue
+            if ($props.DisplayName -like "*$displayName*") {{
+                $result.registry += [PSCustomObject]@{{ path=$_.PSPath; displayName=$props.DisplayName; version=$props.DisplayVersion }}
+            }}
+        }}
+    }}
+}}
+
+# Related services
+$pub = '{publisher}'
+if ($displayName -or $pub) {{
+    Get-CimInstance Win32_Service -EA SilentlyContinue | ForEach-Object {{
+        $svc = $_
+        if (($displayName -and ($svc.DisplayName -like "*$displayName*" -or $svc.PathName -like "*$displayName*")) -or
+            ($pub -and $svc.DisplayName -like "*$pub*")) {{
+            $result.services += [PSCustomObject]@{{ name=$svc.Name; displayName=$svc.DisplayName; status=$svc.State; startType=$svc.StartMode; path=$svc.PathName }}
+        }}
+    }}
+}}
+
+[PSCustomObject]$result | ConvertTo-Json -Depth 3 -Compress"#,
+        install_loc = install_escaped,
+        name = name_escaped,
+        publisher = publisher_escaped
+    );
+
+    crate::ps::run_ps_json(&script).await
 }
 
 #[tauri::command]
 pub async fn check_audit_updates() -> Result<Value, String> {
-    Ok(json!([]))
+    // Check if winget is available, then query for updates
+    let script = r#"
+$updates = @()
+try {
+    $wingetPath = Get-Command winget -EA Stop | Select-Object -ExpandProperty Source
+    $output = & $wingetPath upgrade --accept-source-agreements 2>$null
+    $started = $false
+    foreach ($line in $output) {
+        if ($line -match '^-+$') { $started = $true; continue }
+        if ($started -and $line -match '\S') {
+            $parts = $line -split '\s{2,}'
+            if ($parts.Count -ge 4) {
+                $updates += [PSCustomObject]@{
+                    name = $parts[0].Trim()
+                    id = $parts[1].Trim()
+                    currentVersion = $parts[2].Trim()
+                    availableVersion = $parts[3].Trim()
+                }
+            }
+        }
+    }
+} catch { }
+$updates | ConvertTo-Json -Compress"#;
+
+    crate::ps::run_ps_json_array(script).await
 }
 
 // === Network Monitor ===
@@ -2183,59 +2652,304 @@ pub async fn clear_dns_cache() -> Result<Value, String> {
     Ok(json!({ "success": true }))
 }
 
+// === Network Recording State ===
+static NETWORK_RECORDING: std::sync::LazyLock<Mutex<Option<NetworkRecordingState>>> =
+    std::sync::LazyLock::new(|| Mutex::new(None));
+
+struct NetworkRecordingState {
+    started_at: i64,
+    event_count: u32,
+    filename: String,
+}
+
+fn get_recordings_dir() -> std::path::PathBuf {
+    let dir = get_data_dir().join("netzwerk-aufzeichnungen");
+    let _ = std::fs::create_dir_all(&dir);
+    dir
+}
+
+fn get_snapshots_dir() -> std::path::PathBuf {
+    let dir = get_data_dir().join("netzwerk-snapshots");
+    let _ = std::fs::create_dir_all(&dir);
+    dir
+}
+
 #[tauri::command]
 pub async fn start_network_recording() -> Result<Value, String> {
-    Ok(json!({ "stub": true, "message": "Netzwerk-Aufnahme ist noch nicht implementiert" }))
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0);
+    let filename = format!("recording_{}.jsonl", chrono::Local::now().format("%Y-%m-%d_%H-%M-%S"));
+    let filepath = get_recordings_dir().join(&filename);
+
+    // Write header line
+    let header = json!({ "type": "header", "startedAt": now, "version": 1 });
+    std::fs::write(&filepath, format!("{}\n", header)).map_err(|e| e.to_string())?;
+
+    let mut rec = NETWORK_RECORDING.lock().unwrap();
+    *rec = Some(NetworkRecordingState {
+        started_at: now,
+        event_count: 0,
+        filename: filename.clone(),
+    });
+
+    tracing::debug!(filename = %filename, "Netzwerk-Aufzeichnung gestartet");
+    Ok(json!({ "success": true, "filename": filename, "startedAt": now }))
 }
 
 #[tauri::command]
 pub async fn stop_network_recording() -> Result<Value, String> {
-    Ok(json!({ "stub": true, "message": "Netzwerk-Aufnahme ist noch nicht implementiert" }))
+    let mut rec = NETWORK_RECORDING.lock().unwrap();
+    if let Some(state) = rec.take() {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as i64)
+            .unwrap_or(0);
+        let duration = now - state.started_at;
+
+        // Write footer line
+        let filepath = get_recordings_dir().join(&state.filename);
+        let footer = json!({ "type": "footer", "stoppedAt": now, "duration": duration, "totalEvents": state.event_count });
+        if let Ok(mut f) = std::fs::OpenOptions::new().append(true).open(&filepath) {
+            use std::io::Write;
+            let _ = writeln!(f, "{}", footer);
+        }
+
+        tracing::debug!(filename = %state.filename, events = state.event_count, "Netzwerk-Aufzeichnung gestoppt");
+        Ok(json!({ "success": true, "filename": state.filename, "duration": duration, "eventCount": state.event_count }))
+    } else {
+        Ok(json!({ "success": false, "error": "Keine aktive Aufzeichnung" }))
+    }
 }
 
 #[tauri::command]
 pub async fn get_network_recording_status() -> Result<Value, String> {
-    Ok(json!({ "active": false, "startedAt": 0, "duration": 0, "eventCount": 0, "stub": true }))
+    let rec = NETWORK_RECORDING.lock().unwrap();
+    if let Some(state) = rec.as_ref() {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as i64)
+            .unwrap_or(0);
+        Ok(json!({
+            "active": true,
+            "startedAt": state.started_at,
+            "duration": now - state.started_at,
+            "eventCount": state.event_count,
+            "filename": state.filename
+        }))
+    } else {
+        Ok(json!({ "active": false, "startedAt": 0, "duration": 0, "eventCount": 0 }))
+    }
 }
 
 #[tauri::command]
-pub async fn append_network_recording_events(_events: Value) -> Result<Value, String> {
-    Ok(json!({ "stub": true, "message": "Netzwerk-Aufnahme ist noch nicht implementiert" }))
+pub async fn append_network_recording_events(events: Value) -> Result<Value, String> {
+    let mut rec = NETWORK_RECORDING.lock().unwrap();
+    if let Some(state) = rec.as_mut() {
+        let filepath = get_recordings_dir().join(&state.filename);
+        if let Some(arr) = events.as_array() {
+            if let Ok(mut f) = std::fs::OpenOptions::new().append(true).open(&filepath) {
+                use std::io::Write;
+                for event in arr {
+                    let _ = writeln!(f, "{}", event);
+                    state.event_count += 1;
+                }
+            }
+            Ok(json!({ "success": true, "appended": arr.len(), "totalEvents": state.event_count }))
+        } else {
+            Ok(json!({ "success": false, "error": "events muss ein Array sein" }))
+        }
+    } else {
+        Ok(json!({ "success": false, "error": "Keine aktive Aufzeichnung" }))
+    }
 }
 
 #[tauri::command]
 pub async fn list_network_recordings() -> Result<Value, String> {
-    Ok(json!([]))
+    let dir = get_recordings_dir();
+    let mut recordings = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(&dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().map(|e| e == "jsonl").unwrap_or(false) {
+                let filename = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+                let meta = std::fs::metadata(&path).ok();
+                let file_size = meta.as_ref().map(|m| m.len()).unwrap_or(0);
+                let modified = meta.and_then(|m| m.modified().ok())
+                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map(|d| d.as_millis() as i64)
+                    .unwrap_or(0);
+
+                // Read first and last line for metadata
+                let content = std::fs::read_to_string(&path).unwrap_or_default();
+                let lines: Vec<&str> = content.lines().collect();
+                let mut started_at = 0i64;
+                let mut duration = 0i64;
+                let mut event_count = 0u32;
+                if let Some(first) = lines.first() {
+                    if let Ok(header) = serde_json::from_str::<Value>(first) {
+                        started_at = header["startedAt"].as_i64().unwrap_or(0);
+                    }
+                }
+                if let Some(last) = lines.last() {
+                    if let Ok(footer) = serde_json::from_str::<Value>(last) {
+                        if footer["type"].as_str() == Some("footer") {
+                            duration = footer["duration"].as_i64().unwrap_or(0);
+                            event_count = footer["totalEvents"].as_u64().unwrap_or(0) as u32;
+                        }
+                    }
+                }
+                // Count event lines (non-header, non-footer)
+                if event_count == 0 {
+                    event_count = lines.iter().filter(|l| {
+                        if let Ok(v) = serde_json::from_str::<Value>(l) {
+                            v["type"].as_str() != Some("header") && v["type"].as_str() != Some("footer")
+                        } else { false }
+                    }).count() as u32;
+                }
+
+                recordings.push(json!({
+                    "filename": filename,
+                    "startedAt": started_at,
+                    "duration": duration,
+                    "eventCount": event_count,
+                    "fileSize": file_size,
+                    "modified": modified
+                }));
+            }
+        }
+    }
+    recordings.sort_by(|a, b| b["modified"].as_i64().cmp(&a["modified"].as_i64()));
+    Ok(json!(recordings))
 }
 
 #[tauri::command]
-pub async fn delete_network_recording(_filename: String) -> Result<Value, String> {
-    Ok(json!({ "stub": true, "message": "Netzwerk-Aufnahme löschen ist noch nicht implementiert" }))
+pub async fn delete_network_recording(filename: String) -> Result<Value, String> {
+    // Security: prevent path traversal
+    if filename.contains("..") || filename.contains('/') || filename.contains('\\') {
+        return Err("Ungültiger Dateiname".to_string());
+    }
+    let path = get_recordings_dir().join(&filename);
+    if path.exists() {
+        std::fs::remove_file(&path).map_err(|e| format!("Löschen fehlgeschlagen: {}", e))?;
+        Ok(json!({ "success": true }))
+    } else {
+        Ok(json!({ "success": false, "error": "Datei nicht gefunden" }))
+    }
 }
 
 #[tauri::command]
 pub async fn open_network_recordings_dir() -> Result<Value, String> {
-    Ok(json!({ "stub": true, "message": "Netzwerk-Aufnahme Verzeichnis ist noch nicht implementiert" }))
+    let dir = get_recordings_dir();
+    let _ = std::process::Command::new("explorer.exe")
+        .arg(dir.to_string_lossy().to_string())
+        .spawn();
+    Ok(json!({ "success": true }))
 }
 
 #[tauri::command]
-pub async fn save_network_snapshot(_data: Value) -> Result<Value, String> {
-    Ok(json!({ "stub": true, "message": "Netzwerk-Snapshot speichern ist noch nicht implementiert" }))
+pub async fn save_network_snapshot(data: Value) -> Result<Value, String> {
+    let filename = format!("snapshot_{}.json", chrono::Local::now().format("%Y-%m-%d_%H-%M-%S"));
+    let filepath = get_snapshots_dir().join(&filename);
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0);
+
+    let snapshot = json!({
+        "timestamp": now,
+        "data": data
+    });
+    let content = serde_json::to_string_pretty(&snapshot).map_err(|e| e.to_string())?;
+    std::fs::write(&filepath, content).map_err(|e| format!("Snapshot speichern fehlgeschlagen: {}", e))?;
+    tracing::debug!(filename = %filename, "Netzwerk-Snapshot gespeichert");
+    Ok(json!({ "success": true, "filename": filename, "timestamp": now }))
 }
 
 #[tauri::command]
 pub async fn get_network_history() -> Result<Value, String> {
-    Ok(json!([]))
+    let dir = get_snapshots_dir();
+    let mut snapshots = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(&dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().map(|e| e == "json").unwrap_or(false) {
+                let filename = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+                if let Ok(content) = std::fs::read_to_string(&path) {
+                    if let Ok(snap) = serde_json::from_str::<Value>(&content) {
+                        let ts = snap["timestamp"].as_i64().unwrap_or(0);
+                        snapshots.push(json!({
+                            "filename": filename,
+                            "timestamp": ts,
+                            "data": snap.get("data").cloned().unwrap_or(json!({}))
+                        }));
+                    }
+                }
+            }
+        }
+    }
+    snapshots.sort_by(|a, b| b["timestamp"].as_i64().cmp(&a["timestamp"].as_i64()));
+    Ok(json!(snapshots))
 }
 
 #[tauri::command]
 pub async fn clear_network_history() -> Result<Value, String> {
-    Ok(json!({ "stub": true, "message": "Netzwerk-Verlauf löschen ist noch nicht implementiert" }))
+    let dir = get_snapshots_dir();
+    let mut deleted = 0u32;
+    if let Ok(entries) = std::fs::read_dir(&dir) {
+        for entry in entries.flatten() {
+            if entry.path().extension().map(|e| e == "json").unwrap_or(false) {
+                let _ = std::fs::remove_file(entry.path());
+                deleted += 1;
+            }
+        }
+    }
+    Ok(json!({ "success": true, "deleted": deleted }))
 }
 
 #[tauri::command]
-pub async fn export_network_history(_format: Option<String>) -> Result<Value, String> {
-    Ok(json!({ "stub": true, "message": "Netzwerk-Verlauf exportieren ist noch nicht implementiert" }))
+pub async fn export_network_history(format: Option<String>) -> Result<Value, String> {
+    let fmt = format.unwrap_or_else(|| "json".to_string());
+    let dir = get_snapshots_dir();
+    let mut all_snapshots = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(&dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().map(|e| e == "json").unwrap_or(false) {
+                if let Ok(content) = std::fs::read_to_string(&path) {
+                    if let Ok(snap) = serde_json::from_str::<Value>(&content) {
+                        all_snapshots.push(snap);
+                    }
+                }
+            }
+        }
+    }
+
+    let export_filename = format!("netzwerk-verlauf_{}.{}", chrono::Local::now().format("%Y-%m-%d"), fmt);
+    let export_path = get_data_dir().join(&export_filename);
+
+    match fmt.as_str() {
+        "csv" => {
+            let mut csv = String::from("Zeitpunkt;Verbindungen;Bandbreite_Empfangen;Bandbreite_Gesendet\n");
+            for snap in &all_snapshots {
+                let ts = snap["timestamp"].as_i64().unwrap_or(0);
+                let empty = json!({});
+                let data = snap.get("data").unwrap_or(&empty);
+                let conns = data["connections"].as_u64().unwrap_or(0);
+                let rx = data["bandwidthRx"].as_u64().unwrap_or(0);
+                let tx = data["bandwidthTx"].as_u64().unwrap_or(0);
+                csv.push_str(&format!("{};{};{};{}\n", ts, conns, rx, tx));
+            }
+            std::fs::write(&export_path, csv).map_err(|e| e.to_string())?;
+        }
+        _ => {
+            let content = serde_json::to_string_pretty(&all_snapshots).map_err(|e| e.to_string())?;
+            std::fs::write(&export_path, content).map_err(|e| e.to_string())?;
+        }
+    }
+
+    Ok(json!({ "success": true, "path": export_path.to_string_lossy().to_string(), "count": all_snapshots.len() }))
 }
 
 /// Quick passive scan: ARP table + parallel ping, parallel DNS (5s limit) + OUI vendor
@@ -2567,8 +3281,22 @@ pub async fn get_smb_shares(ip: String) -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn update_oui_database() -> Result<Value, String> {
-    // OUI database download requires HTTP client (reqwest) — keep as stub until added
-    Ok(json!({ "stub": true, "message": "OUI-Datenbank Download benötigt eine HTTP-Client Bibliothek" }))
+    // Use PowerShell to download the IEEE OUI database
+    let oui_path = get_data_dir().join("oui.txt");
+    let oui_path_escaped = oui_path.to_string_lossy().replace("'", "''");
+
+    let script = format!(r#"
+try {{
+    $url = 'https://standards-oui.ieee.org/oui/oui.txt'
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    Invoke-WebRequest -Uri $url -OutFile '{path}' -UseBasicParsing -TimeoutSec 30
+    $lines = (Get-Content '{path}' | Measure-Object).Count
+    [PSCustomObject]@{{ success=$true; path='{path}'; lines=$lines }} | ConvertTo-Json -Compress
+}} catch {{
+    [PSCustomObject]@{{ success=$false; error=$_.Exception.Message }} | ConvertTo-Json -Compress
+}}"#, path = oui_path_escaped);
+
+    crate::ps::run_ps_json(&script).await
 }
 
 // === System Info ===
@@ -2582,21 +3310,122 @@ pub async fn get_system_info() -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn run_security_audit() -> Result<Value, String> {
-    crate::ps::run_ps_json_array(
+    tracing::debug!("Starte Sicherheitscheck");
+    let result = crate::ps::run_ps_json_array(
         r#"$checks = @()
-$fw = (Get-NetFirewallProfile -ErrorAction SilentlyContinue | Where-Object { $_.Enabled }).Count
-$checks += [PSCustomObject]@{ id='firewall'; name='Firewall'; status=if($fw -ge 3){'ok'}else{'warning'}; detail="$fw/3 Profile aktiv" }
-$uac = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -ErrorAction SilentlyContinue).EnableLUA
-$checks += [PSCustomObject]@{ id='uac'; name='UAC'; status=if($uac -eq 1){'ok'}else{'critical'}; detail=if($uac -eq 1){'Aktiviert'}else{'Deaktiviert'} }
-$av = Get-CimInstance -Namespace root/SecurityCenter2 -ClassName AntiVirusProduct -ErrorAction SilentlyContinue
+
+# 1. Firewall
+$fw = (Get-NetFirewallProfile -EA SilentlyContinue | Where-Object { $_.Enabled }).Count
+$checks += [PSCustomObject]@{ id='firewall'; name='Firewall'; status=if($fw -ge 3){'ok'}elseif($fw -ge 1){'warning'}else{'critical'}; detail="$fw/3 Profile aktiv" }
+
+# 2. UAC
+$uac = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -EA SilentlyContinue).EnableLUA
+$checks += [PSCustomObject]@{ id='uac'; name='UAC (Benutzerkontensteuerung)'; status=if($uac -eq 1){'ok'}else{'critical'}; detail=if($uac -eq 1){'Aktiviert'}else{'Deaktiviert'} }
+
+# 3. Antivirus
+$av = Get-CimInstance -Namespace root/SecurityCenter2 -ClassName AntiVirusProduct -EA SilentlyContinue
 $checks += [PSCustomObject]@{ id='antivirus'; name='Antivirus'; status=if($av){'ok'}else{'critical'}; detail=if($av){$av[0].displayName}else{'Nicht gefunden'} }
+
+# 4. Windows Defender Echtzeitschutz
+$defPref = Get-MpPreference -EA SilentlyContinue
+$rtDisabled = $defPref.DisableRealtimeMonitoring
+$checks += [PSCustomObject]@{ id='defender-realtime'; name='Echtzeitschutz'; status=if($rtDisabled -eq $false){'ok'}else{'critical'}; detail=if($rtDisabled -eq $false){'Aktiviert'}else{'Deaktiviert'} }
+
+# 5. Defender Definitionen Alter
+try {
+    $defStatus = Get-MpComputerStatus -EA Stop
+    $daysOld = ((Get-Date) - $defStatus.AntivirusSignatureLastUpdated).Days
+    $checks += [PSCustomObject]@{ id='defender-definitions'; name='Virendefinitionen'; status=if($daysOld -le 2){'ok'}elseif($daysOld -le 7){'warning'}else{'critical'}; detail="Letztes Update vor $daysOld Tagen" }
+} catch {
+    $checks += [PSCustomObject]@{ id='defender-definitions'; name='Virendefinitionen'; status='warning'; detail='Status konnte nicht abgefragt werden' }
+}
+
+# 6. Windows Update — ausstehende Updates
+try {
+    $updateSession = New-Object -ComObject Microsoft.Update.Session -EA Stop
+    $searcher = $updateSession.CreateUpdateSearcher()
+    $pending = $searcher.Search("IsInstalled=0 and Type='Software'").Updates.Count
+    $checks += [PSCustomObject]@{ id='windows-updates'; name='Windows-Updates'; status=if($pending -eq 0){'ok'}elseif($pending -le 3){'warning'}else{'critical'}; detail=if($pending -eq 0){'Alle Updates installiert'}else{"$pending Updates ausstehend"} }
+} catch {
+    $checks += [PSCustomObject]@{ id='windows-updates'; name='Windows-Updates'; status='warning'; detail='Konnte nicht geprüft werden' }
+}
+
+# 7. BitLocker / Verschlüsselung
+try {
+    $bl = Get-BitLockerVolume -MountPoint 'C:' -EA Stop
+    $checks += [PSCustomObject]@{ id='bitlocker'; name='Laufwerksverschlüsselung'; status=if($bl.ProtectionStatus -eq 'On'){'ok'}else{'warning'}; detail=if($bl.ProtectionStatus -eq 'On'){'BitLocker aktiviert'}else{'BitLocker deaktiviert'} }
+} catch {
+    $checks += [PSCustomObject]@{ id='bitlocker'; name='Laufwerksverschlüsselung'; status='warning'; detail='BitLocker nicht verfügbar' }
+}
+
+# 8. SMBv1 (veraltet, Sicherheitsrisiko)
+try {
+    $smb1 = (Get-SmbServerConfiguration -EA Stop).EnableSMB1Protocol
+    $checks += [PSCustomObject]@{ id='smb1'; name='SMBv1-Protokoll'; status=if($smb1 -eq $false){'ok'}else{'critical'}; detail=if($smb1 -eq $false){'Deaktiviert (sicher)'}else{'Aktiviert (Sicherheitsrisiko!)'} }
+} catch {
+    $checks += [PSCustomObject]@{ id='smb1'; name='SMBv1-Protokoll'; status='ok'; detail='Nicht verfügbar (sicher)' }
+}
+
+# 9. Remotedesktop
+$rdp = (Get-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -EA SilentlyContinue).fDenyTSConnections
+$checks += [PSCustomObject]@{ id='rdp'; name='Remotedesktop'; status=if($rdp -eq 1){'ok'}else{'warning'}; detail=if($rdp -eq 1){'Deaktiviert'}else{'Aktiviert — nur aktivieren wenn benötigt'} }
+
+# 10. Passwort — Ablauf
+try {
+    $maxPwAge = (net accounts 2>$null | Select-String 'Maximum password age').ToString() -replace '.*:\s*',''
+    $checks += [PSCustomObject]@{ id='password-policy'; name='Passwort-Richtlinie'; status=if($maxPwAge -match 'Unlimited|Unbegrenzt'){'warning'}else{'ok'}; detail="Max. Passwort-Alter: $maxPwAge" }
+} catch {
+    $checks += [PSCustomObject]@{ id='password-policy'; name='Passwort-Richtlinie'; status='warning'; detail='Konnte nicht geprüft werden' }
+}
+
+# 11. Secure Boot
+try {
+    $sb = Confirm-SecureBootUEFI -EA Stop
+    $checks += [PSCustomObject]@{ id='secure-boot'; name='Secure Boot'; status=if($sb){'ok'}else{'warning'}; detail=if($sb){'Aktiviert'}else{'Deaktiviert'} }
+} catch {
+    $checks += [PSCustomObject]@{ id='secure-boot'; name='Secure Boot'; status='warning'; detail='Nicht verfügbar (Legacy BIOS)' }
+}
+
+# 12. Autostart-Einträge (zu viele = Risiko)
+$asCount = @(Get-CimInstance Win32_StartupCommand -EA SilentlyContinue).Count
+$checks += [PSCustomObject]@{ id='autostart'; name='Autostart-Programme'; status=if($asCount -le 5){'ok'}elseif($asCount -le 15){'warning'}else{'critical'}; detail="$asCount Programme im Autostart" }
+
 $checks | ConvertTo-Json -Compress"#
-    ).await
+    ).await?;
+
+    // Persist the audit result to history
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0);
+
+    let mut history = read_json_file("audit-history.json");
+    let entries = history.as_object_mut()
+        .and_then(|o| o.get_mut("entries"))
+        .and_then(|e| e.as_array_mut());
+
+    let entry = json!({
+        "timestamp": now,
+        "checks": result,
+    });
+
+    if let Some(arr) = entries {
+        arr.insert(0, entry);
+        // Keep max 20 entries
+        arr.truncate(20);
+    } else {
+        history = json!({ "entries": [entry] });
+    }
+    write_json_file("audit-history.json", &history)?;
+    tracing::debug!("Sicherheitscheck abgeschlossen, Ergebnis gespeichert");
+
+    Ok(result)
 }
 
 #[tauri::command]
 pub async fn get_audit_history() -> Result<Value, String> {
-    Ok(json!([]))
+    let history = read_json_file("audit-history.json");
+    Ok(history.get("entries").cloned().unwrap_or(json!([])))
 }
 
 // === System Score ===
@@ -2826,8 +3655,32 @@ pub async fn get_folder_sizes_bulk(scan_id: String, folder_paths: Vec<String>, p
 // === Screenshot ===
 
 #[tauri::command]
-pub async fn capture_screenshot() -> Result<Value, String> {
-    Ok(json!({ "success": false, "error": "Screenshots not available in Tauri" }))
+pub async fn capture_screenshot(_app: tauri::AppHandle) -> Result<Value, String> {
+    // Use PowerShell with System.Drawing to capture the screen
+    let screenshots_dir = get_data_dir().join("screenshots");
+    let _ = std::fs::create_dir_all(&screenshots_dir);
+    let filename = format!("screenshot_{}.png", chrono::Local::now().format("%Y-%m-%d_%H-%M-%S"));
+    let filepath = screenshots_dir.join(&filename);
+    let filepath_escaped = filepath.to_string_lossy().replace("'", "''");
+
+    let script = format!(r#"
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+$screen = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+$bitmap = New-Object System.Drawing.Bitmap($screen.Width, $screen.Height)
+$graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+$graphics.CopyFromScreen($screen.Location, [System.Drawing.Point]::Empty, $screen.Size)
+$bitmap.Save('{path}', [System.Drawing.Imaging.ImageFormat]::Png)
+$graphics.Dispose()
+$bitmap.Dispose()
+[PSCustomObject]@{{ success=$true; path='{path}'; width=$screen.Width; height=$screen.Height }} | ConvertTo-Json -Compress"#,
+        path = filepath_escaped
+    );
+
+    match crate::ps::run_ps_json(&script).await {
+        Ok(result) => Ok(result),
+        Err(e) => Ok(json!({ "success": false, "error": format!("Screenshot fehlgeschlagen: {}", e) }))
+    }
 }
 
 // === Frontend Logging ===
