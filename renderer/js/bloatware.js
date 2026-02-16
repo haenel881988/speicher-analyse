@@ -1,4 +1,4 @@
-import { formatBytes } from './utils.js';
+import { formatBytes, escapeHtml } from './utils.js';
 
 export class BloatwareView {
     constructor(container) {
@@ -201,8 +201,3 @@ export class BloatwareView {
     }
 }
 
-function escapeHtml(text) {
-    const d = document.createElement('div');
-    d.textContent = text;
-    return d.innerHTML;
-}

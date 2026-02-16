@@ -1,4 +1,4 @@
-import { formatBytes, escapeHtml } from './utils.js';
+import { formatBytes, escapeHtml, isStub } from './utils.js';
 
 export class OptimizerView {
     constructor(container) {
@@ -134,7 +134,10 @@ export class OptimizerView {
 
         try {
             const result = await window.api.applyOptimization(id);
-            if (result.success) {
+            if (isStub(result, 'Optimierung')) {
+                btn.textContent = 'Anwenden';
+                btn.disabled = false;
+            } else if (result.success) {
                 btn.textContent = '\u2713 Angewendet';
                 btn.classList.remove('btn-primary');
                 btn.classList.add('btn-success-done');

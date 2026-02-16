@@ -2,6 +2,7 @@
  * Settings View - Zentrale Konfiguration (v7.4)
  * 7 Sektionen: Session, Energie, Allgemein, Hotkey, Terminal, Integration, Über
  */
+import { isStub } from './utils.js';
 
 export class SettingsView {
     constructor(container) {
@@ -324,7 +325,9 @@ export class SettingsView {
             try {
                 const result = await window.api.saveSessionNow({});
                 const infoEl = this.container.querySelector('#settings-session-info');
-                if (result.success) {
+                if (isStub(result, 'Session speichern')) {
+                    // Stub-Warnung wurde angezeigt
+                } else if (result.success) {
                     saveSessionBtn.textContent = 'Gespeichert!';
                     // Refresh session info
                     const info = await window.api.getSessionInfo();
@@ -404,7 +407,9 @@ export class SettingsView {
                     hotkeyInput.removeEventListener('keydown', handler);
 
                     const result = await window.api.setGlobalHotkey(accelerator);
-                    if (result.success) {
+                    if (isStub(result, 'Globaler Hotkey')) {
+                        // Stub-Warnung wurde angezeigt
+                    } else if (result.success) {
                         await this._setPref('globalHotkey', accelerator);
                     } else {
                         hotkeyInput.value = result.error || 'Fehler';
@@ -440,15 +445,19 @@ export class SettingsView {
             const isRegistered = shellStatus.textContent === 'Registriert';
             try {
                 if (isRegistered) {
-                    await window.api.unregisterShellContextMenu();
-                    shellStatus.textContent = 'Nicht registriert';
-                    shellStatus.className = 'settings-badge settings-badge-inactive';
-                    shellBtn.textContent = 'Registrieren';
+                    const res = await window.api.unregisterShellContextMenu();
+                    if (!isStub(res, 'Shell-Kontextmenü')) {
+                        shellStatus.textContent = 'Nicht registriert';
+                        shellStatus.className = 'settings-badge settings-badge-inactive';
+                        shellBtn.textContent = 'Registrieren';
+                    }
                 } else {
-                    await window.api.registerShellContextMenu();
-                    shellStatus.textContent = 'Registriert';
-                    shellStatus.className = 'settings-badge settings-badge-active';
-                    shellBtn.textContent = 'Entfernen';
+                    const res = await window.api.registerShellContextMenu();
+                    if (!isStub(res, 'Shell-Kontextmenü')) {
+                        shellStatus.textContent = 'Registriert';
+                        shellStatus.className = 'settings-badge settings-badge-active';
+                        shellBtn.textContent = 'Entfernen';
+                    }
                 }
             } catch {
                 shellStatus.textContent = 'Fehler';

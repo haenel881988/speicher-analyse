@@ -3,6 +3,7 @@
  * and scheduled tasks audit. Settings split into Standard + Erweitert tiers.
  */
 import { showToast } from './tree.js';
+import { isStub } from './utils.js';
 
 export class PrivacyView {
     constructor(container) {
@@ -320,11 +321,13 @@ export class PrivacyView {
                 applyAllBtn.textContent = 'Wird angewendet...';
                 try {
                     const result = await window.api.applyAllPrivacy();
-                    let msg = `${result.applied} Standard-Einstellungen optimiert`;
-                    if (result.skipped > 0) msg += ` (${result.skipped} erweiterte übersprungen)`;
-                    if (result.failed > 0) msg += `, ${result.failed} fehlgeschlagen`;
-                    showToast(msg, result.failed > 0 ? 'warning' : 'success');
-                    await this.scan();
+                    if (!isStub(result, 'Datenschutz-Einstellungen anwenden')) {
+                        let msg = `${result.applied} Standard-Einstellungen optimiert`;
+                        if (result.skipped > 0) msg += ` (${result.skipped} erweiterte übersprungen)`;
+                        if (result.failed > 0) msg += `, ${result.failed} fehlgeschlagen`;
+                        showToast(msg, result.failed > 0 ? 'warning' : 'success');
+                        await this.scan();
+                    }
                 } catch (err) {
                     showToast('Fehler: ' + err.message, 'error');
                 }
@@ -350,11 +353,13 @@ export class PrivacyView {
                 resetAllBtn.textContent = 'Wird zurückgesetzt...';
                 try {
                     const result = await window.api.resetAllPrivacy();
-                    let msg = `${result.reset} Einstellungen zurückgesetzt`;
-                    if (result.skipped > 0) msg += ` (${result.skipped} erweiterte übersprungen)`;
-                    if (result.failed > 0) msg += `, ${result.failed} fehlgeschlagen`;
-                    showToast(msg, result.failed > 0 ? 'warning' : 'success');
-                    await this.scan();
+                    if (!isStub(result, 'Datenschutz zurücksetzen')) {
+                        let msg = `${result.reset} Einstellungen zurückgesetzt`;
+                        if (result.skipped > 0) msg += ` (${result.skipped} erweiterte übersprungen)`;
+                        if (result.failed > 0) msg += `, ${result.failed} fehlgeschlagen`;
+                        showToast(msg, result.failed > 0 ? 'warning' : 'success');
+                        await this.scan();
+                    }
                 } catch (err) {
                     showToast('Fehler: ' + err.message, 'error');
                 }
@@ -382,7 +387,9 @@ export class PrivacyView {
                 btn.disabled = true;
                 try {
                     const result = await window.api.resetPrivacySetting(btn.dataset.reset);
-                    if (result.success) {
+                    if (isStub(result, 'Datenschutz zurücksetzen')) {
+                        // Stub-Warnung wurde angezeigt
+                    } else if (result.success) {
                         showToast('Einstellung auf Windows-Standard zurückgesetzt', 'success');
                         await this.scan();
                     } else {
@@ -440,7 +447,9 @@ export class PrivacyView {
                 btn.disabled = true;
                 try {
                     const result = await window.api.applyPrivacySetting(btn.dataset.setting);
-                    if (result.success) {
+                    if (isStub(result, 'Datenschutz-Einstellung')) {
+                        // Stub-Warnung wurde angezeigt
+                    } else if (result.success) {
                         showToast('Einstellung angewendet', 'success');
                         await this.scan();
                     } else {
@@ -462,7 +471,9 @@ export class PrivacyView {
                 try {
                     // Erst direkt versuchen
                     const result = await window.api.fixSideloading();
-                    if (result.success) {
+                    if (isStub(result, 'Sideloading reparieren')) {
+                        // Stub-Warnung wurde angezeigt
+                    } else if (result.success) {
                         showToast('App-Sideloading wurde erfolgreich aktiviert!', 'success');
                         await this.scan();
                     } else if (result.needsAdmin) {

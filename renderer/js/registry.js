@@ -1,4 +1,4 @@
-import { formatNumber } from './utils.js';
+import { formatNumber, isStub } from './utils.js';
 import { showToast } from './tree.js';
 
 export class RegistryView {
@@ -76,11 +76,11 @@ export class RegistryView {
             <div class="reg-category">
                 <div class="reg-category-header">
                     <span class="reg-category-icon">${cat.icon}</span>
-                    <span class="reg-category-name">${cat.name}</span>
+                    <span class="reg-category-name">${this.esc(cat.name)}</span>
                     <span class="reg-category-count">(${cat.entries.length})</span>
                     <button class="btn-expand reg-expand" data-id="${cat.id}">\u25BC</button>
                 </div>
-                <div class="reg-category-desc">${cat.description}</div>
+                <div class="reg-category-desc">${this.esc(cat.description)}</div>
                 <div class="reg-entries" id="reg-entries-${cat.id}">
                     ${cat.entries.map((entry, ei) => `
                         <div class="reg-entry">
@@ -147,6 +147,7 @@ export class RegistryView {
 
         try {
             const result = await window.api.exportRegistryBackup(entries);
+            if (isStub(result, 'Registry-Backup')) return;
             if (result.canceled) return;
             if (result.success) {
                 showToast(`Sicherung erstellt: ${result.path}`, 'success');
@@ -172,6 +173,7 @@ export class RegistryView {
 
         try {
             const response = await window.api.cleanRegistry(entries);
+            if (isStub(response, 'Registry bereinigen')) return;
             const ok = response.results.filter(r => r.success).length;
             const failed = response.results.filter(r => !r.success).length;
 

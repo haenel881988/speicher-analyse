@@ -1,4 +1,5 @@
 import { showToast } from './tree.js';
+import { isStub } from './utils.js';
 
 export class AutostartView {
     constructor(container) {
@@ -68,7 +69,7 @@ export class AutostartView {
             filtered.map((entry, i) => '<tr class="' + (entry.exists === false ? 'autostart-invalid' : '') + '" data-index="' + i + '">' +
                 '<td class="name-col">' + this.esc(entry.name) + '</td>' +
                 '<td class="path-col" title="' + this.esc(entry.command) + '">' + this.esc(entry.command) + '</td>' +
-                '<td>' + entry.locationLabel + '</td>' +
+                '<td>' + this.esc(entry.locationLabel) + '</td>' +
                 '<td>' +
                     '<label class="toggle-switch">' +
                         '<input type="checkbox" class="autostart-toggle" data-index="' + i + '"' + (entry.enabled ? ' checked' : '') + '>' +
@@ -88,7 +89,9 @@ export class AutostartView {
                 const entry = filtered[idx];
                 try {
                     const result = await window.api.toggleAutoStart(entry, toggle.checked);
-                    if (result.success) {
+                    if (isStub(result, 'Autostart')) {
+                        toggle.checked = !toggle.checked;
+                    } else if (result.success) {
                         entry.enabled = toggle.checked;
                         showToast(entry.name + (toggle.checked ? ' aktiviert' : ' deaktiviert'), 'success');
                     } else {
@@ -117,7 +120,9 @@ export class AutostartView {
                 if (confirmResult.response !== 1) return;
                 try {
                     const result = await window.api.deleteAutoStart(entry);
-                    if (result.success) {
+                    if (isStub(result, 'Autostart-Eintrag löschen')) {
+                        // Stub-Warnung wurde angezeigt
+                    } else if (result.success) {
                         showToast(entry.name + ' entfernt', 'success');
                         this.scan();
                     } else {

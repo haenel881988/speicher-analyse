@@ -68,8 +68,8 @@ export class CleanupView {
                     <input type="checkbox" class="cleanup-check" data-id="${cat.id}" data-size="${cat.totalSize}" ${cat.requiresAdmin ? 'title="Admin-Rechte nötig"' : ''}>
                     <span class="cleanup-icon">${cat.icon}</span>
                     <div class="cleanup-info">
-                        <div class="cleanup-name">${cat.name} ${cat.requiresAdmin ? '<span class="badge-admin">Admin</span>' : ''}</div>
-                        <div class="cleanup-desc">${cat.description}</div>
+                        <div class="cleanup-name">${this.esc(cat.name)} ${cat.requiresAdmin ? '<span class="badge-admin">Admin</span>' : ''}</div>
+                        <div class="cleanup-desc">${this.esc(cat.description)}</div>
                     </div>
                     <div class="cleanup-size">${formatBytes(cat.totalSize)}</div>
                     <div class="cleanup-count">${formatNumber(cat.fileCount)} Dateien</div>

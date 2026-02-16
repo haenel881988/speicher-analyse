@@ -605,7 +605,7 @@ pub async fn set_service_start_type(name: String, start_type: String) -> Result<
         "auto" => "Automatic",
         "demand" => "Manual",
         "disabled" => "Disabled",
-        other => other, // pass through if already correct format
+        _ => return Err(format!("Ungültiger Start-Typ: '{}'. Erlaubt: auto, demand, disabled", start_type)),
     };
     let safe_name = name.replace("'", "''");
     crate::ps::run_ps(&format!("Set-Service '{}' -StartupType '{}'", safe_name, ps_type)).await?;
