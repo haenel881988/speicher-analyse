@@ -186,6 +186,28 @@ pub fn folder_sizes_bulk(scan_id: &str, folder_paths: &[String]) -> Value {
     }).unwrap_or(json!({}))
 }
 
+/// Export scan data as CSV (semicolon-separated, German format)
+pub fn export_csv(scan_id: &str) -> String {
+    with_scan(scan_id, |data| {
+        let mut lines = Vec::with_capacity(data.files.len() + 1);
+        lines.push("Pfad;Name;Größe (Bytes);Extension;Kategorie".to_string());
+        let mut sorted: Vec<&FileEntry> = data.files.iter().collect();
+        sorted.sort_by(|a, b| b.size.cmp(&a.size));
+        for f in sorted {
+            let cat = file_category(&f.extension);
+            lines.push(format!(
+                "\"{}\";\"{}\";\"{}\";\"{}\";\"{}\";",
+                f.path.replace('"', "\"\""),
+                f.name.replace('"', "\"\""),
+                f.size,
+                f.extension,
+                cat
+            ));
+        }
+        lines.join("\n")
+    }).unwrap_or_default()
+}
+
 /// Build tree node from scan data — returns {path, name, size, dir_count, file_count, children: [...]}
 pub fn tree_node(scan_id: &str, path: &str, _depth: u32) -> Value {
     with_scan(scan_id, |data| {

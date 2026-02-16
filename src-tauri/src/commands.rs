@@ -4,6 +4,29 @@ use std::path::Path;
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 
+// === JSON File Persistence ===
+
+fn get_data_dir() -> std::path::PathBuf {
+    let appdata = std::env::var("APPDATA").unwrap_or_else(|_| ".".to_string());
+    let dir = std::path::PathBuf::from(appdata).join("speicher-analyse");
+    let _ = std::fs::create_dir_all(&dir);
+    dir
+}
+
+fn read_json_file(filename: &str) -> Value {
+    let path = get_data_dir().join(filename);
+    match std::fs::read_to_string(&path) {
+        Ok(content) => serde_json::from_str(&content).unwrap_or(json!({})),
+        Err(_) => json!({}),
+    }
+}
+
+fn write_json_file(filename: &str, data: &Value) -> Result<(), String> {
+    let path = get_data_dir().join(filename);
+    let content = serde_json::to_string_pretty(data).map_err(|e| e.to_string())?;
+    std::fs::write(&path, content).map_err(|e| format!("Datei schreiben fehlgeschlagen: {}", e))
+}
+
 // === Validation Helpers ===
 
 fn validate_ip(ip: &str) -> Result<(), String> {
@@ -225,13 +248,28 @@ pub async fn get_files_by_category(scan_id: String, category: String, limit: Opt
 // === Export ===
 
 #[tauri::command]
-pub async fn export_csv(_scan_id: String) -> Result<Value, String> {
-    Ok(json!({ "success": false, "error": "Not implemented in Tauri yet" }))
+pub async fn export_csv(scan_id: String) -> Result<Value, String> {
+    let csv = crate::scan::export_csv(&scan_id);
+    if csv.is_empty() {
+        return Err("Keine Scan-Daten vorhanden".to_string());
+    }
+    Ok(json!({ "success": true, "content": csv }))
 }
 
 #[tauri::command]
-pub async fn show_save_dialog(_options: Option<Value>) -> Result<Value, String> {
-    Ok(json!(null))
+pub async fn show_save_dialog(app: tauri::AppHandle, _options: Option<Value>) -> Result<Value, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let (tx, rx) = std::sync::mpsc::channel();
+    app.dialog().file().save_file(move |path| {
+        let _ = tx.send(path);
+    });
+    let path = tokio::task::spawn_blocking(move || {
+        rx.recv().unwrap_or(None)
+    }).await.unwrap_or(None);
+    match path {
+        Some(p) => Ok(json!({ "path": p.to_string() })),
+        None => Ok(json!({ "canceled": true })),
+    }
 }
 
 // === File Management ===
@@ -513,13 +551,46 @@ $categories | ConvertTo-Json -Depth 3 -Compress"#
 }
 
 #[tauri::command]
-pub async fn export_registry_backup(_entries: Value) -> Result<Value, String> {
-    Ok(json!({ "stub": true, "message": "Registry-Backup exportieren ist noch nicht implementiert" }))
+pub async fn export_registry_backup(entries: Value) -> Result<Value, String> {
+    let backup_dir = get_data_dir().join("registry-backups");
+    let _ = std::fs::create_dir_all(&backup_dir);
+    let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S").to_string();
+    let backup_file = backup_dir.join(format!("registry_backup_{}.json", timestamp));
+    let content = serde_json::to_string_pretty(&entries).map_err(|e| e.to_string())?;
+    std::fs::write(&backup_file, content)
+        .map_err(|e| format!("Backup schreiben fehlgeschlagen: {}", e))?;
+    Ok(json!({ "success": true, "path": backup_file.to_string_lossy().to_string() }))
 }
 
 #[tauri::command]
-pub async fn clean_registry(_entries: Value) -> Result<Value, String> {
-    Ok(json!({ "stub": true, "message": "Registry bereinigen ist noch nicht implementiert" }))
+pub async fn clean_registry(entries: Value) -> Result<Value, String> {
+    // First create a backup
+    let backup_dir = get_data_dir().join("registry-backups");
+    let _ = std::fs::create_dir_all(&backup_dir);
+    let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S").to_string();
+    let backup_file = backup_dir.join(format!("pre_clean_{}.json", timestamp));
+    let content = serde_json::to_string_pretty(&entries).map_err(|e| e.to_string())?;
+    let _ = std::fs::write(&backup_file, &content);
+
+    let mut cleaned = 0u64;
+    let mut errors = Vec::new();
+    if let Some(categories) = entries.as_array() {
+        for cat in categories {
+            if let Some(cat_entries) = cat.get("entries").and_then(|e| e.as_array()) {
+                for entry in cat_entries {
+                    if let Some(key) = entry.get("key").and_then(|k| k.as_str()) {
+                        let safe_key = key.replace("'", "''");
+                        let script = format!("Remove-Item -Path '{}' -Force -ErrorAction Stop", safe_key);
+                        match crate::ps::run_ps(&script).await {
+                            Ok(_) => cleaned += 1,
+                            Err(e) => errors.push(format!("{}: {}", key, e)),
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(json!({ "success": true, "cleaned": cleaned, "errors": errors, "backupPath": backup_file.to_string_lossy().to_string() }))
 }
 
 #[tauri::command]
@@ -563,13 +634,84 @@ $entries | ConvertTo-Json -Compress"#
 }
 
 #[tauri::command]
-pub async fn toggle_autostart(_entry: Value, _enabled: bool) -> Result<Value, String> {
-    Ok(json!({ "stub": true, "message": "Autostart-Eintrag umschalten ist noch nicht implementiert" }))
+pub async fn toggle_autostart(entry: Value, enabled: bool) -> Result<Value, String> {
+    let source = entry.get("source").and_then(|v| v.as_str()).unwrap_or("");
+    let name = entry.get("name").and_then(|v| v.as_str()).unwrap_or("");
+    let command = entry.get("command").and_then(|v| v.as_str()).unwrap_or("");
+    let location_label = entry.get("locationLabel").and_then(|v| v.as_str()).unwrap_or("");
+
+    match source {
+        "registry" => {
+            // Determine registry path from locationLabel
+            let reg_path = if location_label.contains("HKCU\\Run") {
+                "HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run"
+            } else if location_label.contains("HKLM\\Run") {
+                "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run"
+            } else if location_label.contains("HKCU\\RunOnce") {
+                "HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnce"
+            } else {
+                return Err("Unbekannter Registry-Pfad".to_string());
+            };
+            let safe_name = name.replace("'", "''");
+            let safe_cmd = command.replace("'", "''");
+            if enabled {
+                // Re-enable: set value back
+                let script = format!("Set-ItemProperty -Path '{}' -Name '{}' -Value '{}'", reg_path, safe_name, safe_cmd);
+                crate::ps::run_ps(&script).await?;
+            } else {
+                // Disable: remove value (moves to a disabled subkey is complex, just remove for now)
+                let script = format!("Remove-ItemProperty -Path '{}' -Name '{}' -Force -ErrorAction SilentlyContinue", reg_path, safe_name);
+                crate::ps::run_ps(&script).await?;
+            }
+            Ok(json!({ "success": true }))
+        }
+        "folder" => {
+            // Startup folder: rename file to add/remove .disabled extension
+            let safe_cmd = command.replace("'", "''");
+            if enabled {
+                let script = format!("if (Test-Path '{}.disabled') {{ Rename-Item '{}.disabled' -NewName (Split-Path '{}' -Leaf) }}", safe_cmd, safe_cmd, safe_cmd);
+                crate::ps::run_ps(&script).await?;
+            } else {
+                let script = format!("if (Test-Path '{}') {{ Rename-Item '{}' -NewName ((Split-Path '{}' -Leaf) + '.disabled') }}", safe_cmd, safe_cmd, safe_cmd);
+                crate::ps::run_ps(&script).await?;
+            }
+            Ok(json!({ "success": true }))
+        }
+        _ => Err(format!("Unbekannte Autostart-Quelle: {}", source)),
+    }
 }
 
 #[tauri::command]
-pub async fn delete_autostart(_entry: Value) -> Result<Value, String> {
-    Ok(json!({ "stub": true, "message": "Autostart-Eintrag löschen ist noch nicht implementiert" }))
+pub async fn delete_autostart(entry: Value) -> Result<Value, String> {
+    let source = entry.get("source").and_then(|v| v.as_str()).unwrap_or("");
+    let name = entry.get("name").and_then(|v| v.as_str()).unwrap_or("");
+    let command = entry.get("command").and_then(|v| v.as_str()).unwrap_or("");
+    let location_label = entry.get("locationLabel").and_then(|v| v.as_str()).unwrap_or("");
+
+    match source {
+        "registry" => {
+            let reg_path = if location_label.contains("HKCU\\Run") {
+                "HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run"
+            } else if location_label.contains("HKLM\\Run") {
+                "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run"
+            } else if location_label.contains("HKCU\\RunOnce") {
+                "HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnce"
+            } else {
+                return Err("Unbekannter Registry-Pfad".to_string());
+            };
+            let safe_name = name.replace("'", "''");
+            let script = format!("Remove-ItemProperty -Path '{}' -Name '{}' -Force", reg_path, safe_name);
+            crate::ps::run_ps(&script).await?;
+            Ok(json!({ "success": true }))
+        }
+        "folder" => {
+            let safe_cmd = command.replace("'", "''");
+            let script = format!("Remove-Item -LiteralPath '{}' -Force", safe_cmd);
+            crate::ps::run_ps(&script).await?;
+            Ok(json!({ "success": true }))
+        }
+        _ => Err(format!("Unbekannte Autostart-Quelle: {}", source)),
+    }
 }
 
 // === Services ===
@@ -630,7 +772,29 @@ $opts | ConvertTo-Json -Compress"#
 
 #[tauri::command]
 pub async fn apply_optimization(id: String) -> Result<Value, String> {
-    Ok(json!({ "stub": true, "message": "Optimierung anwenden ist noch nicht implementiert", "id": id }))
+    let script = match id.as_str() {
+        "visual_effects" => {
+            r#"Set-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects' -Name 'VisualFXSetting' -Value 2 -Type DWord -Force
+Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name 'UserPreferencesMask' -Value ([byte[]](0x90,0x12,0x03,0x80,0x10,0x00,0x00,0x00)) -Type Binary -Force"#.to_string()
+        }
+        "prefetch" => {
+            r#"Remove-Item "$env:SystemRoot\Prefetch\*" -Force -Recurse -ErrorAction SilentlyContinue"#.to_string()
+        }
+        "transparency" => {
+            r#"Set-ItemProperty -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize' -Name 'EnableTransparency' -Value 0 -Type DWord -Force"#.to_string()
+        }
+        _ => return Err(format!("Unbekannte Optimierung: {}", id)),
+    };
+    match crate::ps::run_ps(&script).await {
+        Ok(_) => Ok(json!({ "success": true })),
+        Err(e) => {
+            if e.contains("Zugriff") || e.contains("Access") || e.contains("Administrator") {
+                Ok(json!({ "success": false, "error": "Administratorrechte erforderlich", "requiresAdmin": true }))
+            } else {
+                Ok(json!({ "success": false, "error": e }))
+            }
+        }
+    }
 }
 
 // === Bloatware ===
@@ -947,52 +1111,110 @@ pub async fn get_tag_colors() -> Result<Value, String> {
 }
 
 #[tauri::command]
-pub async fn set_file_tag(_file_path: String, _color: String, _note: Option<String>) -> Result<Value, String> {
-    Ok(json!({ "stub": true, "message": "Datei-Tag setzen ist noch nicht implementiert" }))
+pub async fn set_file_tag(file_path: String, color: String, note: Option<String>) -> Result<Value, String> {
+    let mut tags = read_json_file("file-tags.json");
+    if let Some(obj) = tags.as_object_mut() {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as i64)
+            .unwrap_or(0);
+        obj.insert(file_path, json!({ "color": color, "note": note.unwrap_or_default(), "createdAt": now }));
+    }
+    write_json_file("file-tags.json", &tags)?;
+    Ok(json!({ "success": true }))
 }
 
 #[tauri::command]
-pub async fn remove_file_tag(_file_path: String) -> Result<Value, String> {
-    Ok(json!({ "stub": true, "message": "Datei-Tag entfernen ist noch nicht implementiert" }))
+pub async fn remove_file_tag(file_path: String) -> Result<Value, String> {
+    let mut tags = read_json_file("file-tags.json");
+    if let Some(obj) = tags.as_object_mut() {
+        obj.remove(&file_path);
+    }
+    write_json_file("file-tags.json", &tags)?;
+    Ok(json!({ "success": true }))
 }
 
 #[tauri::command]
-pub async fn get_file_tag(_file_path: String) -> Result<Value, String> {
-    Ok(json!(null))
+pub async fn get_file_tag(file_path: String) -> Result<Value, String> {
+    let tags = read_json_file("file-tags.json");
+    Ok(tags.get(&file_path).cloned().unwrap_or(json!(null)))
 }
 
 #[tauri::command]
-pub async fn get_tags_for_directory(_dir_path: String) -> Result<Value, String> {
-    Ok(json!({}))
+pub async fn get_tags_for_directory(dir_path: String) -> Result<Value, String> {
+    let tags = read_json_file("file-tags.json");
+    let prefix = if dir_path.ends_with('\\') || dir_path.ends_with('/') {
+        dir_path.clone()
+    } else {
+        format!("{}\\", dir_path)
+    };
+    let mut result = serde_json::Map::new();
+    if let Some(obj) = tags.as_object() {
+        for (path, tag) in obj {
+            if path.starts_with(&prefix) {
+                result.insert(path.clone(), tag.clone());
+            }
+        }
+    }
+    Ok(Value::Object(result))
 }
 
 #[tauri::command]
 pub async fn get_all_tags() -> Result<Value, String> {
-    Ok(json!([]))
+    let tags = read_json_file("file-tags.json");
+    let mut result = Vec::new();
+    if let Some(obj) = tags.as_object() {
+        for (path, tag) in obj {
+            let mut entry = tag.clone();
+            if let Some(e) = entry.as_object_mut() {
+                e.insert("path".to_string(), json!(path));
+            }
+            result.push(entry);
+        }
+    }
+    Ok(json!(result))
 }
 
 // === Shell Integration ===
 
 #[tauri::command]
 pub async fn register_shell_context_menu() -> Result<Value, String> {
-    Ok(json!({ "stub": true, "message": "Shell-Kontextmenü registrieren ist noch nicht implementiert" }))
+    let exe_path = std::env::current_exe()
+        .map_err(|e| format!("Exe-Pfad nicht ermittelbar: {}", e))?
+        .to_string_lossy().to_string().replace("'", "''");
+    let script = format!(
+        r#"New-Item -Path 'HKCU:\SOFTWARE\Classes\Directory\shell\SpeicherAnalyse' -Force | Out-Null; Set-ItemProperty -Path 'HKCU:\SOFTWARE\Classes\Directory\shell\SpeicherAnalyse' -Name '(Default)' -Value 'Mit Speicher Analyse scannen' -Force; Set-ItemProperty -Path 'HKCU:\SOFTWARE\Classes\Directory\shell\SpeicherAnalyse' -Name 'Icon' -Value '"{}"' -Force; New-Item -Path 'HKCU:\SOFTWARE\Classes\Directory\shell\SpeicherAnalyse\command' -Force | Out-Null; Set-ItemProperty -Path 'HKCU:\SOFTWARE\Classes\Directory\shell\SpeicherAnalyse\command' -Name '(Default)' -Value '"{}" --scan "%V"' -Force"#,
+        exe_path, exe_path
+    );
+    crate::ps::run_ps(&script).await?;
+    Ok(json!({ "success": true }))
 }
 
 #[tauri::command]
 pub async fn unregister_shell_context_menu() -> Result<Value, String> {
-    Ok(json!({ "stub": true, "message": "Shell-Kontextmenü entfernen ist noch nicht implementiert" }))
+    crate::ps::run_ps(
+        "Remove-Item -Path 'HKCU:\\SOFTWARE\\Classes\\Directory\\shell\\SpeicherAnalyse' -Recurse -Force -ErrorAction SilentlyContinue"
+    ).await?;
+    Ok(json!({ "success": true }))
 }
 
 #[tauri::command]
 pub async fn is_shell_context_menu_registered() -> Result<Value, String> {
-    Ok(json!(false))
+    let result = crate::ps::run_ps(
+        "Test-Path 'HKCU:\\SOFTWARE\\Classes\\Directory\\shell\\SpeicherAnalyse'"
+    ).await;
+    match result {
+        Ok(output) => Ok(json!(output.trim().to_lowercase() == "true")),
+        Err(_) => Ok(json!(false)),
+    }
 }
 
 // === Global Hotkey ===
 
 #[tauri::command]
 pub async fn set_global_hotkey(_accelerator: String) -> Result<Value, String> {
-    Ok(json!({ "stub": true, "message": "Globaler Hotkey setzen ist noch nicht implementiert" }))
+    // Requires tauri-plugin-global-shortcut — keep as stub until plugin is added
+    Ok(json!({ "stub": true, "message": "Globaler Hotkey benötigt das tauri-plugin-global-shortcut Plugin" }))
 }
 
 #[tauri::command]
@@ -1068,24 +1290,104 @@ $sl=(Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelU
     Ok(json!({ "settings": settings, "edition": edition, "sideloading": sideloading }))
 }
 
+// Privacy settings database: (id, registry_path, registry_key, recommended_value, default_value, tier)
+// tier: "standard" = safe HKCU, "advanced" = HKLM or risky
+fn privacy_setting_lookup(id: &str) -> Option<(&'static str, &'static str, i32, i32, &'static str)> {
+    match id {
+        "werbung-id" => Some(("HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\AdvertisingInfo", "Enabled", 0, 1, "standard")),
+        "cortana-consent" => Some(("HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Search", "CortanaConsent", 0, 1, "standard")),
+        "feedback-haeufigkeit" => Some(("HKCU\\SOFTWARE\\Microsoft\\Siuf\\Rules", "NumberOfSIUFInPeriod", 0, 1, "standard")),
+        "handschrift-daten" => Some(("HKCU\\SOFTWARE\\Microsoft\\InputPersonalization", "RestrictImplicitTextCollection", 1, 0, "standard")),
+        "diagnose-toast" => Some(("HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Diagnostics\\DiagTrack", "ShowedToastAtLevel", 1, 0, "standard")),
+        "app-diagnose" => Some(("HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\appDiagnostics", "Value", 0, 1, "standard")),
+        "standort-zugriff" => Some(("HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\location", "Value", 0, 1, "standard")),
+        "telemetrie-policy" => Some(("HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\DataCollection", "AllowTelemetry", 0, 3, "advanced")),
+        "telemetrie-datacollection" => Some(("HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\DataCollection", "AllowTelemetry", 0, 3, "advanced")),
+        "wifi-sense" => Some(("HKLM\\SOFTWARE\\Microsoft\\WcmSvc\\wifinetworkmanager\\config", "AutoConnectAllowedOEM", 0, 1, "advanced")),
+        "aktivitaet-feed" => Some(("HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\System", "EnableActivityFeed", 0, 1, "advanced")),
+        "aktivitaet-publish" => Some(("HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\System", "PublishUserActivities", 0, 1, "advanced")),
+        _ => None,
+    }
+}
+
 #[tauri::command]
 pub async fn apply_privacy_setting(id: String) -> Result<Value, String> {
-    Ok(json!({ "stub": true, "message": "Datenschutz-Einstellung anwenden ist noch nicht implementiert", "id": id }))
+    let (reg_path, reg_key, recommended, _, _) = privacy_setting_lookup(&id)
+        .ok_or_else(|| format!("Einstellung '{}' nicht gefunden", id))?;
+    let script = format!(
+        "reg add '{}' /v '{}' /t REG_DWORD /d {} /f",
+        reg_path, reg_key, recommended
+    );
+    match crate::ps::run_ps(&script).await {
+        Ok(_) => Ok(json!({ "success": true })),
+        Err(e) => {
+            if reg_path.starts_with("HKLM") && (e.contains("Zugriff") || e.contains("Access")) {
+                Ok(json!({ "success": false, "error": "Administratorrechte erforderlich", "requiresAdmin": true }))
+            } else {
+                Ok(json!({ "success": false, "error": e }))
+            }
+        }
+    }
 }
 
 #[tauri::command]
 pub async fn apply_all_privacy() -> Result<Value, String> {
-    Ok(json!({ "stub": true, "message": "Alle Datenschutz-Einstellungen anwenden ist noch nicht implementiert" }))
+    let ids = ["werbung-id","cortana-consent","feedback-haeufigkeit","handschrift-daten",
+               "diagnose-toast","app-diagnose","standort-zugriff"];
+    let mut applied = 0u32;
+    let mut failed = 0u32;
+    let mut errors: Vec<String> = Vec::new();
+    for id in &ids {
+        if let Some((reg_path, reg_key, recommended, _, _)) = privacy_setting_lookup(id) {
+            let script = format!("reg add '{}' /v '{}' /t REG_DWORD /d {} /f", reg_path, reg_key, recommended);
+            match crate::ps::run_ps(&script).await {
+                Ok(_) => applied += 1,
+                Err(e) => { failed += 1; errors.push(format!("{}: {}", id, e)); }
+            }
+        }
+    }
+    let skipped = 5u32; // 5 advanced (HKLM) settings skipped
+    Ok(json!({ "applied": applied, "failed": failed, "skipped": skipped, "errors": errors }))
 }
 
 #[tauri::command]
 pub async fn reset_privacy_setting(id: String) -> Result<Value, String> {
-    Ok(json!({ "stub": true, "message": "Datenschutz-Einstellung zurücksetzen ist noch nicht implementiert", "id": id }))
+    let (reg_path, reg_key, _, default_val, _) = privacy_setting_lookup(&id)
+        .ok_or_else(|| format!("Einstellung '{}' nicht gefunden", id))?;
+    let script = format!(
+        "reg add '{}' /v '{}' /t REG_DWORD /d {} /f",
+        reg_path, reg_key, default_val
+    );
+    match crate::ps::run_ps(&script).await {
+        Ok(_) => Ok(json!({ "success": true })),
+        Err(e) => {
+            if reg_path.starts_with("HKLM") && (e.contains("Zugriff") || e.contains("Access")) {
+                Ok(json!({ "success": false, "error": "Administratorrechte erforderlich", "requiresAdmin": true }))
+            } else {
+                Ok(json!({ "success": false, "error": e }))
+            }
+        }
+    }
 }
 
 #[tauri::command]
 pub async fn reset_all_privacy() -> Result<Value, String> {
-    Ok(json!({ "stub": true, "message": "Alle Datenschutz-Einstellungen zurücksetzen ist noch nicht implementiert" }))
+    let ids = ["werbung-id","cortana-consent","feedback-haeufigkeit","handschrift-daten",
+               "diagnose-toast","app-diagnose","standort-zugriff"];
+    let mut reset = 0u32;
+    let mut failed = 0u32;
+    let mut errors: Vec<String> = Vec::new();
+    for id in &ids {
+        if let Some((reg_path, reg_key, _, default_val, _)) = privacy_setting_lookup(id) {
+            let script = format!("reg add '{}' /v '{}' /t REG_DWORD /d {} /f", reg_path, reg_key, default_val);
+            match crate::ps::run_ps(&script).await {
+                Ok(_) => reset += 1,
+                Err(e) => { failed += 1; errors.push(format!("{}: {}", id, e)); }
+            }
+        }
+    }
+    let skipped = 5u32;
+    Ok(json!({ "reset": reset, "failed": failed, "skipped": skipped, "errors": errors }))
 }
 
 #[tauri::command]
@@ -1112,17 +1414,37 @@ pub async fn disable_scheduled_task(task_path: String) -> Result<Value, String> 
 
 #[tauri::command]
 pub async fn check_sideloading() -> Result<Value, String> {
-    Ok(json!({ "enabled": false }))
+    crate::ps::run_ps_json(
+        r#"$val = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock' -Name 'AllowDevelopmentWithoutDevLicense' -ErrorAction SilentlyContinue).AllowDevelopmentWithoutDevLicense; [PSCustomObject]@{ enabled = ($val -eq 1) } | ConvertTo-Json -Compress"#
+    ).await
 }
 
 #[tauri::command]
 pub async fn fix_sideloading() -> Result<Value, String> {
-    Ok(json!({ "stub": true, "message": "Sideloading-Fix ist noch nicht implementiert" }))
+    let result = crate::ps::run_ps(
+        r#"Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock' -Name 'AllowDevelopmentWithoutDevLicense' -Value 1 -Type DWord -Force"#
+    ).await;
+    match result {
+        Ok(_) => Ok(json!({ "success": true })),
+        Err(e) => {
+            if e.contains("Zugriff") || e.contains("Access") || e.contains("denied") {
+                Ok(json!({ "success": false, "needsElevation": true, "error": "Administrator-Rechte erforderlich" }))
+            } else {
+                Ok(json!({ "success": false, "error": e }))
+            }
+        }
+    }
 }
 
 #[tauri::command]
 pub async fn fix_sideloading_with_elevation() -> Result<Value, String> {
-    Ok(json!({ "stub": true, "message": "Sideloading-Fix mit Elevation ist noch nicht implementiert" }))
+    let result = crate::ps::run_ps(
+        r#"Start-Process powershell.exe -ArgumentList '-Command', 'Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock" -Name "AllowDevelopmentWithoutDevLicense" -Value 1 -Type DWord -Force' -Verb RunAs -Wait"#
+    ).await;
+    match result {
+        Ok(_) => Ok(json!({ "success": true })),
+        Err(e) => Ok(json!({ "success": false, "error": e })),
+    }
 }
 
 #[tauri::command]
@@ -1774,7 +2096,8 @@ pub async fn get_smb_shares(ip: String) -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn update_oui_database() -> Result<Value, String> {
-    Ok(json!({ "stub": true, "message": "OUI-Datenbank aktualisieren ist noch nicht implementiert" }))
+    // OUI database download requires HTTP client (reqwest) — keep as stub until added
+    Ok(json!({ "stub": true, "message": "OUI-Datenbank Download benötigt eine HTTP-Client Bibliothek" }))
 }
 
 // === System Info ===
@@ -1826,9 +2149,8 @@ pub async fn get_system_score(_results: Option<Value>) -> Result<Value, String> 
 
 // === Preferences ===
 
-#[tauri::command]
-pub async fn get_preferences() -> Result<Value, String> {
-    Ok(json!({
+fn preferences_defaults() -> Value {
+    json!({
         "theme": "dark",
         "language": "de",
         "networkDetailLevel": "normal",
@@ -1844,34 +2166,96 @@ pub async fn get_preferences() -> Result<Value, String> {
         "showSizeColors": true,
         "smartLayout": true,
         "terminalShell": "powershell"
-    }))
+    })
 }
 
 #[tauri::command]
-pub async fn set_preference(_key: String, _value: Value) -> Result<Value, String> {
-    Ok(json!({ "stub": true, "message": "Einstellungen speichern ist noch nicht implementiert" }))
+pub async fn get_preferences() -> Result<Value, String> {
+    let defaults = preferences_defaults();
+    let saved = read_json_file("preferences.json");
+    // Merge: saved values override defaults
+    if let (Some(def_obj), Some(saved_obj)) = (defaults.as_object(), saved.as_object()) {
+        let mut merged = def_obj.clone();
+        for (k, v) in saved_obj {
+            merged.insert(k.clone(), v.clone());
+        }
+        Ok(Value::Object(merged))
+    } else {
+        Ok(defaults)
+    }
 }
 
 #[tauri::command]
-pub async fn set_preferences_multiple(_entries: Value) -> Result<Value, String> {
-    Ok(json!({ "stub": true, "message": "Einstellungen speichern ist noch nicht implementiert" }))
+pub async fn set_preference(key: String, value: Value) -> Result<Value, String> {
+    let mut prefs = read_json_file("preferences.json");
+    if let Some(obj) = prefs.as_object_mut() {
+        obj.insert(key, value);
+    }
+    write_json_file("preferences.json", &prefs)?;
+    Ok(json!({ "success": true }))
+}
+
+#[tauri::command]
+pub async fn set_preferences_multiple(entries: Value) -> Result<Value, String> {
+    let mut prefs = read_json_file("preferences.json");
+    if let (Some(obj), Some(entries_obj)) = (prefs.as_object_mut(), entries.as_object()) {
+        for (k, v) in entries_obj {
+            obj.insert(k.clone(), v.clone());
+        }
+    }
+    write_json_file("preferences.json", &prefs)?;
+    Ok(json!({ "success": true }))
 }
 
 // === Session ===
 
 #[tauri::command]
 pub async fn get_session_info() -> Result<Value, String> {
-    Ok(json!({ "exists": false, "savedAt": 0, "fileSize": 0, "scanCount": 0 }))
+    let path = get_data_dir().join("session.json");
+    if path.exists() {
+        let meta = std::fs::metadata(&path).ok();
+        let file_size = meta.as_ref().map(|m| m.len()).unwrap_or(0);
+        let saved_at = meta.and_then(|m| m.modified().ok())
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_millis() as i64)
+            .unwrap_or(0);
+        let session = read_json_file("session.json");
+        let scan_count = session.get("scanCount").and_then(|v| v.as_u64()).unwrap_or(0);
+        Ok(json!({ "exists": true, "savedAt": saved_at, "fileSize": file_size, "scanCount": scan_count }))
+    } else {
+        Ok(json!({ "exists": false, "savedAt": 0, "fileSize": 0, "scanCount": 0 }))
+    }
 }
 
 #[tauri::command]
-pub async fn save_session_now(_ui_state: Option<Value>) -> Result<Value, String> {
-    Ok(json!({ "stub": true, "message": "Sitzung speichern ist noch nicht implementiert" }))
+pub async fn save_session_now(ui_state: Option<Value>) -> Result<Value, String> {
+    let mut session = read_json_file("session.json");
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0);
+    if let Some(obj) = session.as_object_mut() {
+        obj.insert("savedAt".to_string(), json!(now));
+        if let Some(state) = ui_state {
+            obj.insert("uiState".to_string(), state);
+        }
+        let count = obj.get("scanCount").and_then(|v| v.as_u64()).unwrap_or(0);
+        obj.insert("scanCount".to_string(), json!(count + 1));
+    }
+    write_json_file("session.json", &session)?;
+    Ok(json!({ "success": true, "savedAt": now }))
 }
 
 #[tauri::command]
-pub async fn update_ui_state(_ui_state: Option<Value>) -> Result<Value, String> {
-    Ok(json!({ "stub": true, "message": "UI-Zustand speichern ist noch nicht implementiert" }))
+pub async fn update_ui_state(ui_state: Option<Value>) -> Result<Value, String> {
+    let mut session = read_json_file("session.json");
+    if let Some(obj) = session.as_object_mut() {
+        if let Some(state) = ui_state {
+            obj.insert("uiState".to_string(), state);
+        }
+    }
+    write_json_file("session.json", &session)?;
+    Ok(json!({ "success": true }))
 }
 
 // === Folder Sizes ===
