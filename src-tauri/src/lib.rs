@@ -1,4 +1,5 @@
 mod commands;
+mod oui;
 mod ps;
 mod scan;
 
@@ -7,17 +8,38 @@ use tauri::{Emitter, Manager};
 fn init_logging() {
     #[cfg(debug_assertions)]
     {
-        use tracing_subscriber::EnvFilter;
+        use tracing_subscriber::{EnvFilter, fmt, prelude::*};
+
         let filter = EnvFilter::try_from_default_env()
             .unwrap_or_else(|_| EnvFilter::new("speicher_analyse_lib=debug,warn"));
-        tracing_subscriber::fmt()
-            .with_env_filter(filter)
+
+        // Log-Datei in docs/logs/ anlegen
+        let log_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../docs/logs");
+        let _ = std::fs::create_dir_all(&log_dir);
+        let timestamp = chrono::Local::now().format("%Y-%m-%d_%H-%M-%S");
+        let log_file = std::fs::File::create(log_dir.join(format!("dev_{}.log", timestamp)))
+            .expect("Log-Datei konnte nicht erstellt werden");
+
+        // Konsole + Datei gleichzeitig
+        let console_layer = fmt::layer()
             .with_target(true)
             .with_thread_ids(false)
             .with_file(false)
-            .with_line_number(false)
+            .with_line_number(false);
+
+        let file_layer = fmt::layer()
+            .with_writer(std::sync::Mutex::new(log_file))
+            .with_target(true)
+            .with_thread_ids(false)
+            .with_ansi(false);
+
+        tracing_subscriber::registry()
+            .with(filter)
+            .with(console_layer)
+            .with(file_layer)
             .init();
-        tracing::info!("Logging initialisiert (Dev-Modus)");
+
+        tracing::info!("Logging initialisiert (Dev-Modus) — Datei: docs/logs/dev_{}.log", timestamp);
     }
 }
 

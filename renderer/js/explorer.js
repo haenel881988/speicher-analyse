@@ -228,7 +228,7 @@ export class ExplorerView {
                             }
                         }
                     }
-                } catch { /* kein Scan-Daten verfügbar → weiter ohne */ }
+                } catch (err) { console.warn('Ordnergrößen konnten nicht geladen werden:', err); }
             }
         }
 

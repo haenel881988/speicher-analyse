@@ -500,6 +500,14 @@ async function selectDriveByPath(drivePath) {
     els.toolbarDriveSelect.disabled = true;
 
     try {
+        // WICHTIG: Listener ZUERST registrieren, DANN Scan starten
+        // Sonst Race-Condition: Events kommen an bevor Listener bereit sind
+        setupScanListeners(
+            (progress) => updateProgress(progress),
+            (progress) => onScanComplete(progress),
+            (error) => onScanError(error),
+        );
+
         const { scan_id } = await startScan(drivePath);
         state.currentScanId = scan_id;
 
@@ -508,12 +516,6 @@ async function selectDriveByPath(drivePath) {
         els.welcomeState.style.display = 'none';
         els.treeContent.style.display = 'none';
         setStatus('Laufwerk wird gescannt...', true);
-
-        setupScanListeners(
-            (progress) => updateProgress(progress),
-            (progress) => onScanComplete(progress),
-            (error) => onScanError(error),
-        );
     } catch (e) {
         console.error('Scan start error:', e);
         state.scanning = false;

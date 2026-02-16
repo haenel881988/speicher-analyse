@@ -90,6 +90,8 @@ const MAX_BW_HISTORY: usize = 60;
 
 use std::sync::LazyLock;
 static LAST_NETWORK_SCAN: LazyLock<Mutex<Option<Value>>> = LazyLock::new(|| Mutex::new(None));
+/// Cache for IP → company name resolution (populated by resolve_ips, used by get_polling_data)
+static IP_RESOLVE_CACHE: LazyLock<Mutex<HashMap<String, String>>> = LazyLock::new(|| Mutex::new(HashMap::new()));
 
 fn is_private_ip(ip: &str) -> bool {
     if ip.is_empty() || ip == "0.0.0.0" || ip == "::" || ip == "::1" { return true; }
@@ -1740,8 +1742,127 @@ pub async fn get_grouped_connections() -> Result<Value, String> {
 }
 
 #[tauri::command]
-pub async fn resolve_ips(_ip_addresses: Vec<String>) -> Result<Value, String> {
-    Ok(json!({}))
+pub async fn resolve_ips(ip_addresses: Vec<String>) -> Result<Value, String> {
+    if ip_addresses.is_empty() {
+        return Ok(json!({}));
+    }
+
+    // Filter out local/private IPs — only resolve public IPs
+    let public_ips: Vec<&str> = ip_addresses.iter()
+        .map(|s| s.as_str())
+        .filter(|ip| !is_private_ip(ip))
+        .take(100)
+        .collect();
+
+    if public_ips.is_empty() {
+        return Ok(json!({}));
+    }
+
+    // Build PS script for parallel reverse DNS
+    let ip_list = public_ips.iter()
+        .map(|ip| format!("'{}'", ip.replace('\'', "''")))
+        .collect::<Vec<_>>()
+        .join(",");
+
+    let script = format!(
+        r#"$ips = @({})
+$tasks = @()
+foreach ($ip in $ips) {{
+    $tasks += @{{ip=$ip; task=[System.Net.Dns]::GetHostEntryAsync($ip)}}
+}}
+try {{ [void][System.Threading.Tasks.Task]::WaitAll(@($tasks | ForEach-Object {{ $_.task }}), 10000) }} catch {{}}
+$result = @{{}}
+foreach ($t in $tasks) {{
+    if ($t.task.IsCompleted -and -not $t.task.IsFaulted) {{
+        $result[$t.ip] = $t.task.Result.HostName
+    }}
+}}
+$result | ConvertTo-Json -Compress"#,
+        ip_list
+    );
+
+    let dns_data = crate::ps::run_ps_json(&script).await?;
+
+    // Map IP → { hostname, company, isTracker }
+    let mut result_map = serde_json::Map::new();
+    if let Some(obj) = dns_data.as_object() {
+        for (ip, hostname_val) in obj {
+            if let Some(hostname) = hostname_val.as_str() {
+                let company = crate::oui::hostname_to_company(hostname)
+                    .unwrap_or("")
+                    .to_string();
+                let is_tracker = crate::oui::is_tracker(hostname);
+                result_map.insert(ip.clone(), json!({
+                    "hostname": hostname,
+                    "company": company,
+                    "isTracker": is_tracker
+                }));
+            }
+        }
+    }
+
+    // Store in cache for use by get_polling_data
+    {
+        let mut cache = IP_RESOLVE_CACHE.lock().unwrap();
+        for (ip, info) in &result_map {
+            if let Some(company) = info["company"].as_str() {
+                if !company.is_empty() {
+                    cache.insert(ip.clone(), company.to_string());
+                }
+            }
+        }
+    }
+
+    Ok(Value::Object(result_map))
+}
+
+/// Background IP resolution helper (non-blocking, stores results in cache)
+async fn resolve_ips_background(ips: &[String]) -> Result<Value, String> {
+    if ips.is_empty() {
+        return Ok(json!({}));
+    }
+    let ip_list = ips.iter()
+        .map(|ip| format!("'{}'", ip.replace('\'', "''")))
+        .collect::<Vec<_>>()
+        .join(",");
+
+    let script = format!(
+        r#"$ips = @({})
+$tasks = @()
+foreach ($ip in $ips) {{
+    $tasks += @{{ip=$ip; task=[System.Net.Dns]::GetHostEntryAsync($ip)}}
+}}
+try {{ [void][System.Threading.Tasks.Task]::WaitAll(@($tasks | ForEach-Object {{ $_.task }}), 8000) }} catch {{}}
+$result = @{{}}
+foreach ($t in $tasks) {{
+    if ($t.task.IsCompleted -and -not $t.task.IsFaulted) {{
+        $result[$t.ip] = $t.task.Result.HostName
+    }}
+}}
+$result | ConvertTo-Json -Compress"#,
+        ip_list
+    );
+
+    let dns_data = crate::ps::run_ps_json(&script).await?;
+
+    let mut result_map = serde_json::Map::new();
+    if let Some(obj) = dns_data.as_object() {
+        for (ip, hostname_val) in obj {
+            if let Some(hostname) = hostname_val.as_str() {
+                let company = crate::oui::hostname_to_company(hostname)
+                    .unwrap_or("")
+                    .to_string();
+                let is_tracker = crate::oui::is_tracker(hostname);
+                result_map.insert(ip.clone(), json!({
+                    "hostname": hostname,
+                    "company": company,
+                    "isTracker": is_tracker
+                }));
+            }
+        }
+    }
+
+    Ok(Value::Object(result_map))
 }
 
 /// Combined polling endpoint: returns summary + grouped + bandwidth in one call.
@@ -1825,6 +1946,12 @@ $uips=@($conns|Where-Object{$_.RemoteAddress -ne '0.0.0.0' -and $_.RemoteAddress
         groups.entry(key).or_default().push(conn);
     }
 
+    // Read IP resolve cache for company mapping
+    let ip_cache = IP_RESOLVE_CACHE.lock().unwrap().clone();
+
+    // Collect all unique public IPs for background resolution
+    let mut all_public_ips: std::collections::HashSet<String> = std::collections::HashSet::new();
+
     let mut grouped: Vec<Value> = groups.iter().map(|(name, conns)| {
         let mut unique_ips: std::collections::HashSet<String> = std::collections::HashSet::new();
         let mut states: HashMap<String, usize> = HashMap::new();
@@ -1834,11 +1961,33 @@ $uips=@($conns|Where-Object{$_.RemoteAddress -ne '0.0.0.0' -and $_.RemoteAddress
             if let Some(ra) = c["remoteAddress"].as_str() {
                 if !is_private_ip(ra) && !ra.is_empty() {
                     unique_ips.insert(ra.to_string());
+                    all_public_ips.insert(ra.to_string());
                 }
             }
             let st = c["state"].as_str().unwrap_or("Unknown");
             *states.entry(st.to_string()).or_insert(0) += 1;
         }
+
+        // Resolve companies from cache
+        let mut companies: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut has_trackers = false;
+        for ip in &unique_ips {
+            if let Some(company) = ip_cache.get(ip) {
+                if !company.is_empty() {
+                    companies.insert(company.clone());
+                }
+            }
+        }
+        // Check connections for tracker flags
+        for c in conns {
+            if let Some(resolved) = c.get("resolved") {
+                if resolved["isTracker"].as_bool().unwrap_or(false) {
+                    has_trackers = true;
+                }
+            }
+        }
+
+        let companies_vec: Vec<String> = companies.into_iter().collect();
 
         json!({
             "processName": name,
@@ -1847,14 +1996,37 @@ $uips=@($conns|Where-Object{$_.RemoteAddress -ne '0.0.0.0' -and $_.RemoteAddress
             "connectionCount": conns.len(),
             "uniqueRemoteIPs": unique_ips.len(),
             "uniqueIPCount": unique_ips.len(),
+            "uniqueIPs": unique_ips.into_iter().collect::<Vec<_>>(),
             "states": states,
-            "resolvedCompanies": [],
-            "hasTrackers": false,
+            "resolvedCompanies": companies_vec,
+            "hasTrackers": has_trackers,
             "hasHighRisk": false,
             "isRunning": true
         })
     }).collect();
     grouped.sort_by(|a, b| b["connectionCount"].as_u64().unwrap_or(0).cmp(&a["connectionCount"].as_u64().unwrap_or(0)));
+
+    // Trigger background IP resolution for uncached IPs (runs async, results available on next poll)
+    let uncached_ips: Vec<String> = all_public_ips.iter()
+        .filter(|ip| !ip_cache.contains_key(*ip))
+        .take(50)
+        .cloned()
+        .collect();
+    if !uncached_ips.is_empty() {
+        tokio::spawn(async move {
+            if let Ok(result) = resolve_ips_background(&uncached_ips).await {
+                let mut cache = IP_RESOLVE_CACHE.lock().unwrap();
+                if let Some(obj) = result.as_object() {
+                    for (ip, info) in obj {
+                        if let Some(company) = info["company"].as_str() {
+                            // Store company (even empty string to avoid re-resolving)
+                            cache.insert(ip.clone(), company.to_string());
+                        }
+                    }
+                }
+            }
+        });
+    }
 
     // Top processes for summary
     let top_processes: Vec<Value> = grouped.iter().take(10).map(|g| {
@@ -2066,10 +2238,10 @@ pub async fn export_network_history(_format: Option<String>) -> Result<Value, St
     Ok(json!({ "stub": true, "message": "Netzwerk-Verlauf exportieren ist noch nicht implementiert" }))
 }
 
-/// Quick passive scan: ARP table + parallel ping, parallel DNS (5s limit)
+/// Quick passive scan: ARP table + parallel ping, parallel DNS (5s limit) + OUI vendor
 #[tauri::command]
 pub async fn scan_local_network() -> Result<Value, String> {
-    crate::ps::run_ps_json_array(
+    let raw_val = crate::ps::run_ps_json_array(
         r#"$gateway = (Get-NetRoute -DestinationPrefix '0.0.0.0/0' -EA SilentlyContinue | Select-Object -First 1).NextHop
 if (-not $gateway) { '[]'; return }
 $subnet = $gateway -replace '\.\d+$', ''
@@ -2088,7 +2260,6 @@ foreach ($t in $tasks) {
         $alive += $t
     }
 }
-# Parallel DNS with 5s global timeout
 $dnsTasks = @()
 foreach ($t in $alive) {
     $dnsTasks += @{ip=$t.ip; task=[System.Net.Dns]::GetHostEntryAsync($t.ip)}
@@ -2103,17 +2274,43 @@ foreach ($dt in $dnsTasks) {
 $results = @()
 foreach ($t in $alive) {
     $ip = $t.ip
-    $results += [PSCustomObject]@{ ip=$ip; mac=$arp[$ip]; hostname=$dnsMap[$ip]; online=$true; responseTime=$t.task.Result.RoundtripTime; vendor=''; deviceType='unknown' }
+    $results += [PSCustomObject]@{ ip=$ip; mac=$arp[$ip]; hostname=$dnsMap[$ip]; online=$true; rtt=[int]$t.task.Result.RoundtripTime }
 }
 $results | ConvertTo-Json -Compress"#
-    ).await
+    ).await?;
+
+    let raw_devices = raw_val.as_array().cloned().unwrap_or_default();
+
+    // Enrich with OUI vendor lookup
+    let enriched: Vec<Value> = raw_devices.iter().map(|d| {
+        let mac = d["mac"].as_str().unwrap_or("");
+        let vendor = if mac.is_empty() {
+            String::new()
+        } else {
+            crate::oui::lookup(mac).unwrap_or("").to_string()
+        };
+        let hostname = d["hostname"].as_str().unwrap_or("");
+        // Basic ARP state classification
+        let state = if d["online"].as_bool().unwrap_or(false) { "Erreichbar" } else { "Veraltet" };
+        json!({
+            "ip": d["ip"],
+            "mac": mac,
+            "hostname": hostname,
+            "vendor": vendor,
+            "state": state,
+            "online": d["online"],
+            "rtt": d["rtt"]
+        })
+    }).collect();
+
+    Ok(json!(enriched))
 }
 
-/// Active network scan: ping sweep + ARP + parallel DNS, returns {devices, subnet, localIP}
+/// Active network scan: ping sweep + ARP + parallel DNS + port scan + OUI vendor + classification
 #[tauri::command]
 pub async fn scan_network_active(app: tauri::AppHandle) -> Result<Value, String> {
     tracing::info!("Aktiver Netzwerk-Scan gestartet");
-    // Get local IP + subnet first
+    // Get local IP + subnet + gateway
     let info = crate::ps::run_ps_json(
         r#"$adapter = Get-NetIPConfiguration | Where-Object { $_.IPv4DefaultGateway -ne $null -and $_.NetAdapter.Status -eq 'Up' } | Select-Object -First 1
 if (-not $adapter) { '{}' | Write-Output; return }
@@ -2125,18 +2322,18 @@ $subnet = $gateway -replace '\.\d+$', ''
 
     let subnet = info.get("subnet").and_then(|v| v.as_str()).unwrap_or("").to_string();
     let local_ip = info.get("localIP").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let gateway_ip = info.get("gateway").and_then(|v| v.as_str()).unwrap_or("").to_string();
 
     if subnet.is_empty() {
         return Ok(json!({ "devices": [], "subnet": "", "localIP": "" }));
     }
 
-    // Emit initial progress
+    // Phase 1: Ping Sweep + ARP + DNS
     let _ = app.emit("network-scan-progress", json!({
-        "phase": "ping", "message": "Ping Sweep...", "percent": 10
+        "phase": "ping", "message": "Ping-Sweep läuft...", "percent": 10
     }));
 
-    // Parallel ping sweep + ARP + parallel DNS
-    let script = format!(
+    let phase1_script = format!(
         r#"$subnet = '{subnet}'
 $arp = @{{}}
 arp -a | ForEach-Object {{ if ($_ -match '(\d+\.\d+\.\d+\.\d+)\s+([0-9a-f-]+)\s+') {{ $arp[$Matches[1]] = $Matches[2].Replace('-',':') }} }}
@@ -2146,14 +2343,13 @@ $tasks = @()
     $ping = New-Object System.Net.NetworkInformation.Ping
     $tasks += @{{ip=$ip; task=$ping.SendPingAsync($ip, 1500)}}
 }}
-try {{ [void][System.Threading.Tasks.Task]::WaitAll(@($tasks | ForEach-Object {{ $_.task }}), 8000) }} catch {{}}
+try {{ [void][System.Threading.Tasks.Task]::WaitAll(@($tasks | ForEach-Object {{ $_.task }}), 10000) }} catch {{}}
 $alive = @()
 foreach ($t in $tasks) {{
     if ($t.task.IsCompleted -and -not $t.task.IsFaulted -and $t.task.Result.Status -eq 'Success') {{
         $alive += $t
     }}
 }}
-# Parallel DNS with 8s global timeout
 $dnsTasks = @()
 foreach ($t in $alive) {{
     $dnsTasks += @{{ip=$t.ip; task=[System.Net.Dns]::GetHostEntryAsync($t.ip)}}
@@ -2168,37 +2364,163 @@ foreach ($dt in $dnsTasks) {{
 $results = @()
 foreach ($t in $alive) {{
     $ip = $t.ip
-    $mac = $arp[$ip]
-    $hostname = $dnsMap[$ip]
-    $deviceType = 'unknown'
-    $deviceLabel = 'Unbekanntes Geraet'
-    if ($ip -eq '{local_ip}') {{ $deviceType = 'pc'; $deviceLabel = 'Eigener PC' }}
-    elseif ($ip -eq (Get-NetRoute -DestinationPrefix '0.0.0.0/0' -EA SilentlyContinue | Select-Object -First 1).NextHop) {{ $deviceType = 'router'; $deviceLabel = 'Router/Gateway' }}
-    $results += [PSCustomObject]@{{ ip=$ip; mac=$mac; hostname=$hostname; online=$true; responseTime=$t.task.Result.RoundtripTime; vendor=''; deviceType=$deviceType; deviceLabel=$deviceLabel; os=''; modelName='' }}
+    $results += [PSCustomObject]@{{
+        ip=$ip
+        mac=$arp[$ip]
+        hostname=$dnsMap[$ip]
+        rtt=[int]$t.task.Result.RoundtripTime
+    }}
 }}
 $results | ConvertTo-Json -Compress"#,
         subnet = subnet.replace('\'', "''"),
-        local_ip = local_ip.replace('\'', "''")
     );
 
+    let phase1_val = crate::ps::run_ps_json_array(&phase1_script).await?;
+    let phase1_raw = phase1_val.as_array().cloned().unwrap_or_default();
+    let alive_count = phase1_raw.len();
+    tracing::info!("Netzwerk-Scan Phase 1: {} Geräte gefunden", alive_count);
+
+    // Phase 2: Parallel port scan for all alive devices
     let _ = app.emit("network-scan-progress", json!({
-        "phase": "scan", "message": "Geraete werden identifiziert...", "percent": 50
+        "phase": "ports", "message": format!("{} Geräte gefunden, scanne Ports...", alive_count), "percent": 40
     }));
 
-    let devices = crate::ps::run_ps_json_array(&script).await?;
+    // Build IP list for port scan
+    let alive_ips: Vec<String> = phase1_raw.iter()
+        .filter_map(|d| d["ip"].as_str().map(|s| s.to_string()))
+        .collect();
+
+    let port_map: std::collections::HashMap<String, Vec<Value>> = if !alive_ips.is_empty() {
+        // Build PS script for parallel port scan of all devices
+        let ip_list = alive_ips.iter()
+            .map(|ip| format!("'{}'", ip.replace('\'', "''")))
+            .collect::<Vec<_>>()
+            .join(",");
+
+        let port_script = format!(
+            r#"$ips = @({ip_list})
+$portDefs = @(21,22,80,139,443,445,631,3389,5900,8080,9100)
+$portLabels = @{{21='FTP';22='SSH';80='HTTP';139='NetBIOS';443='HTTPS';445='SMB';631='IPP';3389='RDP';5900='VNC';8080='HTTP-Proxy';9100='RAW-Print'}}
+$tasks = @()
+foreach ($ip in $ips) {{
+    foreach ($port in $portDefs) {{
+        $tcp = New-Object System.Net.Sockets.TcpClient
+        $tasks += @{{ip=$ip; port=$port; task=$tcp.ConnectAsync($ip, $port); client=$tcp}}
+    }}
+}}
+try {{ [void][System.Threading.Tasks.Task]::WaitAll(@($tasks | ForEach-Object {{ $_.task }}), 12000) }} catch {{}}
+$portMap = @{{}}
+foreach ($pt in $tasks) {{
+    $ok = $pt.task.IsCompleted -and -not $pt.task.IsFaulted -and $pt.client.Connected
+    if ($ok) {{
+        if (-not $portMap[$pt.ip]) {{ $portMap[$pt.ip] = @() }}
+        $portMap[$pt.ip] += [PSCustomObject]@{{port=$pt.port; label=$portLabels[$pt.port]}}
+    }}
+    try {{ $pt.client.Close() }} catch {{}}
+}}
+$result = @{{}}
+foreach ($ip in $portMap.Keys) {{
+    $result[$ip] = @($portMap[$ip])
+}}
+$result | ConvertTo-Json -Depth 3 -Compress"#,
+            ip_list = ip_list
+        );
+
+        match crate::ps::run_ps_json(&port_script).await {
+            Ok(port_data) => {
+                let mut pm: std::collections::HashMap<String, Vec<Value>> = std::collections::HashMap::new();
+                if let Some(obj) = port_data.as_object() {
+                    for (ip, ports) in obj {
+                        let port_list = match ports {
+                            v if v.is_array() => v.as_array().unwrap().clone(),
+                            v if !v.is_null() => vec![v.clone()],
+                            _ => vec![],
+                        };
+                        pm.insert(ip.clone(), port_list);
+                    }
+                }
+                pm
+            }
+            Err(e) => {
+                tracing::warn!("Port-Scan fehlgeschlagen: {}", e);
+                std::collections::HashMap::new()
+            }
+        }
+    } else {
+        std::collections::HashMap::new()
+    };
+
+    // Phase 3: Enrich devices with OUI vendor + classification
+    let _ = app.emit("network-scan-progress", json!({
+        "phase": "classify", "message": "Geräte werden identifiziert...", "percent": 80
+    }));
+
+    let mut enriched_devices: Vec<Value> = Vec::with_capacity(phase1_raw.len());
+    for raw_device in &phase1_raw {
+        let ip = raw_device["ip"].as_str().unwrap_or("").to_string();
+        let mac = raw_device["mac"].as_str().unwrap_or("").to_string();
+        let hostname = raw_device["hostname"].as_str().unwrap_or("").to_string();
+        let rtt = raw_device["rtt"].as_i64().unwrap_or(0);
+
+        // OUI vendor lookup
+        let vendor = if mac.is_empty() {
+            String::new()
+        } else {
+            crate::oui::lookup(&mac).unwrap_or("").to_string()
+        };
+
+        // Get open ports for this device
+        let open_ports = port_map.get(&ip).cloned().unwrap_or_default();
+        let open_port_numbers: Vec<u16> = open_ports.iter()
+            .filter_map(|p| p["port"].as_u64().map(|n| n as u16))
+            .collect();
+
+        // Classify device
+        let is_local = ip == local_ip;
+        let is_gateway = ip == gateway_ip;
+        let (device_type, device_label, device_icon) =
+            crate::oui::classify_device(&vendor, &hostname, &open_port_numbers, is_local, is_gateway);
+
+        enriched_devices.push(json!({
+            "ip": ip,
+            "mac": mac,
+            "hostname": hostname,
+            "online": true,
+            "rtt": rtt,
+            "vendor": vendor,
+            "deviceType": device_type,
+            "deviceLabel": device_label,
+            "deviceIcon": device_icon,
+            "openPorts": open_ports,
+            "isLocal": is_local,
+            "os": "",
+            "modelName": "",
+            "identifiedBy": if !vendor.is_empty() && !open_port_numbers.is_empty() {
+                "OUI + Ports"
+            } else if !vendor.is_empty() {
+                "OUI"
+            } else if !open_port_numbers.is_empty() {
+                "Ports"
+            } else if !hostname.is_empty() {
+                "DNS"
+            } else {
+                "Ping"
+            }
+        }));
+    }
 
     let _ = app.emit("network-scan-progress", json!({
         "phase": "done", "message": "Fertig", "percent": 100
     }));
 
-    // Cache result for get_last_network_scan
+    tracing::info!("Netzwerk-Scan abgeschlossen: {} Geräte", enriched_devices.len());
+
     let result = json!({
-        "devices": devices,
+        "devices": enriched_devices,
         "subnet": subnet,
         "localIP": local_ip
     });
 
-    // Store in static for get_last_network_scan
     *LAST_NETWORK_SCAN.lock().unwrap() = Some(result.clone());
 
     Ok(result)
@@ -2481,7 +2803,9 @@ pub async fn update_ui_state(ui_state: Option<Value>) -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn get_folder_sizes_bulk(scan_id: String, folder_paths: Vec<String>, parent_path: Option<String>) -> Result<Value, String> {
+    tracing::debug!(scan_id = %scan_id, folder_count = folder_paths.len(), parent = ?parent_path, "get_folder_sizes_bulk aufgerufen");
     let flat = crate::scan::folder_sizes_bulk(&scan_id, &folder_paths);
+    tracing::debug!(result_keys = ?flat.as_object().map(|o| o.len()), "folder_sizes_bulk Ergebnis");
     // Transform flat {path: size} into {folders: {path: {size}}, parent: {size}}
     let mut folders = serde_json::Map::new();
     if let Some(obj) = flat.as_object() {
