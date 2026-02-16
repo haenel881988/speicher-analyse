@@ -88,6 +88,9 @@ fn prev_connections_store() -> &'static Mutex<Vec<Value>> {
 
 const MAX_BW_HISTORY: usize = 60;
 
+use std::sync::LazyLock;
+static LAST_NETWORK_SCAN: LazyLock<Mutex<Option<Value>>> = LazyLock::new(|| Mutex::new(None));
+
 fn is_private_ip(ip: &str) -> bool {
     if ip.is_empty() || ip == "0.0.0.0" || ip == "::" || ip == "::1" { return true; }
     if ip.starts_with("127.") || ip.starts_with("10.") || ip.starts_with("192.168.") || ip.starts_with("169.254.") { return true; }
@@ -2051,7 +2054,7 @@ pub async fn export_network_history(_format: Option<String>) -> Result<Value, St
     Ok(json!({ "stub": true, "message": "Netzwerk-Verlauf exportieren ist noch nicht implementiert" }))
 }
 
-/// Parallel network scan using async pings + ARP table for MAC addresses
+/// Quick passive scan: ARP table + parallel ping, parallel DNS (5s limit)
 #[tauri::command]
 pub async fn scan_local_network() -> Result<Value, String> {
     crate::ps::run_ps_json_array(
@@ -2066,30 +2069,133 @@ $tasks = @()
     $ping = New-Object System.Net.NetworkInformation.Ping
     $tasks += @{ip=$ip; task=$ping.SendPingAsync($ip, 1000)}
 }
-[void][System.Threading.Tasks.Task]::WaitAll(@($tasks | ForEach-Object { $_.task }))
-$results = @()
+try { [void][System.Threading.Tasks.Task]::WaitAll(@($tasks | ForEach-Object { $_.task }), 5000) } catch {}
+$alive = @()
 foreach ($t in $tasks) {
-    if ($t.task.Result.Status -eq 'Success') {
-        $ip = $t.ip
-        $mac = $arp[$ip]
-        $hostname = ''
-        try { $hostname = [System.Net.Dns]::GetHostEntry($ip).HostName } catch {}
-        $results += [PSCustomObject]@{ ip=$ip; mac=$mac; hostname=$hostname; online=$true; responseTime=$t.task.Result.RoundtripTime; vendor=''; deviceType='unknown' }
+    if ($t.task.IsCompleted -and -not $t.task.IsFaulted -and $t.task.Result.Status -eq 'Success') {
+        $alive += $t
     }
+}
+# Parallel DNS with 5s global timeout
+$dnsTasks = @()
+foreach ($t in $alive) {
+    $dnsTasks += @{ip=$t.ip; task=[System.Net.Dns]::GetHostEntryAsync($t.ip)}
+}
+try { [void][System.Threading.Tasks.Task]::WaitAll(@($dnsTasks | ForEach-Object { $_.task }), 5000) } catch {}
+$dnsMap = @{}
+foreach ($dt in $dnsTasks) {
+    if ($dt.task.IsCompleted -and -not $dt.task.IsFaulted) {
+        $dnsMap[$dt.ip] = $dt.task.Result.HostName
+    }
+}
+$results = @()
+foreach ($t in $alive) {
+    $ip = $t.ip
+    $results += [PSCustomObject]@{ ip=$ip; mac=$arp[$ip]; hostname=$dnsMap[$ip]; online=$true; responseTime=$t.task.Result.RoundtripTime; vendor=''; deviceType='unknown' }
 }
 $results | ConvertTo-Json -Compress"#
     ).await
 }
 
+/// Active network scan: ping sweep + ARP + parallel DNS, returns {devices, subnet, localIP}
 #[tauri::command]
-pub async fn scan_network_active() -> Result<Value, String> {
-    // Same parallel approach as scan_local_network
-    scan_local_network().await
+pub async fn scan_network_active(app: tauri::AppHandle) -> Result<Value, String> {
+    // Get local IP + subnet first
+    let info = crate::ps::run_ps_json(
+        r#"$adapter = Get-NetIPConfiguration | Where-Object { $_.IPv4DefaultGateway -ne $null -and $_.NetAdapter.Status -eq 'Up' } | Select-Object -First 1
+if (-not $adapter) { '{}' | Write-Output; return }
+$localIP = ($adapter.IPv4Address | Select-Object -First 1).IPAddress
+$gateway = ($adapter.IPv4DefaultGateway | Select-Object -First 1).NextHop
+$subnet = $gateway -replace '\.\d+$', ''
+[PSCustomObject]@{ localIP=$localIP; subnet=$subnet; gateway=$gateway } | ConvertTo-Json -Compress"#
+    ).await?;
+
+    let subnet = info.get("subnet").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let local_ip = info.get("localIP").and_then(|v| v.as_str()).unwrap_or("").to_string();
+
+    if subnet.is_empty() {
+        return Ok(json!({ "devices": [], "subnet": "", "localIP": "" }));
+    }
+
+    // Emit initial progress
+    let _ = app.emit("network-scan-progress", json!({
+        "phase": "ping", "message": "Ping Sweep...", "percent": 10
+    }));
+
+    // Parallel ping sweep + ARP + parallel DNS
+    let script = format!(
+        r#"$subnet = '{subnet}'
+$arp = @{{}}
+arp -a | ForEach-Object {{ if ($_ -match '(\d+\.\d+\.\d+\.\d+)\s+([0-9a-f-]+)\s+') {{ $arp[$Matches[1]] = $Matches[2].Replace('-',':') }} }}
+$tasks = @()
+1..254 | ForEach-Object {{
+    $ip = "$subnet.$_"
+    $ping = New-Object System.Net.NetworkInformation.Ping
+    $tasks += @{{ip=$ip; task=$ping.SendPingAsync($ip, 1500)}}
+}}
+try {{ [void][System.Threading.Tasks.Task]::WaitAll(@($tasks | ForEach-Object {{ $_.task }}), 8000) }} catch {{}}
+$alive = @()
+foreach ($t in $tasks) {{
+    if ($t.task.IsCompleted -and -not $t.task.IsFaulted -and $t.task.Result.Status -eq 'Success') {{
+        $alive += $t
+    }}
+}}
+# Parallel DNS with 8s global timeout
+$dnsTasks = @()
+foreach ($t in $alive) {{
+    $dnsTasks += @{{ip=$t.ip; task=[System.Net.Dns]::GetHostEntryAsync($t.ip)}}
+}}
+try {{ [void][System.Threading.Tasks.Task]::WaitAll(@($dnsTasks | ForEach-Object {{ $_.task }}), 8000) }} catch {{}}
+$dnsMap = @{{}}
+foreach ($dt in $dnsTasks) {{
+    if ($dt.task.IsCompleted -and -not $dt.task.IsFaulted) {{
+        $dnsMap[$dt.ip] = $dt.task.Result.HostName
+    }}
+}}
+$results = @()
+foreach ($t in $alive) {{
+    $ip = $t.ip
+    $mac = $arp[$ip]
+    $hostname = $dnsMap[$ip]
+    $deviceType = 'unknown'
+    $deviceLabel = 'Unbekanntes Geraet'
+    if ($ip -eq '{local_ip}') {{ $deviceType = 'pc'; $deviceLabel = 'Eigener PC' }}
+    elseif ($ip -eq (Get-NetRoute -DestinationPrefix '0.0.0.0/0' -EA SilentlyContinue | Select-Object -First 1).NextHop) {{ $deviceType = 'router'; $deviceLabel = 'Router/Gateway' }}
+    $results += [PSCustomObject]@{{ ip=$ip; mac=$mac; hostname=$hostname; online=$true; responseTime=$t.task.Result.RoundtripTime; vendor=''; deviceType=$deviceType; deviceLabel=$deviceLabel; os=''; modelName='' }}
+}}
+$results | ConvertTo-Json -Compress"#,
+        subnet = subnet.replace('\'', "''"),
+        local_ip = local_ip.replace('\'', "''")
+    );
+
+    let _ = app.emit("network-scan-progress", json!({
+        "phase": "scan", "message": "Geraete werden identifiziert...", "percent": 50
+    }));
+
+    let devices = crate::ps::run_ps_json_array(&script).await?;
+
+    let _ = app.emit("network-scan-progress", json!({
+        "phase": "done", "message": "Fertig", "percent": 100
+    }));
+
+    // Cache result for get_last_network_scan
+    let result = json!({
+        "devices": devices,
+        "subnet": subnet,
+        "localIP": local_ip
+    });
+
+    // Store in static for get_last_network_scan
+    *LAST_NETWORK_SCAN.lock().unwrap() = Some(result.clone());
+
+    Ok(result)
 }
 
+/// Return cached last network scan result
 #[tauri::command]
 pub async fn get_last_network_scan() -> Result<Value, String> {
-    Ok(json!(null))
+    let guard = LAST_NETWORK_SCAN.lock().unwrap();
+    Ok(guard.clone().unwrap_or(json!(null)))
 }
 
 #[tauri::command]
