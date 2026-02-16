@@ -359,47 +359,134 @@
 
 ## 12. Implementierungs-Status (Tauri v2)
 
-### Vollständig implementiert (echte Funktionalität)
-- Laufwerk-Erkennung (`getDrives`)
-- Laufwerk-Scan (`startScan` + Events)
-- Scan-Datenabfragen (Tree, Treemap, TopFiles, FileTypes, Search, OldFiles, FolderSizes)
-- Datei-Management (Löschen, Umbenennen, Verschieben, Kopieren)
-- Explorer (Verzeichnis-Inhalt, Schnellzugriff, Ordner-Größe)
-- Datei-Vorschau und -Editor
-- Registry-Scan (Verwaiste Einträge finden)
-- Autostart-Einträge (Registry + Startup-Ordner)
-- Dienste-Liste und -Steuerung
-- Optimierungen (Visuelle Effekte, Prefetch, Transparenz)
-- Bloatware-Scanner und -Deinstallation
-- Windows/Software-Updates
-- Treiber/Hardware-Info
-- Datenschutz-Dashboard (12 Einstellungen lesen + Statusanzeige)
-- S.M.A.R.T. Festplatten-Gesundheit
-- Software-Audit (Programm-Inventar)
-- Netzwerk-Monitor (TCP/UDP, Bandbreite, Firewall, WiFi, DNS)
-- System-Profil (CPU, RAM, GPU, Disks, Netzwerk)
-- Sicherheits-Audit (Firewall, UAC, Antivirus)
-- Menüleiste (Datei, Bearbeiten, Ansicht, Terminal, Hilfe)
-- Bestätigungsdialoge (echte System-Dialoge)
-- Systemfähigkeiten-Erkennung
+> Detaillierte Auflistung aller Commands in `src-tauri/src/commands.rs`.
+> **STUB** = Gibt Erfolg/Daten zurück ohne echte Funktion. Der User wird getäuscht.
+> Zuletzt geprüft: 2026-02-16 | Gesamtzahl Commands: ~142
 
-### Stub/Platzhalter (gibt OK zurück, tut aber nichts)
-- Datenschutz-Einstellungen ANWENDEN/ZURÜCKSETZEN
-- Registry bereinigen / Backup wiederherstellen
-- Autostart aktivieren/deaktivieren/löschen
-- Optimierungen tatsächlich anwenden
-- Session speichern/wiederherstellen
-- Einstellungen persistieren
-- Datei-Tags (speichern in %APPDATA%)
-- Netzwerk-Aufzeichnungen
-- Shell-Integration (Windows-Kontextmenü)
-- Globaler Hotkey
-- Admin-Elevation
-- Terminal (echtes PTY)
-- CSV-Export
-- Screenshot
+### 12.1 Vollständig implementiert (~83 Commands)
+
+| Bereich | Commands |
+|---------|----------|
+| Laufwerke | `get_drives` (L47) |
+| Scan | `start_scan` (L54), `get_tree_node` (L162), `get_treemap_data` (L167), `get_top_files` (L174), `get_file_types` (L179), `search` (L184), `get_files_by_extension` (L189), `get_files_by_category` (L194), `get_old_files` (L339), `search_name_index` (L708), `get_name_index_info` (L714), `get_folder_sizes_bulk` (L1830) |
+| Datei-Management | `delete_to_trash` (L213), `delete_permanent` (L224), `create_folder` (L237), `file_rename` (L244), `file_move` (L252), `file_copy` (L262), `file_properties` (L272), `open_file` (L288), `show_in_explorer` (L294) |
+| Explorer | `list_directory` (L760), `get_known_folders` (L789), `calculate_folder_size` (L803), `find_empty_folders` (L816) |
+| Vorschau/Editor | `read_file_preview` (L423), `read_file_content` (L430), `write_file_content` (L436), `read_file_binary` (L442) |
+| Suche | `deep_search_start` (L720), `deep_search_cancel` (L753) |
+| Registry | `scan_registry` (L452) |
+| Autostart | `get_autostart_entries` (L498) |
+| Dienste | `get_services` (L543), `control_service` (L554), `set_service_start_type` (L566) |
+| Optimierer | `get_optimizations` (L581) |
+| Bloatware | `scan_bloatware` (L602), `uninstall_bloatware` (L622) |
+| Updates | `check_windows_updates` (L632), `get_update_history` (L644), `check_software_updates` (L657), `update_software` (L679) |
+| Treiber/HW | `get_driver_info` (L685), `get_hardware_info` (L698) |
+| Datenschutz | `get_privacy_settings` (L1000), `get_scheduled_tasks_audit` (L1052), `disable_scheduled_task` (L1068) |
+| System | `get_system_profile` (L1096), `get_system_info` (L1733), `get_system_capabilities` (L867), `get_battery_status` (L881), `is_admin` (L847), `get_platform` (L892), `open_external` (L897) |
+| S.M.A.R.T. | `get_disk_health` (L1132) |
+| Software-Audit | `audit_software` (L1161) |
+| Netzwerk | `get_connections` (L1221), `get_bandwidth` (L1228), `get_firewall_rules` (L1281), `block_process` (L1291), `unblock_process` (L1302), `get_network_summary` (L1308), `get_grouped_connections` (L1318), `get_polling_data` (L1335), `get_connection_diff` (L1511), `get_bandwidth_history` (L1551), `get_wifi_info` (L1561), `get_dns_cache` (L1587), `clear_dns_cache` (L1594), `scan_local_network` (L1656), `scan_device_ports` (L1696), `get_smb_shares` (L1718) |
+| Sicherheit | `run_security_audit` (L1740) |
+| Bereinigung | `scan_cleanup_categories` (L371), `clean_category` (L395) |
+| Dialog | `show_confirm_dialog` (L309) |
+| Sonstiges | `copy_to_clipboard` (L827), `open_in_terminal` (L833), `open_with_dialog` (L839), `terminal_open_external` (L991) |
+
+### 12.2 STUB-Commands — HOCH (User wird getäuscht: meldet Erfolg, tut nichts)
+
+| # | Command | Zeile | Rückgabe | Anforderung | Problem |
+|---|---------|-------|----------|-------------|---------|
+| 1 | `apply_privacy_setting` | L1032 | `{success:true, id}` | 5.1.2 | Registry wird NICHT geändert |
+| 2 | `apply_all_privacy` | L1037 | `{success:true}` | 5.1.3 | Keine Änderung am System |
+| 3 | `reset_privacy_setting` | L1042 | `{success:true, id}` | 5.1.4 | Registry wird NICHT zurückgesetzt |
+| 4 | `reset_all_privacy` | L1047 | `{success:true}` | 5.1.5 | Keine Änderung am System |
+| 5 | `set_preference` | L1801 | `{success:true}` | 8.1.2 | Einstellung wird NICHT gespeichert |
+| 6 | `set_preferences_multiple` | L1806 | `{success:true}` | 8.1.3 | Einstellungen werden NICHT gespeichert |
+| 7 | `save_session_now` | L1818 | `{success:true}` | 8.2.2 | Session wird NICHT gespeichert |
+| 8 | `update_ui_state` | L1823 | `{success:true}` | 8.2.4 | UI-State wird NICHT gespeichert |
+| 9 | `toggle_autostart` | L531 | `{success:true}` | 4.1.2 | Autostart wird NICHT geändert |
+| 10 | `delete_autostart` | L536 | `{success:true}` | 4.1.3 | Eintrag wird NICHT gelöscht |
+| 11 | `apply_optimization` | L595 | `{success:true, id}` | 4.3.2 | Optimierung wird NICHT angewendet |
+| 12 | `get_system_score` | L1761 | Hardcoded 75/C | 7.4.1 | FAKE-Score, nicht berechnet |
+| 13 | `set_file_tag` | L910 | `{success:true}` | 6.4.2 | Tag wird NICHT gespeichert |
+| 14 | `remove_file_tag` | L915 | `{success:true}` | 6.4.2 | Tag wird NICHT entfernt |
+| 15 | `register_shell_context_menu` | L937 | `{success:true}` | 9.2.1 | Kontextmenü wird NICHT registriert |
+| 16 | `unregister_shell_context_menu` | L942 | `{success:true}` | 9.2.2 | Kontextmenü wird NICHT entfernt |
+| 17 | `fix_sideloading` | L1079 | `{success:true}` | 5.1.8 | Sideloading wird NICHT gefixt |
+| 18 | `fix_sideloading_with_elevation` | L1084 | `{success:true}` | 5.1.8 | Sideloading wird NICHT gefixt |
+| 19 | `set_global_hotkey` | L954 | `{success:true}` | 9.3.1 | Hotkey wird NICHT gesetzt |
+| 20 | `start_network_recording` | L1600 | `{success:true}` | 5.3.15 | Aufzeichnung startet NICHT |
+| 21 | `stop_network_recording` | L1605 | `{success:true}` | 5.3.15 | Aufzeichnung stoppt NICHT |
+
+### 12.3 STUB-Commands — MITTEL (gibt leere/falsche Daten zurück)
+
+| # | Command | Zeile | Rückgabe | Anforderung | Problem |
+|---|---------|-------|----------|-------------|---------|
+| 1 | `get_preferences` | L1780 | Hardcoded JSON | 8.1.1 | Liest NICHT von Disk, immer Default |
+| 2 | `get_session_info` | L1813 | `{exists:false}` | 8.2.1 | Session existiert nie |
+| 3 | `get_restored_session` | L860 | `null` | 8.2.3 | Session wird nie wiederhergestellt |
+| 4 | `export_registry_backup` | L481 | `{path:""}` | 3.3.2 | Kein Backup erstellt |
+| 5 | `clean_registry` | L486 | `{results:[]}` | 3.3.3 | Registry wird NICHT bereinigt |
+| 6 | `restore_registry_backup` | L491 | `{success:false}` | 3.3.4 | Kein Restore möglich |
+| 7 | `correlate_software` | L1209 | Leere Arrays | 7.3.3 | Keine Korrelation |
+| 8 | `check_audit_updates` | L1214 | `[]` | 7.3 | Keine Update-Prüfung |
+| 9 | `get_audit_history` | L1754 | `[]` | 5.2.2 | Kein Audit-Verlauf |
+| 10 | `resolve_ips` | L1328 | `{}` | 5.3.17 | IPs werden NICHT aufgelöst |
+| 11 | `start_duplicate_scan` | L346 | Sofort leeres Result | 3.1.1 | Duplikate werden NICHT gesucht |
+| 12 | `get_size_duplicates` | L357 | `{groups:[]}` | 3.1.3 | Immer 0 Duplikate |
+| 13 | `get_network_recording_status` | L1610 | `{active:false}` | 5.3.15 | Status immer inaktiv |
+| 14 | `append_network_recording_events` | L1615 | `{success:true}` | 5.3.15 | Events werden verworfen |
+| 15 | `list_network_recordings` | L1620 | `[]` | 5.3.15 | Keine Aufzeichnungen |
+| 16 | `delete_network_recording` | L1625 | `{success:true}` | 5.3.15 | Nichts wird gelöscht |
+| 17 | `open_network_recordings_dir` | L1630 | `{success:true}` | 5.3.15 | Ordner öffnet nicht |
+| 18 | `save_network_snapshot` | L1635 | `{success:true}` | 5.3.16 | Snapshot wird nicht gespeichert |
+| 19 | `get_network_history` | L1640 | `[]` | 5.3.16 | Immer leer |
+| 20 | `clear_network_history` | L1645 | `{success:true}` | 5.3.16 | Nichts zu löschen |
+| 21 | `get_global_hotkey` | L959 | `"Ctrl+Shift+S"` | 9.3.1 | Hardcoded, nicht konfigurierbar |
+| 22 | `is_shell_context_menu_registered` | L947 | `false` | 9.2.2 | Immer false |
+| 23 | `check_sideloading` | L1074 | `{enabled:false}` | 5.1.8 | Prüft nicht wirklich |
+| 24 | `get_privacy_recommendations` | L1089 | `{recommendations:[]}` | 5.1.9 | Keine Empfehlungen |
+| 25 | `get_file_tag` | L920 | `null` | 6.4 | Kein Tag lesbar |
+| 26 | `get_tags_for_directory` | L925 | `{}` | 6.4.3 | Keine Tags |
+| 27 | `get_all_tags` | L930 | `[]` | 6.4 | Keine Tags |
+| 28 | `update_oui_database` | L1726 | `{success:true}` | 5.3.10 | OUI-DB wird nicht aktualisiert |
+
+### 12.4 STUB-Commands — NIEDRIG (meldet korrekt "nicht implementiert")
+
+| # | Command | Zeile | Rückgabe | Anforderung |
+|---|---------|-------|----------|-------------|
+| 1 | `export_csv` | L201 | `{success:false, error:"Not implemented"}` | 6.6.1 |
+| 2 | `restart_as_admin` | L855 | `{success:false, error:"Not implemented"}` | 9.1.2 |
+| 3 | `capture_screenshot` | L1837 | `{success:false, error:"Not available"}` | - |
+| 4 | `export_network_history` | L1650 | `{success:false}` | 5.3.16 |
+| 5 | `terminal_create` | L971 | `{error:"Not available"}` | 6.5.1 |
+| 6 | `terminal_write` | L976 | `{success:false}` | 6.5.1 |
+| 7 | `terminal_resize` | L981 | `{success:false}` | 6.5.1 |
+
+### 12.5 Teilweise implementiert
+
+| # | Command | Zeile | Status |
+|---|---------|-------|--------|
+| 1 | `show_context_menu` | L302 | Gibt `null` zurück (kein Kontextmenü) |
+| 2 | `show_save_dialog` | L206 | Gibt `null` zurück |
+| 3 | `release_scan_bulk_data` | L364 | Gibt `{released:true}` ohne echtes Freigeben |
+| 4 | `cancel_duplicate_scan` | L352 | Gibt `{cancelled:true}` ohne echtes Abbrechen |
+| 5 | `scan_network_active` | L1685 | Gibt Scan-Status zurück (ok) |
+| 6 | `get_last_network_scan` | L1691 | Gibt letzten Scan zurück (ok) |
+| 7 | `terminal_get_shells` | L966 | Hardcoded PowerShell-Eintrag |
+| 8 | `terminal_destroy` | L986 | Gibt `{success:true}` (kein echtes PTY) |
+| 9 | `get_tag_colors` | L905 | Hardcoded Farben (ok, aber keine Persistenz) |
+
+### 12.6 Zusammenfassung
+
+| Kategorie | Anzahl | Beschreibung |
+|-----------|--------|--------------|
+| Implementiert | ~83 | Echte Funktionalität |
+| STUB HOCH | 21 | Täuscht den User (meldet Erfolg, tut nichts) |
+| STUB MITTEL | 28 | Gibt leere/falsche Daten zurück |
+| STUB NIEDRIG | 7 | Meldet korrekt "nicht implementiert" |
+| Teilweise | 9 | Teilfunktion oder Hardcoded |
+| **Gesamt** | **~148** | |
 
 ---
 
-*Letzte Aktualisierung: 2026-02-15*
+*Letzte Aktualisierung: 2026-02-16*
 *Erstellt als Referenz zur Verifikation aller App-Funktionen*

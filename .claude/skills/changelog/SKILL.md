@@ -19,7 +19,8 @@ Falls keine Argumente angegeben wurden, analysiere die letzten Git-Änderungen (
 ### 1. Aktuelle Daten lesen
 
 - Lies `docs/protokoll/aenderungsprotokoll.md`
-- Lies `package.json` für die aktuelle Version
+- Lies `src-tauri/Cargo.toml` für die aktuelle Version (`[package] version = "..."`)
+- Lies `src-tauri/tauri.conf.json` für die Version (`version` Feld)
 - Zähle die bestehenden Einträge in der Tabelle
 
 ### 2. Archivierung prüfen (max. 30 Einträge)
@@ -35,12 +36,12 @@ Falls die Tabelle bereits **30 Einträge** hat:
 Füge einen neuen Eintrag **oben** in die Tabelle ein (nach dem Header):
 
 ```
-| <nächsteNr> | <YYYY-MM-DD> | <version aus package.json> | <typ> | **<Kurztitel>** - <Detailbeschreibung> |
+| <nächsteNr> | <YYYY-MM-DD> | <version aus Cargo.toml> | <typ> | **<Kurztitel>** - <Detailbeschreibung> |
 ```
 
 **Format-Regeln:**
 - Datum: ISO-Format `YYYY-MM-DD` (heutiges Datum)
-- Version: Aus `package.json` → `version` Feld (z.B. `v7.2.1`)
+- Version: Aus `src-tauri/Cargo.toml` → `[package] version` (z.B. `v2.0.0`)
 - Typ: Exakt wie angegeben (`fix`, `feature`, `improve`, `refactor`, `docs`)
 - Beschreibung: **Fett-Kurztitel** gefolgt von Bindestrich und Details
 - Sprache: Deutsch mit korrekten Umlauten (ä, ö, ü, ß)
@@ -62,9 +63,9 @@ Gib eine kurze Zusammenfassung aus:
 | Typ | Wann verwenden | Beispiel |
 |-----|---------------|----------|
 | `feature` | Komplett neue Funktionalität | Neues Privacy-Dashboard |
-| `fix` | Fehlerbehebung | GPU-Cache-Locking behoben |
+| `fix` | Fehlerbehebung | Command-Injection gefixt |
 | `improve` | Bestehende Funktion verbessert | Schnellere Suche im Explorer |
-| `refactor` | Code-Struktur ohne Funktionsänderung | IPC-Handler modularisiert |
+| `refactor` | Code-Struktur ohne Funktionsänderung | Skills auf Tauri v2 migriert |
 | `docs` | Nur Dokumentation | Projektplan aktualisiert |
 
 ## Hinweise
@@ -73,3 +74,4 @@ Gib eine kurze Zusammenfassung aus:
 - **Keine Emojis** im Änderungsprotokoll
 - **Kurztitel fett** gefolgt von Details nach Bindestrich
 - **NIEMALS** eine Änderung als "Fertig" markieren bevor Simon es bestätigt hat
+- **Version:** IMMER aus `src-tauri/Cargo.toml` lesen, NICHT aus `package.json`

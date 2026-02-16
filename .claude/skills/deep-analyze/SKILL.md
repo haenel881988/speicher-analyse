@@ -1,6 +1,6 @@
 ---
 name: deep-analyze
-description: Tiefenanalyse eines Problems gemäß der OBERSTEN DIREKTIVE. Verfolgt den vollständigen Datenfluss Main→IPC→Preload→Renderer und identifiziert die Wurzelursache. Aufruf mit /deep-analyze [problem-beschreibung oder datei-pfad].
+description: Tiefenanalyse eines Problems gemäß der OBERSTEN DIREKTIVE. Verfolgt den vollständigen Datenfluss Frontend→tauri-bridge→invoke→commands.rs→ps.rs und identifiziert die Wurzelursache. Aufruf mit /deep-analyze [problem-beschreibung oder datei-pfad].
 ---
 
 # Tiefenanalyse (OBERSTE DIREKTIVE)
@@ -23,60 +23,78 @@ Du darfst NIEMALS sagen:
 
 ### Phase 1: Kontext sammeln
 
-1. **Issue-Tracker prüfen:** Lies `docs/issues/issue.md` - gibt es verwandte Issues?
+1. **Issue-Tracker prüfen:** Lies `docs/issues/issue.md` — gibt es verwandte Issues?
 2. **Betroffene Dateien identifizieren:** Welche Module sind involviert?
 3. **Letzte Änderungen prüfen:** `git log --oneline -20` und `git diff` für relevante Dateien
 
-### Phase 2: Vollständiger Datenfluss-Trace
+### Phase 2: Vollständiger Datenfluss-Trace (Tauri v2)
 
 Verfolge den Datenfluss **Schritt für Schritt** durch alle Schichten:
 
 ```
-1. Renderer (renderer/js/*.js)
+1. Frontend (renderer/js/*.js)
    → Welche Funktion löst das Problem aus?
    → Welche window.api.*() Methode wird aufgerufen?
    → Was wird als Argument übergeben?
 
-2. Preload (main/preload.js)
-   → Ist die Methode korrekt exponiert?
-   → Stimmt der IPC-Kanal-Name?
+2. Bridge (renderer/js/tauri-bridge.js)
+   → Ist die Methode korrekt gemappt (makeInvoke)?
+   → Stimmt der Command-Name (snake_case)?
+   → Werden Parameter korrekt weitergeleitet?
 
-3. IPC-Handler (main/ipc-handlers.js)
-   → Wird der Handler korrekt registriert?
-   → Werden die Argumente korrekt weitergeleitet?
-   → Gibt es Error-Handling?
+3. Tauri-Command (src-tauri/src/commands.rs)
+   → Ist der #[tauri::command] korrekt definiert?
+   → Sind Parameter-Typen korrekt?
+   → Werden Parameter escaped (PowerShell-Injection)?
+   → Werden Pfade validiert?
+   → Ist der Command in lib.rs registriert?
 
-4. Backend-Modul (main/*.js)
-   → Was passiert in der aufgerufenen Funktion?
-   → Gibt es Race Conditions?
-   → Werden Daten korrekt zurückgegeben?
+4. PowerShell-Ausführung (src-tauri/src/ps.rs)
+   → Wird run_ps() / run_ps_json() verwendet?
+   → Hat der Aufruf einen Timeout?
+   → Ist das PowerShell-Script korrekt (Syntax, UTF-8)?
 
-5. Rückweg: Backend → IPC → Renderer
-   → Wird das Ergebnis korrekt serialisiert?
+5. Rückweg: ps.rs → commands.rs → Bridge → Frontend
+   → Wird das Ergebnis korrekt als JSON zurückgegeben?
    → Kommt es im Frontend an?
-   → Wird es korrekt dargestellt?
+   → Wird es korrekt dargestellt (escapeHtml)?
 ```
 
-### Phase 3: Worker-Thread-Analyse (falls relevant)
+### Phase 3: State-Management-Analyse
 
-Falls Worker Threads beteiligt sind:
-1. Wie werden Daten zum Worker gesendet? (`workerData` vs. `postMessage`)
-2. Wie werden Ergebnisse zurückgesendet?
-3. Gibt es Kontextisolation-Probleme? (Worker hat KEINEN Zugriff auf Main-Kontext)
-4. Wird der Worker korrekt terminiert?
-
-### Phase 4: State-Management-Analyse
-
-1. **Session-Restore:** Beeinflusst Session-Wiederherstellung das Verhalten?
-2. **Preferences:** Gibt es relevante Einstellungen die den Zustand beeinflussen?
-3. **Map/Cache:** Werden Daten korrekt in Maps gespeichert und abgerufen?
+1. **_loaded Flags:** Werden sie bei Fehler korrekt zurückgesetzt?
+2. **Timer/Intervalle:** Laufen setInterval-Timer weiter wenn sie nicht sollten?
+3. **Event-Listener:** Werden sie bei jedem Aufruf neu registriert (Akkumulation)?
 4. **DOM-State:** Stimmt der DOM-Zustand mit dem Daten-State überein?
+
+### Phase 4: Security-Analyse (bei sicherheitsrelevanten Problemen)
+
+1. **Command Injection:** Wird User-Input in `format!()` für PowerShell ohne `.replace("'", "''")` eingesetzt?
+2. **XSS:** Wird `innerHTML` mit unescapten Variablen verwendet?
+3. **Path Traversal:** Werden Pfade vom Frontend ohne Validierung an Dateioperationen weitergegeben?
+4. **CSP:** Ist die Content Security Policy in `tauri.conf.json` konfiguriert (nicht `null`)?
 
 ### Phase 5: Plattform-Analyse (falls relevant)
 
 1. **Windows-spezifisch:** Registry, PowerShell, Dateipfade (Backslashes)
-2. **Electron-spezifisch:** `file://` Protokoll, CSP, contextIsolation
-3. **Chromium-spezifisch:** Module Workers, Blob URLs, GPU Cache
+2. **Tauri-spezifisch:** CSP in tauri.conf.json, Capabilities, withGlobalTauri
+3. **WebView-spezifisch:** WebView2-Einschränkungen, JavaScript-Interop
+
+### Phase 6: CSS & UI-Analyse (falls visuelles Problem)
+
+1. **CSS-Variablen:** Stimmen die Werte in `renderer/css/style.css`?
+2. **Theme-Konflikte:** Dark/Light Theme korrekt implementiert?
+3. **WCAG-Kontrast:** Text-auf-Hintergrund mindestens 4.5:1?
+4. **Akzentfarben:** `--accent` nur für Borders/Backgrounds, nie für Content-Text?
+5. **display:none + Animationen:** Verbrauchen versteckte Animationen Ressourcen?
+
+### Phase 7: PowerShell-Analyse (falls PS involviert)
+
+1. Wird `crate::ps::run_ps()` verwendet?
+2. Werden Parameter VOR dem `format!()` escaped?
+3. Gibt es einen Timeout (tokio::time::timeout)?
+4. Multi-Line: Werden Newlines beibehalten?
+5. Werden PS-Prozesse sequenziell aufgerufen? (nie parallel)
 
 ## Ausgabeformat
 
@@ -93,8 +111,8 @@ Schritt-für-Schritt Pfad durch den Code mit Datei:Zeile Referenzen
 Die ECHTE Ursache im Code (mit Datei:Zeile)
 
 ### Betroffene Dateien
-- datei.js:123 - Beschreibung
-- datei2.js:456 - Beschreibung
+- datei.rs:123 - Beschreibung
+- datei.js:456 - Beschreibung
 
 ### Vorgeschlagener Fix
 Konkreter Code-Vorschlag
@@ -102,22 +120,6 @@ Konkreter Code-Vorschlag
 ### Verwandte Risiken
 Was könnte durch den Fix brechen?
 ```
-
-## Phase 6: CSS & UI-Analyse (falls visuelles Problem)
-
-1. **CSS-Variablen:** Stimmen die Werte in `renderer/css/style.css`?
-2. **Theme-Konflikte:** Dark/Light Theme korrekt implementiert?
-3. **WCAG-Kontrast:** Text-auf-Hintergrund mindestens 4.5:1?
-4. **Akzentfarben:** `--accent` nur für Borders/Backgrounds, nie für Content-Text?
-5. **Hot-Reload:** Werden CSS-Änderungen tatsächlich geladen? (Smart Reload prüfen)
-6. **display:none + Animationen:** Verbrauchen versteckte Animationen Ressourcen?
-
-## Phase 7: PowerShell-Analyse (falls PS involviert)
-
-1. Wird `runPS()` aus cmd-utils.js verwendet? (nie direktes `execFile('powershell.exe', ...)`)
-2. Ist der Timeout ausreichend? (Minimum 30s wegen Cold Start)
-3. Werden PS-Prozesse sequenziell aufgerufen? (nie parallel)
-4. Multi-Line: Werden Newlines beibehalten? (nie `.replace(/\n/g, ' ')`)
 
 ## Wichtige Hinweise
 

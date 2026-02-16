@@ -60,6 +60,62 @@ export function getCategoryColor(category) {
     return CATEGORY_COLORS[category] || CATEGORY_COLORS['Sonstige'];
 }
 
+/**
+ * Zentrale escapeHtml-Funktion. ALLE Views müssen diese verwenden.
+ * KEINE eigenen Varianten in einzelnen Dateien erstellen.
+ */
+export function escapeHtml(text) {
+    const d = document.createElement('div');
+    d.textContent = String(text ?? '');
+    return d.innerHTML;
+}
+
+/**
+ * Prüft ob eine Backend-Antwort ein Stub ist und zeigt ggf. eine Warnung.
+ * Stubs geben { stub: true, message: "..." } zurück.
+ *
+ * @param {object} result - Die Backend-Antwort
+ * @param {string} featureName - Anzeigename des Features (deutsch)
+ * @returns {boolean} true wenn Stub erkannt wurde
+ *
+ * Verwendung:
+ *   const result = await window.api.applyPrivacySetting(id);
+ *   if (isStub(result)) return; // Warnung wurde bereits angezeigt
+ *   // ... echte Verarbeitung
+ */
+export function isStub(result, featureName = '') {
+    if (result && result.stub === true) {
+        const msg = featureName
+            ? `„${featureName}" ist noch nicht verfügbar.`
+            : (result.message || 'Diese Funktion ist noch nicht verfügbar.');
+        showStubWarning(msg);
+        return true;
+    }
+    return false;
+}
+
+/**
+ * Zeigt eine Stub-Warnung als Toast-Nachricht an.
+ */
+function showStubWarning(message) {
+    // Nutze vorhandenes Toast-System falls vorhanden
+    const existing = document.querySelector('.stub-toast');
+    if (existing) existing.remove();
+
+    const toast = document.createElement('div');
+    toast.className = 'stub-toast';
+    toast.setAttribute('role', 'alert');
+    toast.textContent = message;
+    toast.style.cssText = `
+        position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
+        background: var(--warning, #f59e0b); color: #000; padding: 10px 20px;
+        border-radius: 8px; font-size: 13px; font-weight: 600; z-index: 10000;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3); max-width: 400px; text-align: center;
+    `;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 4000);
+}
+
 // Parse size string like "10MB", "1.5GB" to bytes
 export function parseSize(str) {
     if (!str) return 0;

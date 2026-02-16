@@ -2,23 +2,14 @@
 
 ## Prinzip 1: Ehrlichkeit und Offenheit (ÜBER ALLEM)
 
-Die KI muss immer 100% und absolut sicher sein, dass die Änderungen wirksam sind!
-Behauptungen sind strengstens verboten!
-
-Das Frontend, was der User sieht und drückt ist ausschlaggebend und NICHT das Backend!
-
-Sämtliche Änderungen müssen verifiziert werden in dem die KI die jeweilige Funktion im Frontend testet.
-
-Die App darf nur ein einziges mal gestartet werden, mehrere Instanzen der App sind verboten.
-
-Bei Problemen muss die KI weitere tiefere iterative recherchen und analysen durchführen da davon ausgegangen werden muss, dass weitere Probleme vorhanden sind. Dabei muss die KI immer über den Tellerrand schauen und nicht nur isoliert das jeweilige Problem analysieren, sondern eine hollistische Sicht auf das Problem in der Codebasis erhalten.
-
-Es kommt immer wieder vor, dass Claude einen und / oder mehrere Agents aktiviert. Diese liefern oft leere Ausgaben. Auf Basis dessen fehlenden Basis behauptet die KI, sie habe alle nötigen Dateien und Informationen.
-Die KI muss insistieren, dass der Agent korrekte Informationen liefert, sonst würde die KI ja den Agent nicht aktivieren.
-
-
 **Ehrlichkeit steht ÜBER dem Nach-dem-Mund-reden.**
 
+- **100% Sicherheit vor Aussagen:** KI muss absolut sicher sein, dass Änderungen wirksam sind — Behauptungen ohne Beweis sind strengstens verboten
+- **Frontend = Wahrheit:** Was der User sieht und drückt ist ausschlaggebend, NICHT das Backend
+- **Verifikationspflicht:** Sämtliche Änderungen müssen verifiziert werden, indem die KI die jeweilige Funktion im Frontend testet
+- **Single-Instance:** Die App darf nur ein einziges Mal gestartet werden — mehrere Instanzen sind verboten
+- **Holistische Problemanalyse:** Bei Problemen muss die KI tiefere iterative Recherchen durchführen und davon ausgehen, dass weitere Probleme vorhanden sind. Nicht isoliert analysieren, sondern eine ganzheitliche Sicht auf die Codebasis einnehmen
+- **Agent-Ergebnisse prüfen:** Agents liefern oft leere Ausgaben. Die KI darf auf Basis fehlender Daten KEINE Behauptungen aufstellen. Sie muss insistieren, dass der Agent korrekte Informationen liefert — sonst wäre der Agent überflüssig
 - Wenn etwas nicht funktioniert: offen sagen, nicht beschönigen
 - Wenn eine Idee des Users suboptimal ist: respektvoll erklären warum, nicht einfach zustimmen
 - Wenn die KI einen Fehler gemacht hat: sofort zugeben, nicht verschleiern
@@ -39,7 +30,7 @@ Die KI muss insistieren, dass der Agent korrekte Informationen liefert, sonst w�
 
 ## Prinzip 3: Tiefenanalyse vor jeder Aktion
 
-- Vollständigen Datenfluss nachvollziehen (Main → IPC → Preload → Renderer) BEVOR Code geändert wird
+- Vollständigen Datenfluss nachvollziehen (Frontend → tauri-bridge.js → invoke → commands.rs → ps.rs/scan.rs) BEVOR Code geändert wird
 - Kein Feature als "erledigt" markieren bis Simon dies explizit bestätigt hat
 - Einmal melden reicht — Simon darf dasselbe Problem nie zweimal melden müssen
 - Issue-Tracking: `docs/issues/issue.md` — nur Simon darf Issues als erledigt markieren
@@ -62,12 +53,34 @@ Die KI muss insistieren, dass der Agent korrekte Informationen liefert, sonst w�
 | `/test-issue` | Issue testen mit Beweis |
 | `/wcag-check` | WCAG-Kontrastprüfung bei CSS-Änderungen |
 | `/audit-code` | Codequalitäts-Audit |
+| `/security-scan` | Schneller Security-Check (vor Commits) |
 | `/new-feature` | Komplett neues Feature (Backend + Frontend) |
-| `/add-ipc` | Neuer IPC-Handler |
+| `/add-tauri-command` | Neuer Tauri-Command (Backend + Bridge) |
 | `/add-sidebar-tab` | Neuer Sidebar-Tab mit View |
 | `/powershell-cmd` | Neuer PowerShell-Befehl |
 | `/changelog` | Änderungsprotokoll aktualisieren |
 | `/git-release` | Release erstellen (Version + Tag + Push) |
+
+## Prinzip 4b: Skills und Steuerungsdokumente IMMER aktuell halten
+
+**Veraltete Skills und Dokumente erzeugen systematisch fehlerhafte Ergebnisse.** Lesson learned: Die Electron→Tauri-Migration (02/2026) hat 103+ Probleme verursacht, weil Skills/governance.md auf Electron stehen blieben während der Code auf Tauri migriert wurde.
+
+- **Bei JEDEM Fehler prüfen:** Liegt die Ursache in einer veralteten Anweisung in einem Skill, in governance.md oder in CLAUDE.md? Wenn ja → Anweisung SOFORT korrigieren, nicht nur den Code fixen
+- **Bei Technologie-/Architekturänderungen:** ALLE Skills, governance.md und CLAUDE.md auf Aktualität prüfen und mitmigrieren. Code-Migration OHNE Dokumenten-Migration ist VERBOTEN
+- **Inkonsistenz = Bug:** Wenn ein Skill auf eine Datei/Funktion/Pattern verweist die nicht (mehr) existiert, ist das ein Bug mit höchster Priorität — denn die KI wird den veralteten Anweisungen folgen und systematisch falschen Code generieren
+- **Proaktiv handeln:** Nicht warten bis Simon einen Fehler meldet. Wenn die KI bemerkt dass ein Skill veraltet ist → sofort aktualisieren und im Changelog dokumentieren
+- **Betroffene Dateien:** `.claude/skills/**/*.md`, `docs/planung/governance.md`, `CLAUDE.md`, `docs/issues/anforderungen.md`
+
+## Prinzip 4c: Regelmäßige Audits
+
+**Code-Qualität muss proaktiv geprüft werden, nicht erst wenn Probleme auftreten.**
+
+- **Nach größeren Änderungen** (5+ Dateien oder neues Feature): `/security-scan all` ausführen
+- **Vor jedem Release** (`/git-release`): `/audit-code all` ausführen (deckt Security + Performance + WCAG + Konventionen ab)
+- **Nach Framework-Migrationen:** Vollständiges Audit + Migrations-Checkliste (`docs/planung/migrations-checkliste.md`) abarbeiten
+- **Bei neuen PowerShell-Commands:** Security-Checkliste aus `/powershell-cmd` Skill abarbeiten (Escaping, Timeout, Validierung)
+- **Bei CSS-Änderungen an Farben:** `/wcag-check` ausführen
+- **Stub-Status aktuell halten:** `docs/issues/anforderungen.md` Section 12 bei jeder Stub-Implementierung aktualisieren
 
 ## Prinzip 5: Kommunikation mit Simon
 
@@ -89,39 +102,43 @@ Nach jeder Änderung: `git add .; git commit -m "type: Beschreibung"; git push`
 
 ## Tech Stack
 
-- **Runtime:** Electron v33 (Node.js + Chromium)
-- **Frontend:** Vanilla HTML/CSS/JS (ES Modules, kein Build-Step)
+- **Runtime:** Tauri v2 (Rust-Backend + System-WebView)
+- **Backend:** Rust (`src-tauri/src/`) — Commands, PowerShell-Aufrufe, Scan-Engine
+- **Frontend:** Vanilla HTML/CSS/JS (ES Modules, kein Build-Step, unter `renderer/`)
 - **Charts:** Chart.js v4, **PDF:** html2pdf.js (beides lokal unter `renderer/lib/`)
-- **IPC:** contextBridge + ipcMain.handle / ipcRenderer.invoke
+- **IPC:** Tauri `invoke()` / `#[tauri::command]` — Bridge: `renderer/js/tauri-bridge.js`
 
 ## Starten
 
 ```bash
-node launch.js  # oder: npm start
+cargo tauri dev   # Entwicklung (Hot-Reload)
+cargo tauri build # Release-Build (MSI/NSIS)
 ```
 
 ## Architektur
 
-### IPC-Muster
-- `main/preload.js` → API-Surface via contextBridge
-- `main/ipc-handlers.js` → alle Handler (zentraler Hub)
-- Frontend ruft `window.api.methodName()` auf
+### IPC-Muster (Tauri v2)
+- `renderer/js/tauri-bridge.js` → mappt `window.api.*` auf Tauri `invoke()` Aufrufe
+- `src-tauri/src/commands.rs` → alle `#[tauri::command]` Handler (zentraler Hub)
+- `src-tauri/src/lib.rs` → App-Setup, Menüleiste, Plugin-Registrierung
+- `src-tauri/src/ps.rs` → PowerShell-Ausführung (UTF-8, CREATE_NO_WINDOW)
+- `src-tauri/src/scan.rs` → Scan-Daten im Speicher (FileEntry, ScanData, Abfrage-Funktionen)
+- Frontend ruft `window.api.methodName()` auf → Bridge übersetzt zu `invoke('method_name', {params})`
 
 ### Kernmodule
 | Bereich | Dateien |
 |---------|---------|
-| Scanner | `main/scanner.js` + `scanner-worker.js` + `deep-search-worker.js` |
-| Duplikate | `main/duplicates.js` + `duplicate-worker.js` (3-Phasen: Size → Partial → Full Hash) |
-| Registry | `main/registry.js` (async, Auto-Backup unter %APPDATA%) |
-| System | `optimizer.js`, `privacy.js`, `network.js`, `smart.js`, `software-audit.js`, `system-score.js` |
+| Rust-Backend | `src-tauri/src/commands.rs` (alle Commands), `ps.rs` (PowerShell), `scan.rs` (Scan-Store) |
+| IPC-Bridge | `renderer/js/tauri-bridge.js` (147 API-Methoden, Event-Listener) |
 | Explorer | `renderer/js/explorer.js` + `explorer-tabs.js` + `explorer-dual-panel.js` |
 | UI | `renderer/js/app.js` (Haupt-Controller), `renderer/css/style.css` (Dark/Light Theme) |
+| Anforderungen | `docs/issues/anforderungen.md` (vollständige API-Referenz, 147 Methoden) |
 
 ## Visuelle Verifikation (ABSOLUT)
 
 - **Screenshots sind Single Source of Truth.** DOM-Daten (Runtime.evaluate, textContent, getComputedStyle) sind NICHT aussagekräftig. Nur was auf dem Screenshot sichtbar ist, zählt als Beweis.
 - **"Timeout" ist KEINE Ausrede.** Wenn Screenshots fehlschlagen, muss die Wurzelursache gefunden und behoben werden (z.B. Fenster minimiert → Win32 ShowWindow, CDP-Pfadfehler, etc.).
-- **Electron-Fenster im Tray:** `Target.activateTarget` via CDP reicht NICHT, um ein minimiertes Electron-Fenster wiederherzustellen. Lösung: PowerShell + Win32 `ShowWindow(hWnd, SW_RESTORE)` + `SetForegroundWindow(hWnd)` (siehe `tools/wcag/restore-window.ps1`).
+- **Minimiertes Fenster:** PowerShell + Win32 `ShowWindow(hWnd, SW_RESTORE)` + `SetForegroundWindow(hWnd)` um minimierte Fenster für Screenshots wiederherzustellen (siehe `tools/wcag/restore-window.ps1`).
 - **Ablauf:** 1) Fenster sichtbar machen → 2) Screenshot → 3) Screenshot anschauen → 4) Jeden sichtbaren Text beschreiben → 5) Erst dann Urteil fällen.
 
 ## Prinzip 6: Projektverzeichnis und Repo sind HEILIG
@@ -141,13 +158,46 @@ node launch.js  # oder: npm start
 ## Technische Regeln
 
 - **Sprache:** Alle UI-Texte auf Deutsch mit korrekten Umlauten (ä/ö/ü, nicht ae/oe/ue)
-- **Async:** Niemals `execSync` — friert UI ein
-- **PowerShell:** Immer `runPS()` aus `cmd-utils.js` (30s Timeout + UTF-8)
-- **Single-Instance:** `app.requestSingleInstanceLock()` aktiv
-- **GPU Cache:** `--disable-gpu-shader-disk-cache` aktiv
-- **Security:** BLOCKED_PATHS in `registry.js` beachten
+- **Async:** Rust-Backend ist async (tokio) — blockierende Operationen in `spawn_blocking` wrappen
+- **PowerShell:** Immer `crate::ps::run_ps()` / `run_ps_json()` (UTF-8 Prefix, CREATE_NO_WINDOW, async)
+- **Single-Instance:** Tauri Single-Instance Plugin oder OS-Lock verwenden
+- **IPC-Konvention:** Rust-Commands in `snake_case`, Frontend ruft `camelCase` auf, Bridge übersetzt automatisch
+- **Neue Commands:** In `commands.rs` definieren, in `lib.rs` registrieren, in `tauri-bridge.js` mappen
 - **VERBOTEN: Statische Listen für Erkennung/Discovery.** Die App muss in der Realität funktionieren, nicht nur in Simons Netzwerk. Statische Listen haben NICHTS mit der Realität zu tun — sie funktionieren nur für den Entwickler, nicht für andere Nutzer. IMMER dynamisch erkennen (Protokoll-Queries, Broadcast, OS-APIs), NIEMALS eine feste Liste von "bekannten" Einträgen als Erkennungsgrundlage. Feste Listen sind NUR erlaubt als Fallback-Label/Anzeige NACH einer dynamischen Erkennung — nie als Filter davor.
 - **Realitätsprinzip (ABSOLUT):** Code muss auf JEDEM Rechner in JEDEM Netzwerk funktionieren, nicht nur auf dem Entwickler-PC. Jede Annahme über die Umgebung (welche Geräte, welche Software, welche Services, welche Netzwerke existieren) ist ein Bug. NIEMALS lokale Testdaten, IP-Adressen, MAC-Adressen, Hostnamen oder Gerätenamen aus der Entwicklungsumgebung im Code verwenden. Multi-Produkt-Hersteller dürfen NICHT einem einzigen Gerätetyp zugeordnet werden. Wenn ein Gerätetyp nicht eindeutig erkannt werden kann → ehrlich "Unbekanntes Gerät" anzeigen statt raten.
+
+## Security-Regeln (PFLICHT)
+
+### PowerShell-Escaping (Command Injection verhindern)
+- **JEDER** String-Parameter der in `format!()` für PowerShell-Befehle eingesetzt wird, MUSS vorher mit `.replace("'", "''")` escaped werden
+- **IP-Adressen** MÜSSEN per Regex validiert werden bevor sie in PowerShell verwendet werden
+- **Enum-Parameter** (z.B. direction: "Inbound"/"Outbound") MÜSSEN per `match` auf eine Whitelist erlaubter Werte geprüft werden
+- **KEIN `format!()` mit unescaptem User-Input** — keine Ausnahme
+
+### Pfad-Validierung (Path Traversal verhindern)
+- **Dateipfade vom Frontend** MÜSSEN validiert werden bevor sie an Dateioperationen (`remove_dir_all`, `tokio::fs::write`, `tokio::fs::read`) weitergegeben werden
+- Pfade MÜSSEN innerhalb erlaubter Verzeichnisse liegen (z.B. innerhalb des Scan-Root)
+- **Destruktive Dateioperationen** (Löschen, Überschreiben) MÜSSEN einen Bestätigungsdialog haben — sowohl im Backend (Pfad-Check) als auch im Frontend (User-Bestätigung)
+
+### XSS-Prävention
+- **NIEMALS** `innerHTML` mit unescapten Variablen: `innerHTML = \`...\${variable}...\`` ist VERBOTEN
+- **Fehlermeldungen** MÜSSEN mit `textContent` oder `createElement` angezeigt werden, NICHT mit `innerHTML`
+- **Dynamische Inhalte** in innerHTML MÜSSEN mit `escapeHtml()` aus `renderer/js/utils.js` escaped werden
+- **Eine zentrale `escapeHtml()`-Funktion** in `utils.js` — KEINE eigenen Varianten (_esc, esc, escapeAttr) pro View erstellen
+
+### Tauri-Sicherheitskonfiguration
+- **CSP:** `tauri.conf.json` → `security.csp` MUSS konfiguriert sein (NICHT `null`)
+- **withGlobalTauri:** MUSS `false` sein (verhindert direkten Zugriff auf `window.__TAURI__` durch eingeschleusten Code)
+- **Capabilities:** Minimal-Prinzip — nur die APIs freigeben die tatsächlich benötigt werden
+
+## Memory-Leak-Prävention (PFLICHT)
+
+- **Jeder `setInterval`** MUSS eine gespeicherte Interval-ID haben und in `destroy()` mit `clearInterval()` gestoppt werden
+- **Event-Listener** dürfen nur EINMAL registriert werden (Flag-Pattern verwenden). Bei wiederholtem Aufruf prüfen ob der Listener bereits existiert
+- **`ResizeObserver`** MUSS in `destroy()` mit `.disconnect()` beendet werden
+- **DOM-Elemente** die dynamisch erstellt werden (Overlays, Modals) MÜSSEN in `destroy()` entfernt werden
+- **Jede View** MUSS eine `destroy()`-Funktion haben die ALLE Ressourcen aufräumt
+- **`app.js`** MUSS `destroy()` auf der alten View aufrufen bevor eine neue View aktiviert wird
 
 ## Temporäre Dateien (Cleanup-Policy)
 

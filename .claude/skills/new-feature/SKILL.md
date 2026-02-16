@@ -1,11 +1,11 @@
 ---
 name: new-feature
-description: Scaffolding für ein neues Feature im Electron-Projekt. Erstellt Backend-Modul, IPC-Handler, Preload-Eintrag und Renderer-View nach den Projektkonventionen. Nutze diesen Skill wenn ein komplett neues Feature von Grund auf implementiert werden soll (Backend + Frontend). Für nur einen Sidebar-Tab nutze /add-sidebar-tab, für nur einen IPC-Handler nutze /add-ipc. Aufruf mit /new-feature [feature-name] [beschreibung].
+description: Scaffolding für ein neues Feature in der Tauri v2 App. Erstellt Rust-Command in commands.rs, Bridge-Eintrag in tauri-bridge.js und Renderer-View nach den Projektkonventionen. Nutze diesen Skill wenn ein komplett neues Feature von Grund auf implementiert werden soll (Backend + Frontend). Für nur einen Sidebar-Tab nutze /add-sidebar-tab, für nur einen Command nutze /add-tauri-command. Aufruf mit /new-feature [feature-name] [beschreibung].
 ---
 
 # Neues Feature scaffolden
 
-Du erstellst das Grundgerüst für ein neues Feature in der Speicher Analyse Electron-App.
+Du erstellst das Grundgerüst für ein neues Feature in der Speicher Analyse Tauri-App.
 
 ## Argumente
 
@@ -17,153 +17,161 @@ Du erstellst das Grundgerüst für ein neues Feature in der Speicher Analyse Ele
 **Bevor du Code schreibst:**
 
 1. Lies die bestehende Architektur:
-   - `main/ipc-handlers.js` - Wie Handler registriert werden
-   - `main/preload.js` - Wie die API-Surface aussieht
+   - `src-tauri/src/commands.rs` - Wie Commands definiert werden
+   - `src-tauri/src/lib.rs` - Wie Commands registriert werden
+   - `renderer/js/tauri-bridge.js` - Wie Bridge-Methoden aufgebaut sind
    - `renderer/js/app.js` - Wie Views eingebunden werden
-   - `renderer/index.html` - Wie HTML-Tabs/Views strukturiert sind
+   - `renderer/index.html` - Wie HTML-Views strukturiert sind
 
 2. Prüfe ob ein ähnliches Feature bereits existiert und nutze es als Vorlage
 
-## Dateien erstellen
+## Dateien erstellen/ändern
 
-### 1. Backend-Modul: `main/<feature-name>.js`
+### 1. Rust-Command: `src-tauri/src/commands.rs`
 
-```javascript
-'use strict';
+Füge neue Commands ein (gruppiert mit Kommentar-Header):
 
-// <Beschreibung>
-
-let mainWindow = null;
-
-function register(win) {
-    mainWindow = win;
-}
-
-// Hauptfunktionen hier...
-
-module.exports = { register };
-```
-
-**Konventionen:**
-- `'use strict'` am Anfang
-- `register(win)` Pattern für mainWindow-Referenz
-- Alle externen Prozesse mit `execFile` (nie `execSync`)
-- Alle Funktionen als `async` wenn I/O involviert
-- Fehlerbehandlung mit try/catch
-
-### 2. IPC-Handler in `main/ipc-handlers.js`
-
-Füge den Handler in die `registerAll(mainWindow)` Funktion ein:
-
-```javascript
-ipcMain.handle('<feature-name>-<action>', async (event, ...args) => {
-    try {
-        return await featureModule.action(...args);
-    } catch (err) {
-        console.error('[<feature-name>] Fehler:', err.message);
-        return { error: err.message };
-    }
-});
-```
-
-**Platzierung:** Gruppiert mit ähnlichen Handlern, mit Kommentar-Header:
-
-```javascript
+```rust
 // === <Feature-Name> ===
+
+#[tauri::command]
+pub async fn feature_action(param: String) -> Result<serde_json::Value, String> {
+    // SECURITY: Parameter für PowerShell escapen
+    let safe_param = param.replace("'", "''");
+
+    let script = format!(r#"
+        $result = Get-Something '{}'
+        $result | ConvertTo-Json -Depth 3
+    "#, safe_param);
+
+    crate::ps::run_ps_json(&script).await
+}
 ```
 
-### 3. Preload-Eintrag in `main/preload.js`
+**Security-Regeln (PFLICHT):**
+- Alle String-Parameter die in `format!()` für PowerShell eingesetzt werden → `.replace("'", "''")`
+- Pfade vom Frontend → validieren (existiert? innerhalb erlaubter Verzeichnisse?)
+- Enum-Parameter → per `match` auf erlaubte Werte prüfen
+- IP-Adressen → per Regex validieren
 
-Füge die API-Methode in das `contextBridge.exposeInMainWorld('api', { ... })` Objekt ein:
+### 2. Command-Registrierung: `src-tauri/src/lib.rs`
+
+In den `generate_handler![]` Macro-Aufruf einfügen:
+
+```rust
+commands::feature_action,
+```
+
+### 3. Bridge-Eintrag: `renderer/js/tauri-bridge.js`
 
 ```javascript
-featureNameAction: (...args) => ipcRenderer.invoke('<feature-name>-<action>', ...args),
+featureAction: makeInvoke('feature_action', 'param'),
 ```
-
-**Konventionen:**
-- camelCase für Methodennamen
-- Exakt passend zum IPC-Kanal-Namen
-- Alle Methoden geben Promises zurück (invoke)
 
 ### 4. Renderer-View: `renderer/js/<feature-name>.js`
 
 ```javascript
 // <Feature-Name> View
+import { escapeHtml } from './utils.js';
 
-export class FeatureNameView {
-    constructor(containerEl) {
-        this.el = containerEl;
-        this.data = null;
-    }
+let _loaded = false;
+let _intervalId = null;
 
-    async init() {
-        this.render();
-        await this.loadData();
-    }
+export async function init() {
+    const container = document.getElementById('view-<feature-name>');
+    if (!container) return;
 
-    async loadData() {
-        try {
-            this.data = await window.api.featureNameAction();
-            this.render();
-        } catch (err) {
-            console.error('[FeatureName]', err);
-            this.renderError(err.message);
-        }
+    if (!_loaded) {
+        await loadData(container);
     }
+}
 
-    render() {
-        if (!this.el) return;
-        this.el.innerHTML = `
-            <div class="view-header">
-                <h2>Feature-Titel</h2>
-            </div>
-            <div class="view-content">
-                <!-- Inhalt -->
-            </div>
-        `;
-    }
+async function loadData(container) {
+    try {
+        container.innerHTML = '<div class="loading">Lade Daten...</div>';
 
-    renderError(msg) {
-        if (!this.el) return;
-        this.el.innerHTML = `<div class="error-message">${msg}</div>`;
-    }
+        const data = await window.api.featureAction();
+        if (data?.error) throw new Error(data.error);
 
-    destroy() {
-        this.data = null;
+        render(container, data);
+        _loaded = true;
+    } catch (err) {
+        console.error('[FeatureName]', err);
+        // SECURITY: Fehlermeldungen SICHER anzeigen
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'error-message';
+        errorDiv.textContent = 'Fehler: ' + err.message;
+        container.innerHTML = '';
+        container.appendChild(errorDiv);
+        _loaded = false; // WICHTIG: Retry ermöglichen
     }
+}
+
+function render(container, data) {
+    if (!container) return;
+
+    // SECURITY: Dynamische Inhalte IMMER mit escapeHtml() escapen
+    container.innerHTML = `
+        <div class="view-header">
+            <h2>Feature-Titel</h2>
+        </div>
+        <div class="view-content">
+            ${data.items.map(item => `
+                <div class="item">
+                    <span>${escapeHtml(item.name)}</span>
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+// LIFECYCLE: Aufräumen — PFLICHT für jeden Timer/Listener/Observer
+export function destroy() {
+    // Timer stoppen
+    if (_intervalId) { clearInterval(_intervalId); _intervalId = null; }
+
+    // Event-Listener entfernen (falls registriert)
+    // element.removeEventListener('click', _handler);
+
+    // Observer disconnecten
+    // if (_resizeObserver) { _resizeObserver.disconnect(); _resizeObserver = null; }
+
+    _loaded = false;
 }
 ```
 
 **Konventionen:**
-- ES Module (`export class`)
-- Constructor nimmt Container-Element
-- `init()`, `render()`, `destroy()` Lifecycle
-- Fehlerbehandlung in `loadData()`
+- ES Module (`export function`)
+- `_loaded` Flag mit Reset bei Fehler (KRITISCH — sonst kann User nie erneut laden)
+- **SECURITY:** Fehlermeldungen mit `textContent` oder `createElement`, NIEMALS `innerHTML` mit `${variable}`
+- **SECURITY:** `import { escapeHtml } from './utils.js'` für alle dynamischen Inhalte in innerHTML
+- **LIFECYCLE:** `destroy()` MUSS alle Timer (`clearInterval`), Listener (`removeEventListener`) und Observer (`disconnect`) aufräumen
 - Alle UI-Texte auf Deutsch mit korrekten Umlauten (ä, ö, ü, ß)
-- **KRITISCH:** `_loaded` Flag muss bei Fehler zurückgesetzt werden (sonst kann User nie erneut laden)
 
 ### 5. HTML-Eintrag in `renderer/index.html`
 
-Füge hinzu:
 - Sidebar-Tab-Button (wenn es ein Haupt-Tab sein soll)
 - View-Container `<div id="view-<feature-name>" class="view-panel">`
 - Script-Import (ES Module)
 
 ### 6. App-Integration in `renderer/js/app.js`
 
-- Import der View-Klasse
-- Instanziierung im Constructor
+- Import der View-Funktionen
 - Einbindung in `switchToTab()` Logic
 
-## Nach dem Scaffolding
+## Security-Checkliste (PFLICHT vor Commit)
 
-1. Erstelle eine Zusammenfassung der erstellten/geänderten Dateien
-2. Liste die nächsten Schritte auf (was der Entwickler implementieren muss)
-3. Weise auf relevante bestehende Patterns hin die als Referenz dienen können
+- [ ] Alle PowerShell-Parameter escaped (`.replace("'", "''")`)?
+- [ ] Pfade vom Frontend validiert?
+- [ ] Fehlermeldungen mit `textContent` statt `innerHTML`?
+- [ ] Dynamische Inhalte mit `escapeHtml()` escaped?
+- [ ] `destroy()` räumt Timer/Listener/Observer auf?
+- [ ] `_loaded` Flag wird bei Fehler zurückgesetzt?
+- [ ] Keine `innerHTML = \`...\${variable}...\`` ohne Escaping?
 
 ## Verwandte Skills
 
-- `/add-ipc` - Wenn nur ein einzelner IPC-Handler benötigt wird (ohne View)
+- `/add-tauri-command` - Wenn nur ein einzelner Command benötigt wird (ohne View)
 - `/add-sidebar-tab` - Wenn nur ein Sidebar-Tab mit View benötigt wird (ohne Backend)
 - `/powershell-cmd` - Wenn das Feature PowerShell-Befehle einbindet
 - `/changelog` - Nach Fertigstellung zum Dokumentieren der Änderung

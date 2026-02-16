@@ -1,151 +1,186 @@
 ---
 name: powershell-cmd
-description: Fügt einen neuen PowerShell-Befehl korrekt in die Speicher Analyse App ein. Verwendet runPS() mit korrektem Timeout, UTF-8-Encoding und Fehlerbehandlung. Nutze diesen Skill wenn ein neuer Windows-Systembefehl via PowerShell integriert werden soll. Aufruf mit /powershell-cmd [befehl-name] [modul-name].
+description: Fügt einen neuen PowerShell-Befehl korrekt in die Speicher Analyse Tauri-App ein. Verwendet crate::ps::run_ps() mit korrektem Escaping, UTF-8-Encoding und Fehlerbehandlung. Nutze diesen Skill wenn ein neuer Windows-Systembefehl via PowerShell integriert werden soll. Aufruf mit /powershell-cmd [befehl-name] [beschreibung].
 ---
 
-# PowerShell-Befehl einbinden
+# PowerShell-Befehl einbinden (Tauri/Rust)
 
-Du bindest einen neuen PowerShell-Befehl in die Speicher Analyse App ein, unter Beachtung aller kritischen Lektionen.
+Du bindest einen neuen PowerShell-Befehl in die Speicher Analyse Tauri-App ein, unter Beachtung aller kritischen Lektionen.
 
 ## Argumente
 
-- `$ARGUMENTS[0]` = Befehl-Name (camelCase, z.B. `getBatteryStatus`)
-- `$ARGUMENTS[1]` = Ziel-Modul (z.B. `smart` → `main/smart.js`)
+- `$ARGUMENTS[0]` = Command-Name (snake_case, z.B. `get_battery_status`)
+- `$ARGUMENTS[1]` = Beschreibung (optional)
 
 ## Voranalyse
 
-**Pflicht - lies diese Dateien zuerst:**
+**Pflicht — lies diese Dateien zuerst:**
 
-1. `main/cmd-utils.js` - Die `runPS()` Funktion verstehen (UTF-8 Prefix, Timeout)
-2. Das Ziel-Modul `main/<modul>.js` - Bestehende Pattern als Referenz
-3. `main/ipc-handlers.js` - Falls ein neuer IPC-Handler nötig ist
+1. `src-tauri/src/ps.rs` - Die `run_ps()` und `run_ps_json()` Funktionen verstehen
+2. `src-tauri/src/commands.rs` - Bestehende Commands als Referenz
+3. `src-tauri/src/lib.rs` - Command-Registrierung
 
 ## KRITISCHE REGELN (aus Lessons Learned)
 
-### 1. IMMER `runPS()` verwenden
+### 1. IMMER `crate::ps::run_ps()` verwenden
 
-```javascript
-const { runPS } = require('./cmd-utils');
-
+```rust
 // RICHTIG:
-const result = await runPS(`Get-PhysicalDisk | Select-Object ...`);
+let output = crate::ps::run_ps(&script).await?;
 
-// FALSCH - NIEMALS so:
-const { execFile } = require('child_process');
-execFile('powershell.exe', ['-Command', script]); // Kein UTF-8, kein Timeout!
+// Für JSON-Ausgabe:
+let json = crate::ps::run_ps_json(&script).await?;
+
+// FALSCH — NIEMALS so (kein UTF-8, kein korrektes Error-Handling):
+use std::process::Command;
+let output = Command::new("powershell.exe").arg("-Command").arg(script).output()?;
 ```
 
-### 2. Timeout beachten
+### 2. IMMER Parameter escapen (SECURITY-PFLICHT)
 
-- **Minimum 30 Sekunden** - PowerShell Cold Start dauert 5-10+ Sekunden
-- `runPS()` hat standardmäßig 30s Timeout
-- Für schwere Befehle (Windows Update, DISM): Eigenes höheres Timeout übergeben
+```rust
+// RICHTIG: Vor format!() escapen
+let safe_name = name.replace("'", "''");
+let script = format!("Get-Service '{}'", safe_name);
 
-### 3. KEINE parallelen PowerShell-Prozesse
+// FALSCH — Command Injection!
+let script = format!("Get-Service '{}'", name);  // name könnte "'; Remove-Item -Recurse C:\\" enthalten
+```
 
-```javascript
+**Escaping-Regeln:**
+- String-Parameter: `.replace("'", "''")`
+- IP-Adressen: Regex-Validierung VOR Verwendung
+- Dateipfade: Existenz prüfen + innerhalb erlaubter Verzeichnisse
+- Enum-Werte: Per `match` auf Whitelist prüfen
+
+### 3. Timeout einbauen
+
+```rust
+use tokio::time::{timeout, Duration};
+
+// RICHTIG: Timeout um hängende PS-Prozesse abzufangen
+let result = timeout(
+    Duration::from_secs(30),
+    crate::ps::run_ps(&script)
+).await
+.map_err(|_| "PowerShell-Timeout nach 30 Sekunden".to_string())?;
+```
+
+**Timeout-Richtwerte:**
+- Standard-Befehle: 30 Sekunden (PowerShell Cold Start = 5-10s)
+- Schwere Befehle (Windows Update, DISM): 120 Sekunden
+- Netzwerk-Scans: 60 Sekunden
+
+### 4. KEINE parallelen PowerShell-Prozesse
+
+```rust
 // RICHTIG: Sequenziell
-const result1 = await runPS(script1);
-const result2 = await runPS(script2);
+let result1 = crate::ps::run_ps(&script1).await?;
+let result2 = crate::ps::run_ps(&script2).await?;
 
 // FALSCH: Parallel (können sich gegenseitig aushungern!)
-const [r1, r2] = await Promise.all([runPS(s1), runPS(s2)]);
+let (r1, r2) = tokio::join!(
+    crate::ps::run_ps(&script1),
+    crate::ps::run_ps(&script2)
+);
 ```
 
-### 4. Multi-Line Scripts korrekt übergeben
+### 5. Multi-Line Scripts korrekt übergeben
 
-```javascript
-// RICHTIG: Newlines beibehalten, nur trim()
-const script = `
-    $items = Get-ItemProperty HKLM:\\SOFTWARE\\...
+```rust
+// RICHTIG: Raw-String mit Newlines
+let script = r#"
+    $items = Get-ItemProperty HKLM:\SOFTWARE\...
     $items | ForEach-Object {
         [PSCustomObject]@{
             Name = $_.DisplayName
             Version = $_.DisplayVersion
         }
-    } | ConvertTo-Json
-`.trim();
+    } | ConvertTo-Json -Depth 3
+"#;
 
-// FALSCH: Newlines ersetzen (zerstört Statement-Grenzen!)
-const script = multiLineScript.replace(/\n/g, ' ');
+// FALSCH: Newlines durch Spaces ersetzen (zerstört Statement-Grenzen!)
+let script = multi_line.replace('\n', " ");
 ```
 
-### 5. JSON-Output für strukturierte Daten
+### 6. JSON-Output für strukturierte Daten
 
-```javascript
-// PowerShell-Script sollte JSON ausgeben:
-const script = `
+```rust
+let script = r#"
     $data = Get-Process | Select-Object Name, Id, WorkingSet64
     $data | ConvertTo-Json -Depth 3
-`.trim();
+"#;
 
-const result = await runPS(script);
-const parsed = JSON.parse(result);
+// run_ps_json() parst direkt zu serde_json::Value
+let json = crate::ps::run_ps_json(script).await?;
 ```
 
-### 6. Fehlerbehandlung
+## Template für neuen Command
 
-```javascript
-async function getSystemInfo() {
-    try {
-        const result = await runPS(script);
-        if (!result || result.trim() === '') {
-            return { error: 'Keine Daten empfangen' };
-        }
-        return JSON.parse(result);
-    } catch (err) {
-        console.error('[SystemInfo] PowerShell-Fehler:', err.message);
-        return { error: err.message };
-    }
-}
-```
+```rust
+// In src-tauri/src/commands.rs
 
-## Template für neuen Befehl
+#[tauri::command]
+pub async fn befehl_name(param: String) -> Result<serde_json::Value, String> {
+    // SECURITY: Parameter escapen
+    let safe_param = param.replace("'", "''");
 
-```javascript
-// In main/<modul>.js
-
-const { runPS } = require('./cmd-utils');
-
-async function befehlName(param1, param2) {
-    const script = `
-        # PowerShell-Logik hier
-        $result = <Befehl>
+    let script = format!(r#"
+        $result = Get-Something '{}'
         $result | ConvertTo-Json -Depth 3
-    `.trim();
+    "#, safe_param);
 
-    try {
-        const raw = await runPS(script);
-        if (!raw || raw.trim() === '') return [];
+    // Timeout einbauen
+    use tokio::time::{timeout, Duration};
+    let output = timeout(
+        Duration::from_secs(30),
+        crate::ps::run_ps(&script)
+    ).await
+    .map_err(|_| "Timeout nach 30 Sekunden".to_string())??;
 
-        const data = JSON.parse(raw);
-        // Array sicherstellen (einzelnes Objekt → Array wrappen)
-        return Array.isArray(data) ? data : [data];
-    } catch (err) {
-        console.error('[<Modul>] <befehlName> Fehler:', err.message);
-        return { error: err.message };
+    // JSON parsen
+    let json: serde_json::Value = serde_json::from_str(&output)
+        .map_err(|e| format!("JSON-Fehler: {}", e))?;
+
+    // Array sicherstellen (einzelnes Objekt → Array wrappen)
+    if json.is_object() {
+        Ok(serde_json::json!([json]))
+    } else {
+        Ok(json)
     }
 }
-
-module.exports = { befehlName };
 ```
+
+**Danach:**
+1. In `src-tauri/src/lib.rs` → `generate_handler![]` eintragen
+2. In `renderer/js/tauri-bridge.js` → `makeInvoke()` hinzufügen
 
 ## Häufige Fallstricke
 
 | Problem | Ursache | Lösung |
 |---------|---------|--------|
-| Timeout nach 5s | PowerShell Cold Start | `runPS()` nutzen (30s Standard) |
-| Kryptische Zeichen | Kein UTF-8 | `runPS()` hat UTF-8 Prefix eingebaut |
+| Timeout nach 5s | PowerShell Cold Start | `run_ps()` + 30s Timeout |
+| Kryptische Zeichen | Kein UTF-8 | `run_ps()` hat UTF-8 Prefix eingebaut |
 | Leere Ausgabe | Single Object statt Array | `ConvertTo-Json` + Array-Check |
-| Parse-Fehler | PowerShell Warnings in stdout | `-ErrorAction SilentlyContinue` oder stderr filtern |
-| Hängt endlos | Parallele PS-Prozesse | Sequenziell aufrufen |
-| Script bricht ab | Newlines durch Spaces ersetzt | `.trim()` statt `.replace(/\n/g, ' ')` |
+| Parse-Fehler | PS Warnings in stdout | `-ErrorAction SilentlyContinue` |
+| Hängt endlos | Kein Timeout | `tokio::time::timeout()` wrappen |
+| Script bricht ab | Newlines ersetzt | Raw-Strings oder `.trim()`, nie `.replace('\n', " ")` |
+| Command Injection | Kein Escaping | `.replace("'", "''")` VOR format!() |
+
+## Security-Checkliste (PFLICHT)
+
+- [ ] Parameter mit `.replace("'", "''")` escaped?
+- [ ] Pfade validiert (Existenz + erlaubte Verzeichnisse)?
+- [ ] Enum-Werte per match/Whitelist geprüft?
+- [ ] IP-Adressen per Regex validiert?
+- [ ] Timeout mit `tokio::time::timeout()` eingebaut?
+- [ ] Keine parallelen PS-Aufrufe?
 
 ## Ausgabe
 
 Nach dem Einbinden, gib eine Zusammenfassung:
-- Funktion: Name und Signatur
+- Command: Name und Signatur
 - PowerShell-Befehl: Was ausgeführt wird
-- Rückgabetyp: Array/Object/String
+- Escaping: Welche Parameter wie escaped werden
 - Timeout: Standard (30s) oder angepasst
-- IPC-Handler nötig? Falls ja, verweise auf `/add-ipc`
+- Registrierung: In lib.rs + tauri-bridge.js eingetragen
