@@ -187,7 +187,7 @@ pub fn folder_sizes_bulk(scan_id: &str, folder_paths: &[String]) -> Value {
 }
 
 /// Build tree node from scan data — returns {path, name, size, dir_count, file_count, children: [...]}
-pub fn tree_node(scan_id: &str, path: &str, depth: u32) -> Value {
+pub fn tree_node(scan_id: &str, path: &str, _depth: u32) -> Value {
     with_scan(scan_id, |data| {
         let path_norm = path.replace('/', "\\");
         let path_prefix = if path_norm.ends_with('\\') { path_norm.clone() } else { format!("{}\\", path_norm) };
@@ -222,7 +222,7 @@ pub fn tree_node(scan_id: &str, path: &str, depth: u32) -> Value {
                 let rest = &relative[sep+1..];
                 if rest.contains('\\') {
                     // Has sub-subdirectories
-                    if let Some(entry) = subdirs.get_mut(&subdir_path) {
+                    if let Some(_entry) = subdirs.get_mut(&subdir_path) {
                         // Count unique direct subdirs within this subdir
                         // (We'll estimate dir_count from file paths)
                     }

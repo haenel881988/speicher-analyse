@@ -52,11 +52,14 @@ pub async fn get_drives() -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn start_scan(app: tauri::AppHandle, path: String) -> Result<Value, String> {
+    eprintln!("[start_scan] Called with path: {}", path);
     let scan_id = format!("scan_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis());
     let sid = scan_id.clone();
+    let scan_id_ret = scan_id.clone();
 
     // Use spawn_blocking for walkdir (blocking I/O)
     tokio::task::spawn_blocking(move || {
+        eprintln!("[start_scan] Blocking thread started for scan_id={}", sid);
         let start = std::time::Instant::now();
         let mut files: Vec<crate::scan::FileEntry> = Vec::new();
         let mut dirs_scanned: u64 = 0;
@@ -122,6 +125,7 @@ pub async fn start_scan(app: tauri::AppHandle, path: String) -> Result<Value, St
         }
 
         let elapsed = start.elapsed().as_secs_f64();
+        eprintln!("[start_scan] Walk completed: {} files, {} dirs, {} errors, {:.1}s", files_found, dirs_scanned, errors_count, elapsed);
 
         // Store scan data for queries
         crate::scan::save(crate::scan::ScanData {
@@ -132,9 +136,10 @@ pub async fn start_scan(app: tauri::AppHandle, path: String) -> Result<Value, St
             total_size,
             elapsed_seconds: elapsed,
         });
+        eprintln!("[start_scan] Scan data saved to store");
 
         // Emit completion
-        let _ = app.emit("scan-complete", json!({
+        let emit_result = app.emit("scan-complete", json!({
             "scan_id": &sid,
             "status": "complete",
             "current_path": &path,
@@ -144,9 +149,11 @@ pub async fn start_scan(app: tauri::AppHandle, path: String) -> Result<Value, St
             "errors_count": errors_count,
             "elapsed_seconds": (elapsed * 10.0).round() / 10.0
         }));
+        eprintln!("[start_scan] scan-complete event emitted: {:?}", emit_result);
     });
 
-    Ok(json!({ "scan_id": scan_id }))
+    eprintln!("[start_scan] Returning scan_id: {}", scan_id_ret);
+    Ok(json!({ "scan_id": scan_id_ret }))
 }
 
 // === Tree Data ===
@@ -299,8 +306,31 @@ pub async fn show_context_menu(_menu_type: String, _context: Option<Value>) -> R
 // === Dialog ===
 
 #[tauri::command]
-pub async fn show_confirm_dialog(_options: Value) -> Result<Value, String> {
-    Ok(json!({ "response": 0 }))
+pub async fn show_confirm_dialog(app: tauri::AppHandle, options: Value) -> Result<Value, String> {
+    use tauri_plugin_dialog::DialogExt;
+
+    let title = options.get("title").and_then(|v| v.as_str()).unwrap_or("Bestätigung").to_string();
+    let message = options.get("message").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let buttons = options.get("buttons").and_then(|v| v.as_array()).cloned();
+
+    let (tx, rx) = std::sync::mpsc::channel();
+
+    let builder = app.dialog().message(message).title(title);
+
+    // Note: tauri-plugin-dialog v2 doesn't support custom button labels
+    // Dialog shows standard OK/Cancel buttons
+    let _ = buttons; // silence unused warning
+
+    builder.show(move |answer| {
+        let _ = tx.send(answer);
+    });
+
+    // Wait for user response without blocking async executor
+    let answer = tokio::task::spawn_blocking(move || {
+        rx.recv().unwrap_or(false)
+    }).await.unwrap_or(false);
+
+    Ok(json!({ "response": if answer { 1 } else { 0 } }))
 }
 
 // === Old Files ===
@@ -835,7 +865,16 @@ pub async fn get_restored_session() -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn get_system_capabilities() -> Result<Value, String> {
-    Ok(json!({ "isAdmin": false, "hasBattery": false, "platform": "win32" }))
+    let result = crate::ps::run_ps_json(
+        r#"$admin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+$bat = $null -ne (Get-CimInstance Win32_Battery -EA SilentlyContinue)
+$wg = $null -ne (Get-Command winget -EA SilentlyContinue)
+[PSCustomObject]@{ isAdmin=$admin; hasBattery=$bat; wingetAvailable=$wg; platform='win32' } | ConvertTo-Json -Compress"#
+    ).await;
+    match result {
+        Ok(v) => Ok(v),
+        Err(_) => Ok(json!({ "isAdmin": false, "hasBattery": false, "wingetAvailable": false, "platform": "win32" })),
+    }
 }
 
 #[tauri::command]

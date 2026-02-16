@@ -2,11 +2,87 @@ mod commands;
 mod ps;
 mod scan;
 
+use tauri::{Emitter, Manager};
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .setup(|app| {
+            use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
+
+            // === Menüleiste (Datei, Bearbeiten, Ansicht, Terminal, Hilfe) ===
+            let file_menu = Submenu::with_items(app, "Datei", true, &[
+                &PredefinedMenuItem::close_window(app, Some("Fenster schließen"))?,
+                &PredefinedMenuItem::separator(app)?,
+                &PredefinedMenuItem::quit(app, Some("Beenden"))?,
+            ])?;
+
+            let edit_menu = Submenu::with_items(app, "Bearbeiten", true, &[
+                &PredefinedMenuItem::undo(app, Some("Rückgängig"))?,
+                &PredefinedMenuItem::redo(app, Some("Wiederholen"))?,
+                &PredefinedMenuItem::separator(app)?,
+                &PredefinedMenuItem::cut(app, Some("Ausschneiden"))?,
+                &PredefinedMenuItem::copy(app, Some("Kopieren"))?,
+                &PredefinedMenuItem::paste(app, Some("Einfügen"))?,
+                &PredefinedMenuItem::separator(app)?,
+                &PredefinedMenuItem::select_all(app, Some("Alles auswählen"))?,
+            ])?;
+
+            let view_menu = Submenu::with_items(app, "Ansicht", true, &[
+                &MenuItem::with_id(app, "reload", "Neu laden", true, Some("F5"))?,
+                &MenuItem::with_id(app, "dev-tools", "Entwicklertools", true, Some("F12"))?,
+            ])?;
+
+            let terminal_menu = Submenu::with_items(app, "Terminal", true, &[
+                &MenuItem::with_id(app, "toggle-terminal", "Terminal ein-/ausblenden", true, None::<&str>)?,
+                &MenuItem::with_id(app, "new-terminal", "Neues Terminal", true, None::<&str>)?,
+            ])?;
+
+            let help_menu = Submenu::with_items(app, "Hilfe", true, &[
+                &MenuItem::with_id(app, "about", "Über Speicher Analyse", true, None::<&str>)?,
+            ])?;
+
+            let menu = Menu::with_items(app, &[
+                &file_menu,
+                &edit_menu,
+                &view_menu,
+                &terminal_menu,
+                &help_menu,
+            ])?;
+
+            app.set_menu(menu)?;
+
+            eprintln!("[Tauri] App gestartet, Menüleiste erstellt");
+
+            Ok(())
+        })
+        .on_menu_event(|app, event| {
+            match event.id().as_ref() {
+                "reload" => {
+                    if let Some(w) = app.get_webview_window("main") {
+                        let _ = w.eval("location.reload()");
+                    }
+                }
+                "dev-tools" => {
+                    #[cfg(debug_assertions)]
+                    if let Some(w) = app.get_webview_window("main") {
+                        w.open_devtools();
+                    }
+                }
+                "toggle-terminal" => {
+                    let _ = app.emit("toggle-terminal", serde_json::json!({}));
+                }
+                "new-terminal" => {
+                    let _ = app.emit("new-terminal", serde_json::json!({}));
+                }
+                "about" => {
+                    let _ = app.emit("menu-action", serde_json::json!({"action": "about"}));
+                }
+                _ => {}
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             // Drive & Scan
             commands::get_drives,
