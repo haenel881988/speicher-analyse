@@ -103,6 +103,16 @@ pub async fn get_drives() -> Result<Value, String> {
 #[tauri::command]
 pub async fn start_scan(app: tauri::AppHandle, path: String) -> Result<Value, String> {
     eprintln!("[start_scan] Called with path: {}", path);
+
+    // Validate path exists before starting scan
+    if !Path::new(&path).exists() {
+        let _ = app.emit("scan-error", json!({
+            "error": format!("Pfad existiert nicht: {}", path),
+            "path": &path
+        }));
+        return Err(format!("Pfad existiert nicht: {}", path));
+    }
+
     let scan_id = format!("scan_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis());
     let sid = scan_id.clone();
     let scan_id_ret = scan_id.clone();
@@ -2261,8 +2271,23 @@ pub async fn update_ui_state(ui_state: Option<Value>) -> Result<Value, String> {
 // === Folder Sizes ===
 
 #[tauri::command]
-pub async fn get_folder_sizes_bulk(scan_id: String, folder_paths: Vec<String>, _parent_path: Option<String>) -> Result<Value, String> {
-    Ok(crate::scan::folder_sizes_bulk(&scan_id, &folder_paths))
+pub async fn get_folder_sizes_bulk(scan_id: String, folder_paths: Vec<String>, parent_path: Option<String>) -> Result<Value, String> {
+    let flat = crate::scan::folder_sizes_bulk(&scan_id, &folder_paths);
+    // Transform flat {path: size} into {folders: {path: {size}}, parent: {size}}
+    let mut folders = serde_json::Map::new();
+    if let Some(obj) = flat.as_object() {
+        for (path, size) in obj {
+            folders.insert(path.clone(), json!({"size": size}));
+        }
+    }
+    let parent_size = parent_path
+        .map(|pp| crate::scan::folder_sizes_bulk(&scan_id, &[pp]))
+        .and_then(|v| v.as_object()?.values().next()?.as_u64())
+        .unwrap_or(0);
+    Ok(json!({
+        "folders": folders,
+        "parent": { "size": parent_size }
+    }))
 }
 
 // === Screenshot ===

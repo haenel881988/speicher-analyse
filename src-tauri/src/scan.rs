@@ -234,7 +234,8 @@ pub fn tree_node(scan_id: &str, path: &str, _depth: u32) -> Value {
             }
         }
 
-        // Count subdirectories within each subdirectory
+        // Count unique direct subdirectories within each subdirectory
+        let mut subdir_children: HashMap<String, std::collections::HashSet<String>> = HashMap::new();
         for f in &data.files {
             if !f.path.starts_with(&path_prefix) { continue; }
             let relative = &f.path[path_prefix.len()..];
@@ -242,12 +243,9 @@ pub fn tree_node(scan_id: &str, path: &str, _depth: u32) -> Value {
                 let subdir_name = &relative[..sep];
                 let subdir_path = format!("{}{}", path_prefix, subdir_name);
                 let rest = &relative[sep+1..];
-                if rest.contains('\\') {
-                    // Has sub-subdirectories
-                    if let Some(_entry) = subdirs.get_mut(&subdir_path) {
-                        // Count unique direct subdirs within this subdir
-                        // (We'll estimate dir_count from file paths)
-                    }
+                if let Some(sep2) = rest.find('\\') {
+                    let child_subdir = rest[..sep2].to_string();
+                    subdir_children.entry(subdir_path).or_default().insert(child_subdir);
                 }
             }
         }
@@ -257,12 +255,13 @@ pub fn tree_node(scan_id: &str, path: &str, _depth: u32) -> Value {
 
         let mut children: Vec<Value> = subdirs.iter().map(|(subdir_path, (size, file_count, _))| {
             let name = subdir_path.rsplit('\\').next().unwrap_or(subdir_path);
+            let dir_count = subdir_children.get(subdir_path).map(|s| s.len()).unwrap_or(0);
             json!({
                 "path": subdir_path,
                 "name": name,
                 "size": size,
                 "isDir": true,
-                "dir_count": 0,
+                "dir_count": dir_count,
                 "file_count": file_count
             })
         }).collect();
