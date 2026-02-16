@@ -39,6 +39,7 @@ const state = {
     scanning: false,
     capabilities: null,
     batteryInfo: null,
+    batteryIntervalId: null,
 };
 
 // Track which tabs have been auto-loaded this session
@@ -230,7 +231,7 @@ async function init() {
             window.api.setPreference('theme', lsTheme).catch(() => {});
         }
     } catch { /* use default interval */ }
-    setInterval(updateBatteryUI, batteryInterval);
+    state.batteryIntervalId = setInterval(updateBatteryUI, batteryInterval);
 
     // Smart Reload: State wiederherstellen nach F5 (page reload mit State-Preservation)
     const reloadStateJson = sessionStorage.getItem('speicher-analyse-reload-state');

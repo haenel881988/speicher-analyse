@@ -4,6 +4,33 @@ use std::path::Path;
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 
+// === Validation Helpers ===
+
+fn validate_ip(ip: &str) -> Result<(), String> {
+    let parts: Vec<&str> = ip.split('.').collect();
+    if parts.len() != 4 {
+        return Err(format!("Ungültige IP-Adresse: {}", ip));
+    }
+    for part in &parts {
+        match part.parse::<u8>() {
+            Ok(_) => {}
+            Err(_) => return Err(format!("Ungültige IP-Adresse: {}", ip)),
+        }
+    }
+    Ok(())
+}
+
+fn validate_path(p: &str) -> Result<(), String> {
+    let p_lower = p.to_lowercase().replace('/', "\\");
+    let blocked = ["\\windows\\system32", "\\windows\\syswow64"];
+    for b in &blocked {
+        if p_lower.contains(b) {
+            return Err(format!("Zugriff auf Systempfad verweigert: {}", p));
+        }
+    }
+    Ok(())
+}
+
 // === Network State (bandwidth delta, history, prev connections) ===
 
 struct BwPrev {
@@ -223,6 +250,7 @@ pub async fn delete_to_trash(paths: Vec<String>) -> Result<Value, String> {
 #[tauri::command]
 pub async fn delete_permanent(paths: Vec<String>) -> Result<Value, String> {
     for p in &paths {
+        validate_path(p)?;
         let path = Path::new(p);
         if path.is_dir() {
             tokio::fs::remove_dir_all(path).await.map_err(|e| e.to_string())?;
@@ -251,6 +279,7 @@ pub async fn file_rename(old_path: String, new_name: String) -> Result<Value, St
 #[tauri::command]
 pub async fn file_move(source_paths: Vec<String>, dest_dir: String) -> Result<Value, String> {
     for src in &source_paths {
+        validate_path(src)?;
         let name = Path::new(src).file_name().unwrap_or_default();
         let dest = Path::new(&dest_dir).join(name);
         tokio::fs::rename(src, &dest).await.map_err(|e| e.to_string())?;
@@ -261,6 +290,7 @@ pub async fn file_move(source_paths: Vec<String>, dest_dir: String) -> Result<Va
 #[tauri::command]
 pub async fn file_copy(source_paths: Vec<String>, dest_dir: String) -> Result<Value, String> {
     for src in &source_paths {
+        validate_path(src)?;
         let name = Path::new(src).file_name().unwrap_or_default();
         let dest = Path::new(&dest_dir).join(name);
         tokio::fs::copy(src, &dest).await.map_err(|e| e.to_string())?;
@@ -396,6 +426,10 @@ pub async fn clean_category(_category_id: String, paths: Vec<String>) -> Result<
     let mut deleted_count: u64 = 0;
     let mut errors: Vec<Value> = Vec::new();
     for p in &paths {
+        if let Err(e) = validate_path(p) {
+            errors.push(json!({"path": p, "error": e}));
+            continue;
+        }
         let path = Path::new(p);
         let result = if path.is_dir() {
             // Count files before deleting
@@ -434,6 +468,7 @@ pub async fn read_file_content(file_path: String) -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn write_file_content(file_path: String, content: String) -> Result<Value, String> {
+    validate_path(&file_path)?;
     tokio::fs::write(&file_path, &content).await.map_err(|e| e.to_string())?;
     Ok(json!({ "success": true }))
 }
@@ -479,12 +514,12 @@ $categories | ConvertTo-Json -Depth 3 -Compress"#
 
 #[tauri::command]
 pub async fn export_registry_backup(_entries: Value) -> Result<Value, String> {
-    Ok(json!({ "success": true, "path": "" }))
+    Ok(json!({ "stub": true, "message": "Registry-Backup exportieren ist noch nicht implementiert" }))
 }
 
 #[tauri::command]
 pub async fn clean_registry(_entries: Value) -> Result<Value, String> {
-    Ok(json!({ "success": true, "results": [], "backupPath": "" }))
+    Ok(json!({ "stub": true, "message": "Registry bereinigen ist noch nicht implementiert" }))
 }
 
 #[tauri::command]
@@ -529,12 +564,12 @@ $entries | ConvertTo-Json -Compress"#
 
 #[tauri::command]
 pub async fn toggle_autostart(_entry: Value, _enabled: bool) -> Result<Value, String> {
-    Ok(json!({ "success": true }))
+    Ok(json!({ "stub": true, "message": "Autostart-Eintrag umschalten ist noch nicht implementiert" }))
 }
 
 #[tauri::command]
 pub async fn delete_autostart(_entry: Value) -> Result<Value, String> {
-    Ok(json!({ "success": true }))
+    Ok(json!({ "stub": true, "message": "Autostart-Eintrag löschen ist noch nicht implementiert" }))
 }
 
 // === Services ===
@@ -552,10 +587,11 @@ $stt = switch([int]$_.StartType){0{'Boot'}1{'System'}2{'Automatic'}3{'Manual'}4{
 
 #[tauri::command]
 pub async fn control_service(name: String, action: String) -> Result<Value, String> {
+    let safe_name = name.replace("'", "''");
     let cmd = match action.as_str() {
-        "start" => format!("Start-Service '{}'", name),
-        "stop" => format!("Stop-Service '{}' -Force", name),
-        "restart" => format!("Restart-Service '{}' -Force", name),
+        "start" => format!("Start-Service '{}'", safe_name),
+        "stop" => format!("Stop-Service '{}' -Force", safe_name),
+        "restart" => format!("Restart-Service '{}' -Force", safe_name),
         _ => return Err(format!("Unknown action: {}", action)),
     };
     crate::ps::run_ps(&cmd).await?;
@@ -571,7 +607,8 @@ pub async fn set_service_start_type(name: String, start_type: String) -> Result<
         "disabled" => "Disabled",
         other => other, // pass through if already correct format
     };
-    crate::ps::run_ps(&format!("Set-Service '{}' -StartupType '{}'", name, ps_type)).await?;
+    let safe_name = name.replace("'", "''");
+    crate::ps::run_ps(&format!("Set-Service '{}' -StartupType '{}'", safe_name, ps_type)).await?;
     Ok(json!({ "success": true }))
 }
 
@@ -593,7 +630,7 @@ $opts | ConvertTo-Json -Compress"#
 
 #[tauri::command]
 pub async fn apply_optimization(id: String) -> Result<Value, String> {
-    Ok(json!({ "success": true, "id": id }))
+    Ok(json!({ "stub": true, "message": "Optimierung anwenden ist noch nicht implementiert", "id": id }))
 }
 
 // === Bloatware ===
@@ -621,7 +658,8 @@ Get-AppxPackage | Where-Object { $_.IsFramework -eq $false -and $_.SignatureKind
 #[tauri::command]
 pub async fn uninstall_bloatware(entry: Value) -> Result<Value, String> {
     if let Some(pkg) = entry.get("packageFullName").and_then(|v| v.as_str()) {
-        crate::ps::run_ps(&format!("Remove-AppxPackage '{}'", pkg)).await?;
+        let safe_pkg = pkg.replace("'", "''");
+        crate::ps::run_ps(&format!("Remove-AppxPackage '{}'", safe_pkg)).await?;
     }
     Ok(json!({ "success": true }))
 }
@@ -677,7 +715,8 @@ pub async fn check_software_updates() -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn update_software(package_id: String) -> Result<Value, String> {
-    crate::ps::run_ps(&format!("winget upgrade '{}' --accept-package-agreements --accept-source-agreements", package_id)).await?;
+    let safe_id = package_id.replace("'", "''");
+    crate::ps::run_ps(&format!("winget upgrade '{}' --accept-package-agreements --accept-source-agreements", safe_id)).await?;
     Ok(json!({ "success": true }))
 }
 
@@ -837,7 +876,8 @@ pub async fn open_in_terminal(dir_path: String) -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn open_with_dialog(file_path: String) -> Result<Value, String> {
-    crate::ps::run_ps(&format!("Start-Process rundll32.exe -ArgumentList 'shell32.dll,OpenAs_RunDLL {}'", file_path)).await?;
+    let safe_path = file_path.replace("'", "''");
+    crate::ps::run_ps(&format!("Start-Process rundll32.exe -ArgumentList 'shell32.dll,OpenAs_RunDLL \"{}\"'", safe_path)).await?;
     Ok(json!({ "success": true }))
 }
 
@@ -908,12 +948,12 @@ pub async fn get_tag_colors() -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn set_file_tag(_file_path: String, _color: String, _note: Option<String>) -> Result<Value, String> {
-    Ok(json!({ "success": true }))
+    Ok(json!({ "stub": true, "message": "Datei-Tag setzen ist noch nicht implementiert" }))
 }
 
 #[tauri::command]
 pub async fn remove_file_tag(_file_path: String) -> Result<Value, String> {
-    Ok(json!({ "success": true }))
+    Ok(json!({ "stub": true, "message": "Datei-Tag entfernen ist noch nicht implementiert" }))
 }
 
 #[tauri::command]
@@ -935,12 +975,12 @@ pub async fn get_all_tags() -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn register_shell_context_menu() -> Result<Value, String> {
-    Ok(json!({ "success": true }))
+    Ok(json!({ "stub": true, "message": "Shell-Kontextmenü registrieren ist noch nicht implementiert" }))
 }
 
 #[tauri::command]
 pub async fn unregister_shell_context_menu() -> Result<Value, String> {
-    Ok(json!({ "success": true }))
+    Ok(json!({ "stub": true, "message": "Shell-Kontextmenü entfernen ist noch nicht implementiert" }))
 }
 
 #[tauri::command]
@@ -952,7 +992,7 @@ pub async fn is_shell_context_menu_registered() -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn set_global_hotkey(_accelerator: String) -> Result<Value, String> {
-    Ok(json!({ "success": true }))
+    Ok(json!({ "stub": true, "message": "Globaler Hotkey setzen ist noch nicht implementiert" }))
 }
 
 #[tauri::command]
@@ -1030,22 +1070,22 @@ $sl=(Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelU
 
 #[tauri::command]
 pub async fn apply_privacy_setting(id: String) -> Result<Value, String> {
-    Ok(json!({ "success": true, "id": id }))
+    Ok(json!({ "stub": true, "message": "Datenschutz-Einstellung anwenden ist noch nicht implementiert", "id": id }))
 }
 
 #[tauri::command]
 pub async fn apply_all_privacy() -> Result<Value, String> {
-    Ok(json!({ "success": true }))
+    Ok(json!({ "stub": true, "message": "Alle Datenschutz-Einstellungen anwenden ist noch nicht implementiert" }))
 }
 
 #[tauri::command]
 pub async fn reset_privacy_setting(id: String) -> Result<Value, String> {
-    Ok(json!({ "success": true, "id": id }))
+    Ok(json!({ "stub": true, "message": "Datenschutz-Einstellung zurücksetzen ist noch nicht implementiert", "id": id }))
 }
 
 #[tauri::command]
 pub async fn reset_all_privacy() -> Result<Value, String> {
-    Ok(json!({ "success": true }))
+    Ok(json!({ "stub": true, "message": "Alle Datenschutz-Einstellungen zurücksetzen ist noch nicht implementiert" }))
 }
 
 #[tauri::command]
@@ -1077,12 +1117,12 @@ pub async fn check_sideloading() -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn fix_sideloading() -> Result<Value, String> {
-    Ok(json!({ "success": true }))
+    Ok(json!({ "stub": true, "message": "Sideloading-Fix ist noch nicht implementiert" }))
 }
 
 #[tauri::command]
 pub async fn fix_sideloading_with_elevation() -> Result<Value, String> {
-    Ok(json!({ "success": true }))
+    Ok(json!({ "stub": true, "message": "Sideloading-Fix mit Elevation ist noch nicht implementiert" }))
 }
 
 #[tauri::command]
@@ -1280,9 +1320,14 @@ $sm = @{}; foreach ($s in $stats) { $sm[$s.Name] = $s }
 #[tauri::command]
 pub async fn get_firewall_rules(direction: Option<String>) -> Result<Value, String> {
     let dir = direction.unwrap_or_else(|| "Inbound".to_string());
+    let safe_dir = match dir.as_str() {
+        "Inbound" => "Inbound",
+        "Outbound" => "Outbound",
+        _ => return Err("Ungültige Richtung: nur 'Inbound' oder 'Outbound' erlaubt".to_string()),
+    };
     let script = format!(
         r#"Get-NetFirewallRule -Direction '{}' -Enabled True -ErrorAction SilentlyContinue | Select-Object DisplayName, Direction, Action, Profile -First 100 | ConvertTo-Json -Compress"#,
-        dir
+        safe_dir
     );
     crate::ps::run_ps_json_array(&script).await
 }
@@ -1290,9 +1335,11 @@ pub async fn get_firewall_rules(direction: Option<String>) -> Result<Value, Stri
 #[tauri::command]
 pub async fn block_process(name: String, path: Option<String>) -> Result<Value, String> {
     let prog = path.unwrap_or_else(|| name.clone());
+    let safe_name = name.replace("'", "''");
+    let safe_prog = prog.replace("'", "''");
     let script = format!(
         r#"New-NetFirewallRule -DisplayName 'Block {}' -Direction Outbound -Program '{}' -Action Block"#,
-        name, prog
+        safe_name, safe_prog
     );
     crate::ps::run_ps(&script).await?;
     Ok(json!({ "success": true }))
@@ -1300,7 +1347,8 @@ pub async fn block_process(name: String, path: Option<String>) -> Result<Value, 
 
 #[tauri::command]
 pub async fn unblock_process(rule_name: String) -> Result<Value, String> {
-    crate::ps::run_ps(&format!("Remove-NetFirewallRule -DisplayName '{}'", rule_name)).await?;
+    let safe_name = rule_name.replace("'", "''");
+    crate::ps::run_ps(&format!("Remove-NetFirewallRule -DisplayName '{}'", safe_name)).await?;
     Ok(json!({ "success": true }))
 }
 
@@ -1694,6 +1742,7 @@ pub async fn get_last_network_scan() -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn scan_device_ports(ip: String) -> Result<Value, String> {
+    validate_ip(&ip)?;
     let script = format!(
         r#"$portLabels = @{{21='FTP';22='SSH';23='Telnet';25='SMTP';53='DNS';80='HTTP';139='NetBIOS';443='HTTPS';445='SMB';3389='RDP';5900='VNC';8080='HTTP-Proxy'}}
 $ports = @(21,22,23,25,53,80,139,443,445,3389,5900,8080)
@@ -1716,6 +1765,7 @@ $results | ConvertTo-Json -Compress"#, ip
 
 #[tauri::command]
 pub async fn get_smb_shares(ip: String) -> Result<Value, String> {
+    validate_ip(&ip)?;
     let script = format!(
         r#"@(Get-SmbConnection -ServerName '{}' -ErrorAction SilentlyContinue | ForEach-Object {{ [PSCustomObject]@{{ name=$_.ShareName; path="\\$($_.ServerName)\$($_.ShareName)" }} }}) | ConvertTo-Json -Compress"#, ip
     );
@@ -1724,7 +1774,7 @@ pub async fn get_smb_shares(ip: String) -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn update_oui_database() -> Result<Value, String> {
-    Ok(json!({ "success": true }))
+    Ok(json!({ "stub": true, "message": "OUI-Datenbank aktualisieren ist noch nicht implementiert" }))
 }
 
 // === System Info ===
@@ -1799,12 +1849,12 @@ pub async fn get_preferences() -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn set_preference(_key: String, _value: Value) -> Result<Value, String> {
-    Ok(json!({ "success": true }))
+    Ok(json!({ "stub": true, "message": "Einstellungen speichern ist noch nicht implementiert" }))
 }
 
 #[tauri::command]
 pub async fn set_preferences_multiple(_entries: Value) -> Result<Value, String> {
-    Ok(json!({ "success": true }))
+    Ok(json!({ "stub": true, "message": "Einstellungen speichern ist noch nicht implementiert" }))
 }
 
 // === Session ===
@@ -1816,12 +1866,12 @@ pub async fn get_session_info() -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn save_session_now(_ui_state: Option<Value>) -> Result<Value, String> {
-    Ok(json!({ "success": true }))
+    Ok(json!({ "stub": true, "message": "Sitzung speichern ist noch nicht implementiert" }))
 }
 
 #[tauri::command]
 pub async fn update_ui_state(_ui_state: Option<Value>) -> Result<Value, String> {
-    Ok(json!({ "success": true }))
+    Ok(json!({ "stub": true, "message": "UI-Zustand speichern ist noch nicht implementiert" }))
 }
 
 // === Folder Sizes ===

@@ -51,7 +51,7 @@ export class RegistryView {
             this.categories = await window.api.scanRegistry();
             this.renderResults();
         } catch (e) {
-            resultsEl.innerHTML = `<div class="tool-error">Fehler: ${e.message}<br>Möglicherweise sind Administratorrechte erforderlich.</div>`;
+            resultsEl.innerHTML = `<div class="tool-error">Fehler: ${this.esc(e.message)}<br>Möglicherweise sind Administratorrechte erforderlich.</div>`;
         }
     }
 

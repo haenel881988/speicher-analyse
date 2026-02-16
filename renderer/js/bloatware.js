@@ -62,7 +62,7 @@ export class BloatwareView {
             this.renderResults();
             this.setupActions();
         } catch (err) {
-            resultsEl.innerHTML = `<div class="tool-error">Fehler: ${err.message}</div>`;
+            resultsEl.innerHTML = `<div class="tool-error">Fehler: ${escapeHtml(err.message)}</div>`;
         }
     }
 
@@ -188,7 +188,10 @@ export class BloatwareView {
         // Toast-Nachricht
         const toast = document.createElement('div');
         toast.className = `toast ${failed > 0 ? 'error' : 'success'}`;
-        toast.innerHTML = `<span class="toast-text">${msg}</span>`;
+        const textSpan = document.createElement('span');
+        textSpan.className = 'toast-text';
+        textSpan.textContent = msg;
+        toast.appendChild(textSpan);
         document.getElementById('toast-container').appendChild(toast);
         setTimeout(() => toast.remove(), 5000);
 

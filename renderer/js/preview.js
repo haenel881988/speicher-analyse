@@ -163,7 +163,7 @@ export class EditorPanel {
 
         const result = await window.api.readFileContent(filePath);
         if (result.error) {
-            this.container.innerHTML = `<div class="preview-error">Fehler: ${result.error}</div>`;
+            this.container.innerHTML = `<div class="preview-error">Fehler: ${this.escapeHtml(result.error)}</div>`;
             return;
         }
 
@@ -267,15 +267,17 @@ if(!Uint8Array.fromHex){Uint8Array.fromHex=function(s){const b=new Uint8Array(s.
             this.container.innerHTML = `
                 <div class="preview-error">
                     <p>PDF-Vorschau nicht verfügbar (pdf.js konnte nicht geladen werden).</p>
-                    <button class="pdf-btn" onclick="window.api.openFile('${filePath.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}')">PDF extern öffnen</button>
+                    <button class="pdf-btn" id="pdf-open-fallback">PDF extern öffnen</button>
                 </div>`;
+            const fallbackBtn = this.container.querySelector('#pdf-open-fallback');
+            if (fallbackBtn) fallbackBtn.onclick = () => window.api.openFile(filePath);
             return;
         }
 
         try {
             const result = await window.api.readFileBinary(filePath);
             if (result.error) {
-                this.container.innerHTML = `<div class="preview-error">Fehler: ${result.error}</div>`;
+                this.container.innerHTML = `<div class="preview-error">Fehler: ${this.escapeHtml(result.error)}</div>`;
                 return;
             }
 
@@ -349,7 +351,7 @@ if(!Uint8Array.fromHex){Uint8Array.fromHex=function(s){const b=new Uint8Array(s.
                 window.api.openFile(filePath);
             };
         } catch (err) {
-            this.container.innerHTML = `<div class="preview-error">PDF-Fehler: ${err.message}</div>`;
+            this.container.innerHTML = `<div class="preview-error">PDF-Fehler: ${this.escapeHtml(err.message)}</div>`;
         }
     }
 
@@ -366,7 +368,7 @@ if(!Uint8Array.fromHex){Uint8Array.fromHex=function(s){const b=new Uint8Array(s.
         try {
             const result = await window.api.readFileBinary(filePath);
             if (result.error) {
-                this.container.innerHTML = `<div class="preview-error">Fehler: ${result.error}</div>`;
+                this.container.innerHTML = `<div class="preview-error">Fehler: ${this.escapeHtml(result.error)}</div>`;
                 return;
             }
 
@@ -398,7 +400,7 @@ if(!Uint8Array.fromHex){Uint8Array.fromHex=function(s){const b=new Uint8Array(s.
                 }
             }
         } catch (err) {
-            this.container.innerHTML = `<div class="preview-error">DOCX-Fehler: ${err.message}</div>`;
+            this.container.innerHTML = `<div class="preview-error">DOCX-Fehler: ${this.escapeHtml(err.message)}</div>`;
         }
     }
 
@@ -415,7 +417,7 @@ if(!Uint8Array.fromHex){Uint8Array.fromHex=function(s){const b=new Uint8Array(s.
         try {
             const result = await window.api.readFileBinary(filePath);
             if (result.error) {
-                this.container.innerHTML = `<div class="preview-error">Fehler: ${result.error}</div>`;
+                this.container.innerHTML = `<div class="preview-error">Fehler: ${this.escapeHtml(result.error)}</div>`;
                 return;
             }
 
@@ -487,7 +489,7 @@ if(!Uint8Array.fromHex){Uint8Array.fromHex=function(s){const b=new Uint8Array(s.
 
             renderSheet(workbook.SheetNames[0]);
         } catch (err) {
-            this.container.innerHTML = `<div class="preview-error">Excel-Fehler: ${err.message}</div>`;
+            this.container.innerHTML = `<div class="preview-error">Excel-Fehler: ${this.escapeHtml(err.message)}</div>`;
         }
     }
 
@@ -507,7 +509,7 @@ if(!Uint8Array.fromHex){Uint8Array.fromHex=function(s){const b=new Uint8Array(s.
         try {
             const result = await window.api.readFilePreview(filePath, 500);
             if (result.error) {
-                this.container.innerHTML = `<div class="preview-error">${result.error}</div>`;
+                this.container.innerHTML = `<div class="preview-error">${this.escapeHtml(result.error)}</div>`;
                 return;
             }
 
@@ -522,7 +524,7 @@ if(!Uint8Array.fromHex){Uint8Array.fromHex=function(s){const b=new Uint8Array(s.
                 <pre class="preview-text">${numbered}</pre>
             `;
         } catch (e) {
-            this.container.innerHTML = `<div class="preview-error">Fehler: ${e.message}</div>`;
+            this.container.innerHTML = `<div class="preview-error">Fehler: ${this.escapeHtml(e.message)}</div>`;
         }
     }
 
@@ -530,7 +532,7 @@ if(!Uint8Array.fromHex){Uint8Array.fromHex=function(s){const b=new Uint8Array(s.
         try {
             const props = await window.api.getProperties(filePath);
             if (props.error) {
-                this.container.innerHTML = `<div class="preview-error">${props.error}</div>`;
+                this.container.innerHTML = `<div class="preview-error">${this.escapeHtml(props.error)}</div>`;
                 return;
             }
 
@@ -549,7 +551,7 @@ if(!Uint8Array.fromHex){Uint8Array.fromHex=function(s){const b=new Uint8Array(s.
                 </div>
             `;
         } catch (e) {
-            this.container.innerHTML = `<div class="preview-error">Fehler: ${e.message}</div>`;
+            this.container.innerHTML = `<div class="preview-error">Fehler: ${this.escapeHtml(e.message)}</div>`;
         }
     }
 

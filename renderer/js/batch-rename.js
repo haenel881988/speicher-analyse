@@ -33,6 +33,13 @@ export class BatchRenameModal {
         this.files = [];
     }
 
+    destroy() {
+        this.close();
+        if (this.el && this.el.parentNode) {
+            this.el.parentNode.removeChild(this.el);
+        }
+    }
+
     // ===== Build DOM =====
 
     _build() {

@@ -69,7 +69,7 @@ export class OldFilesView {
             this.selectedFiles.clear();
             this.renderResults();
         } catch (e) {
-            resultsEl.innerHTML = `<div class="tool-error">Fehler: ${e.message}</div>`;
+            resultsEl.innerHTML = `<div class="tool-error">Fehler: ${this.esc(e.message)}</div>`;
         }
     }
 

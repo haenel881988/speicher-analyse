@@ -11,10 +11,19 @@ export class TreemapView {
         this.rootPath = null;
         this.history = [];
         this.onContextMenu = null;
+        this._resizeTimer = null;
         this.resizeObserver = new ResizeObserver(() => {
-            if (this.scanId && this.rootPath) this.render(this.rootPath);
+            clearTimeout(this._resizeTimer);
+            this._resizeTimer = setTimeout(() => {
+                if (this.scanId && this.rootPath) this.render(this.rootPath);
+            }, 200);
         });
         this.resizeObserver.observe(this.container);
+    }
+
+    destroy() {
+        clearTimeout(this._resizeTimer);
+        this.resizeObserver.disconnect();
     }
 
     init(scanId, rootPath) {
@@ -203,7 +212,7 @@ export class TreemapView {
 
     showTooltip(e, item, pct) {
         this.tooltipName.textContent = item.name;
-        this.tooltipDetail.innerHTML = `Größe: <strong>${formatBytes(item.size)}</strong> (${pct}%)<br>${item.dir_count > 0 ? `Ordner: ${item.dir_count}<br>` : ''}${item.file_count > 0 ? `Dateien: ${item.file_count}<br>` : ''}<span style="color:var(--text-muted);font-size:11px">${item.path}</span>`;
+        this.tooltipDetail.innerHTML = `Größe: <strong>${formatBytes(item.size)}</strong> (${pct}%)<br>${item.dir_count > 0 ? `Ordner: ${item.dir_count}<br>` : ''}${item.file_count > 0 ? `Dateien: ${item.file_count}<br>` : ''}<span style="color:var(--text-muted);font-size:11px">${this.escapeHtml(item.path)}</span>`;
         this.tooltip.style.display = 'block';
         this.moveTooltip(e);
     }

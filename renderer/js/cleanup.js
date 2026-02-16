@@ -42,7 +42,7 @@ export class CleanupView {
             this.categories = await window.api.scanCleanupCategories(this.scanId);
             this.renderResults();
         } catch (e) {
-            resultsEl.innerHTML = `<div class="tool-error">Fehler: ${e.message}</div>`;
+            resultsEl.innerHTML = `<div class="tool-error">Fehler: ${this.esc(e.message)}</div>`;
         }
     }
 

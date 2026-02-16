@@ -7,6 +7,7 @@ export class DuplicatesView {
         this.scanId = null;
         this.results = null;
         this.scanning = false;
+        this._listenersRegistered = false;
     }
 
     init(scanId) {
@@ -62,30 +63,41 @@ export class DuplicatesView {
         progressEl.style.display = 'block';
         resultsEl.innerHTML = '';
 
-        window.api.onDuplicateProgress((data) => {
-            const pct = data.totalToHash > 0 ? (data.filesHashed / data.totalToHash * 100) : 0;
-            this.container.querySelector('#dup-progress-bar').style.width = pct + '%';
-            const etaText = data.eta > 0 ? ` · ca. ${data.eta}s` : '';
-            this.container.querySelector('#dup-progress-text').textContent =
-                `${data.phase === 'partial-hash' ? 'Vorab-Prüfung' : 'Vollständiger Hash'}: ${data.filesHashed}/${data.totalToHash}${etaText} - ${data.currentFile}`;
-        });
+        if (!this._listenersRegistered) {
+            this._listenersRegistered = true;
+            window.api.onDuplicateProgress((data) => {
+                const pct = data.totalToHash > 0 ? (data.filesHashed / data.totalToHash * 100) : 0;
+                const bar = this.container.querySelector('#dup-progress-bar');
+                if (bar) bar.style.width = pct + '%';
+                const etaText = data.eta > 0 ? ` · ca. ${data.eta}s` : '';
+                const text = this.container.querySelector('#dup-progress-text');
+                if (text) text.textContent =
+                    `${data.phase === 'partial-hash' ? 'Vorab-Prüfung' : 'Vollständiger Hash'}: ${data.filesHashed}/${data.totalToHash}${etaText} - ${data.currentFile}`;
+            });
 
-        window.api.onDuplicateComplete((data) => {
-            this.scanning = false;
-            this.results = data;
-            startBtn.style.display = 'inline-block';
-            cancelBtn.style.display = 'none';
-            progressEl.style.display = 'none';
-            this.renderResults();
-        });
+            window.api.onDuplicateComplete((data) => {
+                this.scanning = false;
+                this.results = data;
+                const sb = this.container.querySelector('#dup-start-scan');
+                const cb = this.container.querySelector('#dup-cancel-scan');
+                const pg = this.container.querySelector('#dup-progress');
+                if (sb) sb.style.display = 'inline-block';
+                if (cb) cb.style.display = 'none';
+                if (pg) pg.style.display = 'none';
+                this.renderResults();
+            });
 
-        window.api.onDuplicateError((data) => {
-            this.scanning = false;
-            startBtn.style.display = 'inline-block';
-            cancelBtn.style.display = 'none';
-            progressEl.style.display = 'none';
-            showToast(data.error || 'Duplikat-Scan fehlgeschlagen', 'error');
-        });
+            window.api.onDuplicateError((data) => {
+                this.scanning = false;
+                const sb = this.container.querySelector('#dup-start-scan');
+                const cb = this.container.querySelector('#dup-cancel-scan');
+                const pg = this.container.querySelector('#dup-progress');
+                if (sb) sb.style.display = 'inline-block';
+                if (cb) cb.style.display = 'none';
+                if (pg) pg.style.display = 'none';
+                showToast(data.error || 'Duplikat-Scan fehlgeschlagen', 'error');
+            });
+        }
 
         try {
             const minSize = this.parseSize(this.container.querySelector('#dup-min-size').value);

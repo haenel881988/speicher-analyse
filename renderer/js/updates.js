@@ -1,4 +1,4 @@
-import { formatBytes } from './utils.js';
+import { formatBytes, escapeHtml, escapeAttr } from './utils.js';
 import { showToast } from './tree.js';
 
 export class UpdatesView {
@@ -398,14 +398,3 @@ export class UpdatesView {
     }
 }
 
-function escapeHtml(text) {
-    if (!text) return '';
-    const d = document.createElement('div');
-    d.textContent = String(text);
-    return d.innerHTML;
-}
-
-function escapeAttr(text) {
-    if (!text) return '';
-    return String(text).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-}

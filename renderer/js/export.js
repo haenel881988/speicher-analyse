@@ -65,7 +65,14 @@ function showToast(message, type) {
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
     const icons = { success: '\u2705', error: '\u274C', info: '\u2139\uFE0F' };
-    toast.innerHTML = `<span class="toast-icon">${icons[type] || icons.info}</span><span class="toast-text">${message}</span>`;
+    const iconSpan = document.createElement('span');
+    iconSpan.className = 'toast-icon';
+    iconSpan.textContent = icons[type] || icons.info;
+    const textSpan = document.createElement('span');
+    textSpan.className = 'toast-text';
+    textSpan.textContent = message;
+    toast.appendChild(iconSpan);
+    toast.appendChild(textSpan);
     container.appendChild(toast);
     setTimeout(() => { toast.style.animation = 'toastOut 0.3s ease forwards'; setTimeout(() => toast.remove(), 300); }, 4000);
 }

@@ -145,7 +145,7 @@ export async function showProperties(filePath) {
     try {
         const props = await window.api.getProperties(filePath);
         if (props.error) {
-            body.innerHTML = `<div style="color:var(--danger)">${props.error}</div>`;
+            body.innerHTML = `<div style="color:var(--danger)">${escapeHtml(props.error)}</div>`;
             return;
         }
 
@@ -164,7 +164,7 @@ export async function showProperties(filePath) {
             <div class="prop-row"><span class="prop-label">Schreibschutz</span><span class="prop-value">${props.readonly ? 'Ja' : 'Nein'}</span></div>
         `;
     } catch (e) {
-        body.innerHTML = `<div style="color:var(--danger)">Fehler: ${e.message}</div>`;
+        body.innerHTML = `<div style="color:var(--danger)">Fehler: ${escapeHtml(e.message)}</div>`;
     }
 }
 

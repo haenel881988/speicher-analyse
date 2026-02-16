@@ -1,6 +1,7 @@
 /**
  * System Score View - Overall system health dashboard with category breakdown.
  */
+import { escapeHtml } from './utils.js';
 
 export class SystemScoreView {
     constructor(container) {
@@ -50,7 +51,7 @@ export class SystemScoreView {
         const catClass = cat.score >= 70 ? 'score-good' : cat.score >= 40 ? 'score-warn' : 'score-bad';
         return `<div class="score-category-card">
             <div class="score-cat-header">
-                <span class="score-cat-name">${cat.name}</span>
+                <span class="score-cat-name">${escapeHtml(cat.name)}</span>
                 <span class="score-cat-weight">${cat.weight}%</span>
             </div>
             <div class="score-cat-bar">
@@ -58,7 +59,7 @@ export class SystemScoreView {
             </div>
             <div class="score-cat-footer">
                 <span class="score-cat-value ${catClass}">${cat.score}</span>
-                <span class="score-cat-desc">${cat.description}</span>
+                <span class="score-cat-desc">${escapeHtml(cat.description)}</span>
             </div>
         </div>`;
     }

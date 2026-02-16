@@ -116,6 +116,14 @@ function showStubWarning(message) {
     setTimeout(() => toast.remove(), 4000);
 }
 
+/**
+ * Escape-Funktion für HTML-Attribute (Anführungszeichen).
+ */
+export function escapeAttr(text) {
+    if (!text) return '';
+    return String(text).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 // Parse size string like "10MB", "1.5GB" to bytes
 export function parseSize(str) {
     if (!str) return 0;

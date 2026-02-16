@@ -1,4 +1,4 @@
-import { formatBytes } from './utils.js';
+import { formatBytes, escapeHtml } from './utils.js';
 
 export class OptimizerView {
     constructor(container) {
@@ -62,7 +62,7 @@ export class OptimizerView {
             summaryEl.textContent = `${this.recommendations.length} Empfehlungen`;
             this.renderResults();
         } catch (err) {
-            resultsEl.innerHTML = `<div class="tool-error">Fehler: ${err.message}</div>`;
+            resultsEl.innerHTML = `<div class="tool-error">Fehler: ${escapeHtml(err.message)}</div>`;
         }
     }
 
@@ -174,16 +174,14 @@ export class OptimizerView {
     }
 }
 
-function escapeHtml(text) {
-    const d = document.createElement('div');
-    d.textContent = text;
-    return d.innerHTML;
-}
 
 function showToastMsg(msg, type) {
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
-    toast.innerHTML = `<span class="toast-text">${msg}</span>`;
+    const textSpan = document.createElement('span');
+    textSpan.className = 'toast-text';
+    textSpan.textContent = msg;
+    toast.appendChild(textSpan);
     document.getElementById('toast-container').appendChild(toast);
     setTimeout(() => toast.remove(), 5000);
 }

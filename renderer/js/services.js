@@ -45,7 +45,7 @@ export class ServicesView {
             this.services = await window.api.getServices();
             this.renderTable();
         } catch (e) {
-            resultsEl.innerHTML = '<div class="tool-error">Fehler: ' + e.message + '<br>Möglicherweise sind Administratorrechte erforderlich.</div>';
+            resultsEl.innerHTML = '<div class="tool-error">Fehler: ' + this.esc(e.message) + '<br>Möglicherweise sind Administratorrechte erforderlich.</div>';
         }
     }
 

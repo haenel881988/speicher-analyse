@@ -28,8 +28,12 @@ pub async fn run_ps(script: &str) -> Result<String, String> {
     #[cfg(windows)]
     cmd.creation_flags(CREATE_NO_WINDOW);
 
-    let output = cmd.output()
+    let output = tokio::time::timeout(
+        std::time::Duration::from_secs(30),
+        cmd.output()
+    )
         .await
+        .map_err(|_| "PowerShell-Timeout nach 30 Sekunden".to_string())?
         .map_err(|e| format!("PowerShell start failed: {}", e))?;
 
     if output.status.success() {

@@ -45,7 +45,7 @@ export class AutostartView {
             this.entries = await window.api.getAutoStartEntries();
             this.renderEntries();
         } catch (e) {
-            resultsEl.innerHTML = '<div class="tool-error">Fehler: ' + e.message + '<br>Möglicherweise sind Administratorrechte erforderlich.</div>';
+            resultsEl.innerHTML = '<div class="tool-error">Fehler: ' + this.esc(e.message) + '<br>Möglicherweise sind Administratorrechte erforderlich.</div>';
         }
     }
 

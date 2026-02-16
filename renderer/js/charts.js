@@ -136,7 +136,7 @@ export class FileTypeChart {
             const files = await window.api.getFilesByExtension(this.scanId, ext, 500);
             this.renderDetailFiles(files, body);
         } catch (e) {
-            body.innerHTML = `<tr><td colspan="5" style="color:var(--danger)">Fehler: ${e.message}</td></tr>`;
+            body.innerHTML = `<tr><td colspan="5" style="color:var(--danger)">Fehler: ${escapeHtml(e.message)}</td></tr>`;
         }
     }
 
@@ -150,7 +150,7 @@ export class FileTypeChart {
             const files = await window.api.getFilesByCategory(this.scanId, category, 500);
             this.renderDetailFiles(files, body);
         } catch (e) {
-            body.innerHTML = `<tr><td colspan="5" style="color:var(--danger)">Fehler: ${e.message}</td></tr>`;
+            body.innerHTML = `<tr><td colspan="5" style="color:var(--danger)">Fehler: ${escapeHtml(e.message)}</td></tr>`;
         }
     }
 
