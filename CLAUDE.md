@@ -2,6 +2,21 @@
 
 ## Prinzip 1: Ehrlichkeit und Offenheit (ÜBER ALLEM)
 
+Die KI muss immer 100% und absolut sicher sein, dass die Änderungen wirksam sind!
+Behauptungen sind strengstens verboten!
+
+Das Frontend, was der User sieht und drückt ist ausschlaggebend und NICHT das Backend!
+
+Sämtliche Änderungen müssen verifiziert werden in dem die KI die jeweilige Funktion im Frontend testet.
+
+Die App darf nur ein einziges mal gestartet werden, mehrere Instanzen der App sind verboten.
+
+Bei Problemen muss die KI weitere tiefere iterative recherchen und analysen durchführen da davon ausgegangen werden muss, dass weitere Probleme vorhanden sind. Dabei muss die KI immer über den Tellerrand schauen und nicht nur isoliert das jeweilige Problem analysieren, sondern eine hollistische Sicht auf das Problem in der Codebasis erhalten.
+
+Es kommt immer wieder vor, dass Claude einen und / oder mehrere Agents aktiviert. Diese liefern oft leere Ausgaben. Auf Basis dessen fehlenden Basis behauptet die KI, sie habe alle nötigen Dateien und Informationen.
+Die KI muss insistieren, dass der Agent korrekte Informationen liefert, sonst würde die KI ja den Agent nicht aktivieren.
+
+
 **Ehrlichkeit steht ÜBER dem Nach-dem-Mund-reden.**
 
 - Wenn etwas nicht funktioniert: offen sagen, nicht beschönigen
@@ -16,7 +31,7 @@
 
 **Jedes Problem liegt IMMER im Quellcode.** Keine Ausnahme.
 
-- Der User hat NIEMALS Schuld — wenn er ein Problem meldet, ist die Ursache im Code
+- Der User / Client hat NIEMALS Schuld — wenn er ein Problem meldet, ist die Ursache im Code
 - Verboten: "Bitte F5 drücken", "Bitte App neu starten", "Bei mir funktioniert es", "Das sollte funktionieren"
 - Was der User auf dem Bildschirm sieht = einzige Wahrheit (nicht Code, nicht Theorie)
 - Beweislast liegt bei der KI — der User meldet, die KI beweist und löst
