@@ -1,4 +1,4 @@
-import { formatBytes } from './utils.js';
+import { formatBytes, escapeHtml, escapeAttr } from './utils.js';
 
 const IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.svg', '.ico']);
 const PDF_EXTS = new Set(['.pdf']);
@@ -387,10 +387,11 @@ if(!Uint8Array.fromHex){Uint8Array.fromHex=function(s){const b=new Uint8Array(s.
             toolbar.querySelector('.pdf-open-ext').onclick = () => window.api.openFile(filePath);
             this.container.appendChild(toolbar);
 
-            // Content
+            // Content — sanitize mammoth HTML output (strip scripts/events)
             const content = document.createElement('div');
             content.className = 'docx-content';
-            content.innerHTML = converted.value;
+            const sanitized = this.sanitizeHtml(converted.value);
+            content.innerHTML = sanitized;
             this.container.appendChild(content);
 
             if (converted.messages.length > 0) {
@@ -497,11 +498,18 @@ if(!Uint8Array.fromHex){Uint8Array.fromHex=function(s){const b=new Uint8Array(s.
 
     renderImage(filePath) {
         const fileUrl = 'file:///' + filePath.replace(/\\/g, '/').replace(/ /g, '%20');
-        this.container.innerHTML = `<div class="preview-image-wrap"><img class="preview-image" src="${fileUrl}" alt="Vorschau"></div>`;
-        const img = this.container.querySelector('.preview-image');
+        const wrap = document.createElement('div');
+        wrap.className = 'preview-image-wrap';
+        const img = document.createElement('img');
+        img.className = 'preview-image';
+        img.alt = 'Vorschau';
+        img.src = fileUrl;
         img.onerror = () => {
             this.container.innerHTML = '<div class="preview-error">Bild konnte nicht geladen werden</div>';
         };
+        wrap.appendChild(img);
+        this.container.textContent = '';
+        this.container.appendChild(wrap);
     }
 
     async renderText(filePath) {
@@ -558,6 +566,33 @@ if(!Uint8Array.fromHex){Uint8Array.fromHex=function(s){const b=new Uint8Array(s.
     fmtDate(iso) {
         if (!iso) return '-';
         return new Date(iso).toLocaleString('de-DE');
+    }
+
+    /**
+     * Sanitize HTML from external sources (e.g. mammoth DOCX conversion).
+     * Strips script tags, event handlers, and dangerous elements.
+     */
+    sanitizeHtml(html) {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        // Remove dangerous elements
+        doc.querySelectorAll('script, iframe, object, embed, form, link[rel="import"]').forEach(el => el.remove());
+        // Remove event handler attributes from all elements
+        doc.querySelectorAll('*').forEach(el => {
+            for (const attr of [...el.attributes]) {
+                if (attr.name.startsWith('on') || attr.name === 'href' && attr.value.startsWith('javascript:')) {
+                    el.removeAttribute(attr.name);
+                }
+            }
+            // Strip javascript: in href/src
+            if (el.hasAttribute('href') && el.getAttribute('href').toLowerCase().startsWith('javascript:')) {
+                el.removeAttribute('href');
+            }
+            if (el.hasAttribute('src') && el.getAttribute('src').toLowerCase().startsWith('javascript:')) {
+                el.removeAttribute('src');
+            }
+        });
+        return doc.body.innerHTML;
     }
 
     escapeHtml(text) {

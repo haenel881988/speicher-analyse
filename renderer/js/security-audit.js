@@ -15,12 +15,14 @@ export class SecurityAuditView {
     }
 
     async init() {
+        this._loaded = false;
         this.container.innerHTML = '<div class="loading-state">Sicherheits-Check wird vorbereitet...</div>';
         try {
             this.history = await window.api.getAuditHistory();
             this._loaded = true;
             this.render();
         } catch (err) {
+            this._loaded = false;
             console.error('Security-Audit Init Fehler:', err);
             this.container.innerHTML = `<div class="security-page">
                 <div class="security-header"><h2>Sicherheits-Check</h2></div>

@@ -89,9 +89,12 @@ export class TreemapView {
             if (r.w > 50 && r.h > 25) {
                 const label = document.createElement('div');
                 label.className = 'treemap-label';
-                label.innerHTML = this.escapeHtml(r.item.name);
+                label.textContent = r.item.name;
                 if (r.w > 80 && r.h > 40) {
-                    label.innerHTML += `<span class="treemap-label-size">${formatBytes(r.item.size)} (${pct}%)</span>`;
+                    const sizeSpan = document.createElement('span');
+                    sizeSpan.className = 'treemap-label-size';
+                    sizeSpan.textContent = `${formatBytes(r.item.size)} (${pct}%)`;
+                    label.appendChild(sizeSpan);
                 }
                 cell.appendChild(label);
             }

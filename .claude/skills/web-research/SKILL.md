@@ -16,7 +16,7 @@ Du führst eine systematische Internet-Recherche durch und lieferst eine fundier
 ### Phase 1: Breite Suche (mindestens 5 verschiedene Suchanfragen)
 
 1. **Allgemeine Suche:** Hauptthema + aktuelle Lösungen
-2. **Spezifische Suche:** Kontext der App (Electron, Node.js, Windows)
+2. **Spezifische Suche:** Kontext der App (Tauri v2, Rust, Windows)
 3. **Alternativen-Suche:** "Alternative to X", "X vs Y"
 4. **Praxis-Suche:** Echte Implementierungen, GitHub-Repos, npm-Pakete
 5. **Probleme-Suche:** Known issues, Limitierungen, Firmenumgebungen
@@ -37,7 +37,7 @@ Jede Option bewerten nach:
 | Funktioniert OHNE Firewall-Änderungen | PFLICHT |
 | Funktioniert in Firmenumgebungen | PFLICHT |
 | Pure JS / keine Native Addons | Hoch |
-| Electron-kompatibel | Hoch |
+| Tauri-kompatibel (Rust-Backend + WebView-Frontend) | Hoch |
 | Aktiv gewartet (Updates < 12 Monate) | Mittel |
 | Datenmenge/Qualität der Ergebnisse | Hoch |
 | Performance (Timeout, Parallelität) | Mittel |

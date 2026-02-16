@@ -11,8 +11,7 @@ export class SystemScoreView {
     }
 
     async init() {
-        if (this._loaded) return;
-        this._loaded = true;
+        // _loaded is set to true only when update() provides real data
     }
 
     update(scoreData) {

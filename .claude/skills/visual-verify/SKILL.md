@@ -115,7 +115,7 @@ Sub-Agents die an diesen Skill delegiert werden, MÜSSEN die Cleanup-Anweisung i
 
 ## Hinweise
 
-- **`page.click()` hängt** in dieser Electron-App → immer `page.evaluate(() => el.click())` verwenden
+- **`page.click()` hängt** in dieser Tauri-App → immer `page.evaluate(() => el.click())` verwenden
 - **Puppeteer-Scripts** liegen in `tools/wcag/` (dort ist puppeteer-core installiert)
 - **Puppeteer-Verbindung:** `puppeteer.connect({ browserURL: 'http://127.0.0.1:9222' })`
 - **Dieser Skill ersetzt NICHT `/audit-code`** — er ergänzt ihn um die visuelle Komponente

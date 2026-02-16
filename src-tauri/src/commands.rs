@@ -45,11 +45,20 @@ fn validate_ip(ip: &str) -> Result<(), String> {
 
 fn validate_path(p: &str) -> Result<(), String> {
     let p_lower = p.to_lowercase().replace('/', "\\");
-    let blocked = ["\\windows\\system32", "\\windows\\syswow64"];
+    let blocked = [
+        "\\windows\\system32", "\\windows\\syswow64",
+        "\\program files\\", "\\program files (x86)\\",
+        "\\programdata\\", "\\$recycle.bin",
+        "\\system volume information",
+    ];
     for b in &blocked {
         if p_lower.contains(b) {
             return Err(format!("Zugriff auf Systempfad verweigert: {}", p));
         }
+    }
+    // Block drive root (e.g. "C:\") — too dangerous for delete/write
+    if p_lower.len() <= 3 {
+        return Err(format!("Zugriff auf Laufwerkswurzel verweigert: {}", p));
     }
     Ok(())
 }
@@ -311,6 +320,7 @@ pub async fn delete_permanent(paths: Vec<String>) -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn create_folder(parent_path: String, name: String) -> Result<Value, String> {
+    validate_path(&parent_path)?;
     let full = Path::new(&parent_path).join(&name);
     tokio::fs::create_dir_all(&full).await.map_err(|e| e.to_string())?;
     Ok(json!({ "success": true, "path": full.to_string_lossy() }))
@@ -318,6 +328,7 @@ pub async fn create_folder(parent_path: String, name: String) -> Result<Value, S
 
 #[tauri::command]
 pub async fn file_rename(old_path: String, new_name: String) -> Result<Value, String> {
+    validate_path(&old_path)?;
     let src = Path::new(&old_path);
     let dest = src.parent().unwrap_or(Path::new(".")).join(&new_name);
     tokio::fs::rename(&src, &dest).await.map_err(|e| e.to_string())?;
@@ -439,8 +450,11 @@ pub async fn get_size_duplicates(_scan_id: String, _min_size: Option<u64>) -> Re
 // === Memory ===
 
 #[tauri::command]
-pub async fn release_scan_bulk_data(_scan_id: String) -> Result<Value, String> {
-    Ok(json!({ "released": true }))
+pub async fn release_scan_bulk_data(scan_id: String) -> Result<Value, String> {
+    // Actually clear the scan data from memory
+    let mut s = crate::scan::store_mut();
+    let removed = s.remove(&scan_id).is_some();
+    Ok(json!({ "released": removed }))
 }
 
 // === Cleanup ===
@@ -605,7 +619,7 @@ pub async fn clean_registry(entries: Value) -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn restore_registry_backup() -> Result<Value, String> {
-    Ok(json!({ "success": false, "error": "No backup found" }))
+    Ok(json!({ "stub": true, "message": "Registry-Backup wiederherstellen ist noch nicht implementiert" }))
 }
 
 // === Autostart ===
@@ -964,7 +978,9 @@ Get-ChildItem -Path '{}' -Recurse -Force -ErrorAction SilentlyContinue | ForEach
 
 #[tauri::command]
 pub async fn deep_search_cancel() -> Result<Value, String> {
-    Ok(json!({ "cancelled": true }))
+    // Note: The spawned PowerShell process cannot be cancelled from here.
+    // This only signals the frontend to stop processing incoming results.
+    Ok(json!({ "cancelled": true, "note": "Laufende PowerShell-Suche wird im Hintergrund beendet" }))
 }
 
 // === Explorer ===
@@ -1109,6 +1125,10 @@ pub async fn get_platform() -> Result<String, String> {
 
 #[tauri::command]
 pub async fn open_external(url: String) -> Result<Value, String> {
+    // Only allow http/https URLs
+    if !url.starts_with("http://") && !url.starts_with("https://") {
+        return Err(format!("Nur HTTP/HTTPS-URLs erlaubt, nicht: {}", &url[..url.len().min(50)]));
+    }
     crate::ps::run_ps(&format!("Start-Process '{}'", url.replace("'", "''"))).await?;
     Ok(json!({ "success": true }))
 }
@@ -1579,7 +1599,7 @@ $programs | Sort-Object name | ConvertTo-Json -Depth 2 -Compress"#
 
 #[tauri::command]
 pub async fn correlate_software(_program: Value) -> Result<Value, String> {
-    Ok(json!({ "files": [], "registry": [], "services": [] }))
+    Ok(json!({ "files": [], "registry": [], "services": [], "stub": true, "message": "Software-Korrelation ist noch nicht implementiert" }))
 }
 
 #[tauri::command]
@@ -1978,22 +1998,22 @@ pub async fn clear_dns_cache() -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn start_network_recording() -> Result<Value, String> {
-    Ok(json!({ "success": true }))
+    Ok(json!({ "stub": true, "message": "Netzwerk-Aufnahme ist noch nicht implementiert" }))
 }
 
 #[tauri::command]
 pub async fn stop_network_recording() -> Result<Value, String> {
-    Ok(json!({ "success": true }))
+    Ok(json!({ "stub": true, "message": "Netzwerk-Aufnahme ist noch nicht implementiert" }))
 }
 
 #[tauri::command]
 pub async fn get_network_recording_status() -> Result<Value, String> {
-    Ok(json!({ "active": false, "startedAt": 0, "duration": 0, "eventCount": 0 }))
+    Ok(json!({ "active": false, "startedAt": 0, "duration": 0, "eventCount": 0, "stub": true }))
 }
 
 #[tauri::command]
 pub async fn append_network_recording_events(_events: Value) -> Result<Value, String> {
-    Ok(json!({ "success": true }))
+    Ok(json!({ "stub": true, "message": "Netzwerk-Aufnahme ist noch nicht implementiert" }))
 }
 
 #[tauri::command]
@@ -2003,17 +2023,17 @@ pub async fn list_network_recordings() -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn delete_network_recording(_filename: String) -> Result<Value, String> {
-    Ok(json!({ "success": true }))
+    Ok(json!({ "stub": true, "message": "Netzwerk-Aufnahme löschen ist noch nicht implementiert" }))
 }
 
 #[tauri::command]
 pub async fn open_network_recordings_dir() -> Result<Value, String> {
-    Ok(json!({ "success": true }))
+    Ok(json!({ "stub": true, "message": "Netzwerk-Aufnahme Verzeichnis ist noch nicht implementiert" }))
 }
 
 #[tauri::command]
 pub async fn save_network_snapshot(_data: Value) -> Result<Value, String> {
-    Ok(json!({ "success": true }))
+    Ok(json!({ "stub": true, "message": "Netzwerk-Snapshot speichern ist noch nicht implementiert" }))
 }
 
 #[tauri::command]
@@ -2023,12 +2043,12 @@ pub async fn get_network_history() -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn clear_network_history() -> Result<Value, String> {
-    Ok(json!({ "success": true }))
+    Ok(json!({ "stub": true, "message": "Netzwerk-Verlauf löschen ist noch nicht implementiert" }))
 }
 
 #[tauri::command]
 pub async fn export_network_history(_format: Option<String>) -> Result<Value, String> {
-    Ok(json!({ "success": false }))
+    Ok(json!({ "stub": true, "message": "Netzwerk-Verlauf exportieren ist noch nicht implementiert" }))
 }
 
 /// Parallel network scan using async pings + ARP table for MAC addresses
@@ -2141,20 +2161,90 @@ pub async fn get_audit_history() -> Result<Value, String> {
 // === System Score ===
 
 #[tauri::command]
-pub async fn get_system_score(_results: Option<Value>) -> Result<Value, String> {
-    Ok(json!({
-        "score": 75,
-        "grade": "C",
-        "riskLevel": "moderate",
-        "categories": [
-            {"name": "Datenschutz", "weight": 25, "score": 70, "description": "Windows-Datenschutzeinstellungen"},
-            {"name": "Festplatten", "weight": 20, "score": 80, "description": "Festplatten-Gesundheit und Speicherplatz"},
-            {"name": "Registry", "weight": 15, "score": 75, "description": "Registry-Sauberkeit"},
-            {"name": "Optimierung", "weight": 15, "score": 70, "description": "Systemoptimierungen"},
-            {"name": "Updates", "weight": 15, "score": 80, "description": "Windows- und Software-Updates"},
-            {"name": "Software", "weight": 10, "score": 75, "description": "Software-Inventar und Bloatware"}
-        ]
-    }))
+pub async fn get_system_score(results: Option<Value>) -> Result<Value, String> {
+    // Compute real scores from passed-in results, or return defaults with stub flag
+    let r = results.unwrap_or(json!({}));
+
+    // Privacy score: based on how many settings are "private"
+    let privacy_score = if let Some(settings) = r.get("privacy").and_then(|p| p.get("settings")).and_then(|s| s.as_array()) {
+        let total = settings.len() as f64;
+        let protected = settings.iter().filter(|s| s["isPrivate"].as_bool().unwrap_or(false)).count() as f64;
+        if total > 0.0 { (protected / total * 100.0).round() as u32 } else { 50 }
+    } else { 50 };
+
+    // Disk score: based on health scores from SMART data
+    let disk_score = if let Some(disks) = r.get("diskHealth").and_then(|d| d.as_array()) {
+        if disks.is_empty() { 50 } else {
+            let sum: u32 = disks.iter().map(|d| d["healthScore"].as_u64().unwrap_or(50) as u32).sum();
+            sum / disks.len() as u32
+        }
+    } else { 50 };
+
+    // Registry score: based on orphaned entries found
+    let registry_score = if let Some(cats) = r.get("registry").and_then(|r| r.as_array()) {
+        let total_entries: usize = cats.iter().map(|c| c["entries"].as_array().map(|a| a.len()).unwrap_or(0)).sum();
+        if total_entries == 0 { 100 } else if total_entries < 10 { 85 } else if total_entries < 50 { 65 } else { 40 }
+    } else { 50 };
+
+    // Optimizer score: based on how many optimizations are applied
+    let optimizer_score = if let Some(opts) = r.get("optimizations").and_then(|o| o.as_array()) {
+        let total = opts.len() as f64;
+        let applied = opts.iter().filter(|o| o["applied"].as_bool().unwrap_or(false)).count() as f64;
+        if total > 0.0 { (applied / total * 100.0).round() as u32 } else { 50 }
+    } else { 50 };
+
+    // Updates score: fewer pending = better
+    let updates_score = if let Some(updates) = r.get("updates").and_then(|u| u.as_array()) {
+        if updates.is_empty() { 100 } else if updates.len() < 3 { 80 } else if updates.len() < 10 { 60 } else { 40 }
+    } else { 50 };
+
+    // Software score: fewer orphaned entries = better
+    let software_score = if let Some(orphaned) = r.get("orphanedCount").and_then(|o| o.as_u64()) {
+        if orphaned == 0 { 100 } else if orphaned < 5 { 80 } else if orphaned < 15 { 60 } else { 40 }
+    } else { 50 };
+
+    let has_real_data = r.as_object().map(|o| !o.is_empty()).unwrap_or(false);
+
+    // Weighted average
+    let categories = vec![
+        json!({"name": "Datenschutz", "weight": 25, "score": privacy_score, "description": "Windows-Datenschutzeinstellungen"}),
+        json!({"name": "Festplatten", "weight": 20, "score": disk_score, "description": "Festplatten-Gesundheit und Speicherplatz"}),
+        json!({"name": "Registry", "weight": 15, "score": registry_score, "description": "Registry-Sauberkeit"}),
+        json!({"name": "Optimierung", "weight": 15, "score": optimizer_score, "description": "Systemoptimierungen"}),
+        json!({"name": "Updates", "weight": 15, "score": updates_score, "description": "Windows- und Software-Updates"}),
+        json!({"name": "Software", "weight": 10, "score": software_score, "description": "Software-Inventar und Bloatware"}),
+    ];
+
+    let total_score: f64 = categories.iter().map(|c| {
+        c["score"].as_f64().unwrap_or(0.0) * c["weight"].as_f64().unwrap_or(0.0) / 100.0
+    }).sum();
+    let score = total_score.round() as u32;
+
+    let grade = match score {
+        90..=100 => "A",
+        80..=89 => "B",
+        70..=79 => "C",
+        60..=69 => "D",
+        _ => "F",
+    };
+
+    let risk_level = match score {
+        80..=100 => "low",
+        60..=79 => "moderate",
+        _ => "high",
+    };
+
+    let mut result = json!({
+        "score": score,
+        "grade": grade,
+        "riskLevel": risk_level,
+        "categories": categories
+    });
+    if !has_real_data {
+        result["stub"] = json!(true);
+        result["message"] = json!("Keine Analysedaten übergeben — Score basiert auf Standardwerten");
+    }
+    Ok(result)
 }
 
 // === Preferences ===

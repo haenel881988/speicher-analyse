@@ -31,6 +31,11 @@ pub fn save(data: ScanData) {
     s.insert(data.scan_id.clone(), data);
 }
 
+/// Mutable access to store — for releasing scan data from memory
+pub fn store_mut() -> std::sync::MutexGuard<'static, HashMap<String, ScanData>> {
+    store().lock().unwrap()
+}
+
 pub fn with_scan<F, R>(scan_id: &str, f: F) -> Option<R>
 where
     F: FnOnce(&ScanData) -> R,

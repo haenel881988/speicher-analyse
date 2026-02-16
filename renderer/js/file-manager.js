@@ -1,4 +1,4 @@
-import { formatBytes, formatDate } from './utils.js';
+import { formatBytes, formatDate, escapeHtml } from './utils.js';
 import { showToast } from './tree.js';
 
 // Clipboard state
@@ -176,8 +176,4 @@ function formatDateTime(isoString) {
     });
 }
 
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
+// escapeHtml importiert aus utils.js

@@ -29,15 +29,31 @@
     }
 
     // Helper: create event listener wrapper
+    // Stores unlisten promises to prevent race conditions with rapid re-registration
+    if (!makeListener._unlisteners) makeListener._unlisteners = {};
+    if (!makeListener._pendingListens) makeListener._pendingListens = {};
     function makeListener(eventName) {
         return function (callback) {
-            // Unlisten previous listener if any
-            if (makeListener._unlisteners && makeListener._unlisteners[eventName]) {
+            // Unlisten previous listener if any (sync stored)
+            if (makeListener._unlisteners[eventName]) {
                 makeListener._unlisteners[eventName]();
+                delete makeListener._unlisteners[eventName];
             }
-            if (!makeListener._unlisteners) makeListener._unlisteners = {};
-            listen(eventName, (event) => callback(event.payload)).then(unlisten => {
-                makeListener._unlisteners[eventName] = unlisten;
+            // Also wait for any pending listen() to resolve and unlisten it
+            const pending = makeListener._pendingListens[eventName];
+            if (pending) {
+                pending.then(unlisten => { if (unlisten) unlisten(); });
+            }
+            const listenPromise = listen(eventName, (event) => callback(event.payload));
+            makeListener._pendingListens[eventName] = listenPromise;
+            listenPromise.then(unlisten => {
+                // Only store if this is still the current listener for this event
+                if (makeListener._pendingListens[eventName] === listenPromise) {
+                    makeListener._unlisteners[eventName] = unlisten;
+                } else {
+                    // A newer listener was registered — unlisten this one
+                    unlisten();
+                }
             });
         };
     }

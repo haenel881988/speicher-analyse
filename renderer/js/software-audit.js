@@ -76,7 +76,7 @@ export class SoftwareAuditView {
 
         // Kategorie-Dropdown-Optionen
         const catOptions = Object.values(this.categories)
-            .map(c => `<option value="${c.id}" ${this.categoryFilter === c.id ? 'selected' : ''}>${c.label} (${this.categoryStats[c.id] || 0})</option>`)
+            .map(c => `<option value="${this._esc(c.id)}" ${this.categoryFilter === c.id ? 'selected' : ''}>${this._esc(c.label)} (${this.categoryStats[c.id] || 0})</option>`)
             .join('');
 
         // Update-Status-Text
@@ -172,7 +172,7 @@ export class SoftwareAuditView {
 
         return `<tr class="${p.isOrphaned ? 'audit-row-orphaned' : ''}" data-path="${this._esc(p.registryPath)}">
             <td class="audit-name" title="${this._esc(p.installLocation || '')}">${this._esc(p.name)}</td>
-            <td><span class="audit-category-badge" style="background:${catColor}20;color:${catColor}">${catLabel}</span></td>
+            <td><span class="audit-category-badge" style="background:${this._esc(catColor)}20;color:${this._esc(catColor)}">${this._esc(catLabel)}</span></td>
             <td>${this._esc(p.publisher || '-')}</td>
             <td>${this._esc(p.version || '-')}</td>
             <td class="audit-size">${sizeMB}</td>

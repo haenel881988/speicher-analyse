@@ -1,4 +1,4 @@
-import { formatBytes, formatNumber, getCategoryColor, getCategoryClass } from './utils.js';
+import { formatBytes, formatNumber, getCategoryColor, getCategoryClass, escapeHtml, escapeAttr } from './utils.js';
 
 export class FileTypeChart {
     constructor(canvasEl, tableBodyEl) {
@@ -299,5 +299,4 @@ export class FileTypeChart {
     }
 }
 
-function escapeHtml(text) { const d = document.createElement('div'); d.textContent = text; return d.innerHTML; }
-function escapeAttr(text) { return text.replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
+// escapeHtml + escapeAttr importiert aus utils.js

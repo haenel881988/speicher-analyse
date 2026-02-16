@@ -1,4 +1,4 @@
-import { formatBytes, formatNumber, formatDuration, getCategoryClass } from './utils.js';
+import { formatBytes, formatNumber, formatDuration, getCategoryClass, escapeHtml, escapeAttr } from './utils.js';
 import { startScan, fetchDrives, setupScanListeners } from './scanner.js';
 import { TreeView, showToast } from './tree.js';
 import { TreemapView } from './treemap.js';
@@ -848,7 +848,7 @@ function renderTopFiles(files) {
                 <td class="rank-col">${i + 1}</td>
                 <td class="name-col" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</td>
                 <td class="path-col" title="${escapeHtml(dirPath)}">${escapeHtml(dirPath)}</td>
-                <td class="type-col"><span class="category-badge ${catClass}">${file.extension || '-'}</span></td>
+                <td class="type-col"><span class="category-badge ${catClass}">${escapeHtml(file.extension || '-')}</span></td>
                 <td class="age-col">${age}</td>
                 <td class="size-col">${formatBytes(file.size)}</td>
             </tr>
@@ -1337,8 +1337,7 @@ async function updateBatteryUI() {
 }
 
 // ===== Helpers =====
-function escapeHtml(text) { const d = document.createElement('div'); d.textContent = text; return d.innerHTML; }
-function escapeAttr(text) { return text.replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
+// escapeHtml + escapeAttr importiert aus utils.js
 
 // ===== Start =====
 init().catch(e => console.error('[app.js] init() error:', e));

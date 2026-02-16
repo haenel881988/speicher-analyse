@@ -14,8 +14,14 @@ export class SettingsView {
 
     async load() {
         if (this.loaded) return;
-        this.loaded = true;
-        await this.render();
+        try {
+            this.loaded = true;
+            await this.render();
+        } catch (err) {
+            this.loaded = false;
+            console.error('[settings] load() failed:', err);
+            this.container.innerHTML = '<div class="error-state" style="padding:24px">Einstellungen konnten nicht geladen werden.</div>';
+        }
     }
 
     async render() {
