@@ -114,7 +114,7 @@ pub async fn get_drives() -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn start_scan(app: tauri::AppHandle, path: String) -> Result<Value, String> {
-    eprintln!("[start_scan] Called with path: {}", path);
+    tracing::info!(path = %path, "Scan gestartet");
 
     // Validate path exists before starting scan
     if !Path::new(&path).exists() {
@@ -131,7 +131,7 @@ pub async fn start_scan(app: tauri::AppHandle, path: String) -> Result<Value, St
 
     // Use spawn_blocking for walkdir (blocking I/O)
     tokio::task::spawn_blocking(move || {
-        eprintln!("[start_scan] Blocking thread started for scan_id={}", sid);
+        tracing::debug!(scan_id = %sid, "Scan-Thread gestartet");
         let start = std::time::Instant::now();
         let mut files: Vec<crate::scan::FileEntry> = Vec::new();
         let mut dirs_scanned: u64 = 0;
@@ -197,7 +197,7 @@ pub async fn start_scan(app: tauri::AppHandle, path: String) -> Result<Value, St
         }
 
         let elapsed = start.elapsed().as_secs_f64();
-        eprintln!("[start_scan] Walk completed: {} files, {} dirs, {} errors, {:.1}s", files_found, dirs_scanned, errors_count, elapsed);
+        tracing::info!(files = files_found, dirs = dirs_scanned, errors = errors_count, elapsed_s = format!("{:.1}", elapsed), "Scan abgeschlossen");
 
         // Store scan data for queries
         crate::scan::save(crate::scan::ScanData {
@@ -208,7 +208,7 @@ pub async fn start_scan(app: tauri::AppHandle, path: String) -> Result<Value, St
             total_size,
             elapsed_seconds: elapsed,
         });
-        eprintln!("[start_scan] Scan data saved to store");
+        tracing::debug!(scan_id = %sid, "Scan-Daten im Store gespeichert");
 
         // Emit completion
         let emit_result = app.emit("scan-complete", json!({
@@ -221,10 +221,10 @@ pub async fn start_scan(app: tauri::AppHandle, path: String) -> Result<Value, St
             "errors_count": errors_count,
             "elapsed_seconds": (elapsed * 10.0).round() / 10.0
         }));
-        eprintln!("[start_scan] scan-complete event emitted: {:?}", emit_result);
+        tracing::debug!(scan_id = %sid, emit_ok = emit_result.is_ok(), "scan-complete Event gesendet");
     });
 
-    eprintln!("[start_scan] Returning scan_id: {}", scan_id_ret);
+    tracing::debug!(scan_id = %scan_id_ret, "Scan-ID zurückgegeben");
     Ok(json!({ "scan_id": scan_id_ret }))
 }
 
@@ -298,6 +298,7 @@ pub async fn show_save_dialog(app: tauri::AppHandle, _options: Option<Value>) ->
 
 #[tauri::command]
 pub async fn delete_to_trash(paths: Vec<String>) -> Result<Value, String> {
+    tracing::info!(count = paths.len(), "Papierkorb-Löschung angefordert");
     let ps_paths = paths.iter().map(|p| format!("'{}'", p.replace("'", "''"))).collect::<Vec<_>>().join(",");
     let script = format!(
         r#"Add-Type -AssemblyName Microsoft.VisualBasic
@@ -309,6 +310,7 @@ pub async fn delete_to_trash(paths: Vec<String>) -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn delete_permanent(paths: Vec<String>) -> Result<Value, String> {
+    tracing::warn!(count = paths.len(), "Permanente Löschung angefordert");
     for p in &paths {
         validate_path(p)?;
         let path = Path::new(p);
@@ -488,6 +490,7 @@ $cats | ConvertTo-Json -Depth 3 -Compress"#
 
 #[tauri::command]
 pub async fn clean_category(_category_id: String, paths: Vec<String>) -> Result<Value, String> {
+    tracing::info!(category = %_category_id, count = paths.len(), "Bereinigung Kategorie");
     let mut deleted_count: u64 = 0;
     let mut errors: Vec<Value> = Vec::new();
     for p in &paths {
@@ -591,6 +594,7 @@ pub async fn export_registry_backup(entries: Value) -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn clean_registry(entries: Value) -> Result<Value, String> {
+    tracing::warn!(entries_count = entries.as_array().map_or(0, |a| a.len()), "Registry-Bereinigung gestartet");
     // First create a backup
     let backup_dir = get_data_dir().join("registry-backups");
     let _ = std::fs::create_dir_all(&backup_dir);
@@ -756,6 +760,7 @@ $stt = switch([int]$_.StartType){0{'Boot'}1{'System'}2{'Automatic'}3{'Manual'}4{
 
 #[tauri::command]
 pub async fn control_service(name: String, action: String) -> Result<Value, String> {
+    tracing::info!(service = %name, action = %action, "Service-Steuerung");
     let safe_name = name.replace("'", "''");
     let cmd = match action.as_str() {
         "start" => format!("Start-Service '{}'", safe_name),
@@ -769,6 +774,7 @@ pub async fn control_service(name: String, action: String) -> Result<Value, Stri
 
 #[tauri::command]
 pub async fn set_service_start_type(name: String, start_type: String) -> Result<Value, String> {
+    tracing::info!(service = %name, start_type = %start_type, "Service-Starttyp ändern");
     // Frontend sends 'auto'|'demand'|'disabled', PowerShell needs 'Automatic'|'Manual'|'Disabled'
     let ps_type = match start_type.as_str() {
         "auto" => "Automatic",
@@ -799,6 +805,7 @@ $opts | ConvertTo-Json -Compress"#
 
 #[tauri::command]
 pub async fn apply_optimization(id: String) -> Result<Value, String> {
+    tracing::info!(optimization = %id, "Optimierung anwenden");
     let script = match id.as_str() {
         "visual_effects" => {
             r#"Set-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects' -Name 'VisualFXSetting' -Value 2 -Type DWord -Force
@@ -848,6 +855,7 @@ Get-AppxPackage | Where-Object { $_.IsFramework -eq $false -and $_.SignatureKind
 
 #[tauri::command]
 pub async fn uninstall_bloatware(entry: Value) -> Result<Value, String> {
+    tracing::warn!(package = ?entry.get("packageFullName"), "Bloatware deinstallieren");
     if let Some(pkg) = entry.get("packageFullName").and_then(|v| v.as_str()) {
         let safe_pkg = pkg.replace("'", "''");
         crate::ps::run_ps(&format!("Remove-AppxPackage '{}'", safe_pkg)).await?;
@@ -1345,6 +1353,7 @@ fn privacy_setting_lookup(id: &str) -> Option<(&'static str, &'static str, i32, 
 
 #[tauri::command]
 pub async fn apply_privacy_setting(id: String) -> Result<Value, String> {
+    tracing::info!(setting = %id, "Privacy-Einstellung anwenden");
     let (reg_path, reg_key, recommended, _, _) = privacy_setting_lookup(&id)
         .ok_or_else(|| format!("Einstellung '{}' nicht gefunden", id))?;
     let script = format!(
@@ -1365,6 +1374,7 @@ pub async fn apply_privacy_setting(id: String) -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn apply_all_privacy() -> Result<Value, String> {
+    tracing::info!("Alle Privacy-Einstellungen anwenden");
     let ids = ["werbung-id","cortana-consent","feedback-haeufigkeit","handschrift-daten",
                "diagnose-toast","app-diagnose","standort-zugriff"];
     let mut applied = 0u32;
@@ -1689,6 +1699,7 @@ pub async fn get_firewall_rules(direction: Option<String>) -> Result<Value, Stri
 
 #[tauri::command]
 pub async fn block_process(name: String, path: Option<String>) -> Result<Value, String> {
+    tracing::warn!(process = %name, "Firewall-Block erstellen");
     let prog = path.unwrap_or_else(|| name.clone());
     let safe_name = name.replace("'", "''");
     let safe_prog = prog.replace("'", "''");
@@ -1702,6 +1713,7 @@ pub async fn block_process(name: String, path: Option<String>) -> Result<Value, 
 
 #[tauri::command]
 pub async fn unblock_process(rule_name: String) -> Result<Value, String> {
+    tracing::info!(rule = %rule_name, "Firewall-Block entfernen");
     let safe_name = rule_name.replace("'", "''");
     crate::ps::run_ps(&format!("Remove-NetFirewallRule -DisplayName '{}'", safe_name)).await?;
     Ok(json!({ "success": true }))
@@ -2100,6 +2112,7 @@ $results | ConvertTo-Json -Compress"#
 /// Active network scan: ping sweep + ARP + parallel DNS, returns {devices, subnet, localIP}
 #[tauri::command]
 pub async fn scan_network_active(app: tauri::AppHandle) -> Result<Value, String> {
+    tracing::info!("Aktiver Netzwerk-Scan gestartet");
     // Get local IP + subnet first
     let info = crate::ps::run_ps_json(
         r#"$adapter = Get-NetIPConfiguration | Where-Object { $_.IPv4DefaultGateway -ne $null -and $_.NetAdapter.Status -eq 'Up' } | Select-Object -First 1
@@ -2491,6 +2504,21 @@ pub async fn get_folder_sizes_bulk(scan_id: String, folder_paths: Vec<String>, p
 #[tauri::command]
 pub async fn capture_screenshot() -> Result<Value, String> {
     Ok(json!({ "success": false, "error": "Screenshots not available in Tauri" }))
+}
+
+// === Frontend Logging ===
+
+#[tauri::command]
+pub async fn log_frontend(level: String, message: String, context: Option<String>) -> Result<Value, String> {
+    let ctx = context.as_deref().unwrap_or("");
+    match level.as_str() {
+        "error" => tracing::error!(source = "frontend", context = %ctx, "{}", message),
+        "warn" => tracing::warn!(source = "frontend", context = %ctx, "{}", message),
+        "info" => tracing::info!(source = "frontend", context = %ctx, "{}", message),
+        "debug" => tracing::debug!(source = "frontend", context = %ctx, "{}", message),
+        _ => tracing::debug!(source = "frontend", context = %ctx, level = %level, "{}", message),
+    }
+    Ok(json!({ "success": true }))
 }
 
 // === Privacy Settings Database ===

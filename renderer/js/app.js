@@ -30,6 +30,21 @@ import { SecurityAuditView } from './security-audit.js';
 import { SystemProfilView } from './system-profil.js';
 import { TerminalPanel } from './terminal-panel.js';
 
+// ===== Global Error Handlers (Dev-Logging) =====
+window.addEventListener('error', (event) => {
+    if (window.api?.logFrontend) {
+        window.api.logFrontend('error', event.message || 'Unknown error',
+            `${event.filename || ''}:${event.lineno || 0}:${event.colno || 0}`);
+    }
+});
+window.addEventListener('unhandledrejection', (event) => {
+    if (window.api?.logFrontend) {
+        const msg = event.reason?.message || event.reason?.toString() || 'Unhandled Promise rejection';
+        const stack = event.reason?.stack?.split('\n')[1]?.trim() || '';
+        window.api.logFrontend('error', msg, stack);
+    }
+});
+
 // ===== State =====
 const state = {
     drives: [],

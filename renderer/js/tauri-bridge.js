@@ -312,7 +312,10 @@
 
         // === Screenshot ===
         captureScreenshot: makeInvoke('capture_screenshot'),
+
+        // === Frontend Logging ===
+        logFrontend: (level, message, context) => invoke('log_frontend', { level, message, context }),
     };
 
-    console.log('[Tauri Bridge] window.api mapped — 147 methods + 20 event listeners');
+    console.log('[Tauri Bridge] window.api mapped — 148 methods + 20 event listeners');
 })();

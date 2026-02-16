@@ -23,6 +23,8 @@ tokio = { version = "1", features = ["process", "fs", "io-util", "time"] }
 chrono = "0.4"
 base64 = "0.22"
 walkdir = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 
 [profile.release]
 strip = true

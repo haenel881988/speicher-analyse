@@ -4,7 +4,26 @@ mod scan;
 
 use tauri::{Emitter, Manager};
 
+fn init_logging() {
+    #[cfg(debug_assertions)]
+    {
+        use tracing_subscriber::EnvFilter;
+        let filter = EnvFilter::try_from_default_env()
+            .unwrap_or_else(|_| EnvFilter::new("speicher_analyse_lib=debug,warn"));
+        tracing_subscriber::fmt()
+            .with_env_filter(filter)
+            .with_target(true)
+            .with_thread_ids(false)
+            .with_file(false)
+            .with_line_number(false)
+            .init();
+        tracing::info!("Logging initialisiert (Dev-Modus)");
+    }
+}
+
 pub fn run() {
+    init_logging();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
@@ -54,7 +73,7 @@ pub fn run() {
 
             app.set_menu(menu)?;
 
-            eprintln!("[Tauri] App gestartet, Menüleiste erstellt");
+            tracing::info!("App gestartet, Menüleiste erstellt");
 
             Ok(())
         })
@@ -270,6 +289,8 @@ pub fn run() {
             commands::get_folder_sizes_bulk,
             // Screenshot
             commands::capture_screenshot,
+            // Frontend Logging
+            commands::log_frontend,
         ])
         .run(tauri::generate_context!())
         .expect("Fehler beim Starten der Anwendung");
