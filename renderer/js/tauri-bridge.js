@@ -1,7 +1,6 @@
 /**
- * Tauri Bridge — Maps window.api.* (Electron IPC) to Tauri invoke() calls.
+ * Tauri Bridge — Maps window.api.* to Tauri invoke() calls.
  * Loaded BEFORE app.js via <script> tag in index.html.
- * In Electron mode, this file is not loaded (preload.js handles window.api).
  */
 (function() {
     // Detect if we're running in Tauri

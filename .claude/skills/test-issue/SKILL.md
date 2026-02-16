@@ -91,7 +91,7 @@ Task(subagent_type="general-purpose", prompt="Führe /test-issue #19 aus...")
 
 ## Hinweise
 
-- **App muss laufen** auf Port 9222
+- **App muss laufen** mit CDP-Port 9222 (Tauri/WebView2: `$env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS='--remote-debugging-port=9222'; cargo tauri dev`)
 - **Puppeteer-Verbindung:** `puppeteer.connect({ browserURL: 'http://127.0.0.1:9222' })`
 - **`page.click()` hängt** → immer `page.evaluate(() => el.click())` verwenden
 - **Puppeteer-Scripts** liegen in `tools/wcag/` (dort ist puppeteer-core installiert)

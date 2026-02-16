@@ -1733,7 +1733,7 @@ pub async fn resolve_ips(_ip_addresses: Vec<String>) -> Result<Value, String> {
 /// Matches the format expected by the frontend (network.js refresh()).
 #[tauri::command]
 pub async fn get_polling_data() -> Result<Value, String> {
-    // Single PS call for TCP + UDP + Bandwidth (same approach as Electron backend)
+    // Single PS call for TCP + UDP + Bandwidth
     let raw = crate::ps::run_ps_json(
         r#"$conns = @(Get-NetTCPConnection -EA SilentlyContinue | Select-Object LocalAddress, LocalPort, RemoteAddress, RemotePort, State, OwningProcess)
 $pids = @($conns | Select-Object -ExpandProperty OwningProcess -Unique)

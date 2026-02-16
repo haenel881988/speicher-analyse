@@ -2,7 +2,7 @@
  * WCAG Contrast Gate — Automatische Prüfung aller Views.
  *
  * Verbindet sich mit der laufenden App, navigiert zu jedem View,
- * nimmt Screenshots via Electron-IPC (nicht CDP!), extrahiert alle
+ * nimmt Screenshots via Tauri IPC, extrahiert alle
  * Text-Elemente mit getComputedStyle, berechnet Kontrast mit korrektem
  * Alpha-Blending, und meldet alle Verletzungen.
  *
@@ -113,7 +113,7 @@ const viewsToCheck = requestedViews
             if (readyResult.value === true) break;
         }
 
-        // Take screenshot via Electron IPC (bypasses CDP hang)
+        // Take screenshot via Tauri IPC (bypasses CDP hang)
         if (saveScreenshots) {
             try {
                 const { result: ssResult } = await cdp.send('Runtime.evaluate', {

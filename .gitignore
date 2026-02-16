@@ -5,7 +5,7 @@ out/
 logs/
 .env
 
-# Old v1.0 FastAPI files (not part of Electron app)
+# Old v1.0 FastAPI files (not part of Tauri app)
 static/
 __pycache__/
 *.pyc
@@ -24,7 +24,7 @@ Desktop.ini
 .vscode/
 .idea/
 
-# Electron build
+# Legacy build artifacts
 release/
 build/
 

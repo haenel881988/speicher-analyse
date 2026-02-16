@@ -20,7 +20,7 @@ Du verifizierst visuell ob ein UI-Element, ein View oder eine Änderung korrekt 
 
 ## Phase 1: Screenshot & Bestandsaufnahme
 
-1. **App muss laufen** auf Port 9222 (prüfen mit `curl -s http://127.0.0.1:9222/json/version`)
+1. **App muss laufen** mit CDP-Port 9222 (Tauri/WebView2: `$env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS='--remote-debugging-port=9222'; cargo tauri dev`; prüfen mit `curl -s http://127.0.0.1:9222/json/version`)
 2. **Zum Ziel-View navigieren** via `page.evaluate(() => document.querySelector('.sidebar-nav-btn[data-tab="..."]')?.click())`
 3. **Screenshot machen** — ganzer View
 4. **JEDEN sichtbaren Text auflisten:**
@@ -98,7 +98,7 @@ Für jedes problematische Element:
 
 Dieser Skill kann an einen Sub-Agent delegiert werden:
 ```
-Task(subagent_type="general-purpose", prompt="Führe /visual-verify für den [view] aus. App läuft auf Port 9222. ...")
+Task(subagent_type="general-purpose", prompt="Führe /visual-verify für den [view] aus. App läuft mit WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS='--remote-debugging-port=9222' auf Port 9222. ...")
 ```
 
 ## Cleanup (PFLICHT)

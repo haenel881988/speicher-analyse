@@ -230,7 +230,7 @@ export class EditorPanel {
         try {
             this._pdfjsLib = await import('../lib/pdfjs/pdf.min.mjs');
 
-            // Electron file:// protocol does NOT support module Workers (.mjs).
+            // Tauri file:// protocol does NOT support module Workers (.mjs).
             // Chromium blocks: new Worker(fileUrl, { type: 'module' }) from file:// origin.
             // Fix: Fetch the worker script, strip ESM export, create blob URL (classic Worker).
             const workerUrl = new URL('../lib/pdfjs/pdf.worker.min.mjs', import.meta.url);
@@ -240,7 +240,7 @@ export class EditorPanel {
             // The worker already sets globalThis.pdfjsWorker for classic mode
             workerCode = workerCode.replace(/;\s*export\s*\{[^}]*\}\s*$/, ';');
 
-            // Polyfill: Uint8Array.toHex/fromHex (Chrome 132+, nicht in Electron 33/Chrome 130)
+            // Polyfill: Uint8Array.toHex/fromHex (Chrome 132+, nicht in allen WebView2-Versionen)
             // MUSS im Worker-Kontext verfügbar sein, da pdf.js v5.4 diese Methoden intern nutzt
             const polyfill = `
 if(!Uint8Array.prototype.toHex){Uint8Array.prototype.toHex=function(){const h=[];for(let i=0;i<this.length;i++)h.push(this[i].toString(16).padStart(2,'0'));return h.join('')};}
