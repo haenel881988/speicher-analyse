@@ -38,6 +38,23 @@ Archiv: [`archiv/aenderungsprotokoll_n46-60.md`](archiv/aenderungsprotokoll_n46-
 Siehe auch: [`archiv/aenderungsprotokoll_v7.0-v7.2.md`](archiv/aenderungsprotokoll_v7.0-v7.2.md) (3 Lessons)
 Siehe auch: [`archiv/aenderungsprotokoll_v7.3-v7.5.md`](archiv/aenderungsprotokoll_v7.3-v7.5.md)
 
+### #9: Migration = JEDE Funktion prüfen, nicht nur die offensichtlich kaputten (2026-02-16)
+
+**Problem:** Nach der Electron→Tauri v2 Migration wurden 31 Funktionen als Stubs belassen (leere Arrays, `null`, `{ stub: true }`). Die KI hat nur die offensichtlich sichtbaren Probleme (Netzwerk-Scan) repariert und die restlichen 31 Stubs ignoriert. Der User musste mehrmals darauf hinweisen, dass Funktionen fehlen — obwohl eine systematische Prüfung ALLER Commands beim ersten Mal nötig gewesen wäre.
+
+**Ursache:** Isolierte statt ganzheitliche Analyse. Die KI hat sich auf ein Symptom konzentriert (Netzwerk zeigt keine Daten) statt die gesamte Codebasis systematisch zu prüfen (welche Commands sind Stubs? welche geben Fake-Daten zurück?).
+
+**Lösung:** Nach JEDER Migration/Rewrite: Systematisch JEDEN Command in commands.rs durchgehen und per Grep nach Stub-Patterns suchen (`stub: true`, `json!([])`, `json!(null)`, `"not implemented"`). Checkliste abarbeiten, nicht nur die ersten sichtbaren Fehler fixen.
+
+**Lehre:**
+- Migration ist NICHT fertig wenn die App startet. Migration ist fertig wenn JEDE Funktion echte Daten liefert.
+- NIEMALS isoliert analysieren. IMMER die gesamte Codebasis prüfen.
+- Ein Stub der `[]` oder `null` zurückgibt ist genauso kaputt wie ein Kompilierungsfehler — er ist nur schwerer zu sehen.
+- Der User muss NIEMALS zweimal auf dasselbe Problem hinweisen. Beim ersten Hinweis: ganzheitlich prüfen, nicht nur den gemeldeten Fall fixen.
+- Grep-Patterns für Stub-Erkennung: `stub: true`, `json!([])`, `json!(null)`, `"not implemented"`, `"not yet"`, `todo!()`, `unimplemented!()`
+
+---
+
 ### #4: node-pty + Electron: Native Module Builds (2026-02-10)
 
 **Problem:** node-pty@1.1.0 brauchte winpty (GetCommitHash.bat Fehler). node-pty@1.2.0-beta.11 (ConPTY-only) scheiterte an Spectre-Mitigation.

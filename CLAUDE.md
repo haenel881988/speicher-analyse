@@ -85,7 +85,8 @@ Daher gilt: Annahmen, Behauptungen und Halluzinationen sind STRENGSTENS VERBOTEN
 
 - **Nach größeren Änderungen** (5+ Dateien oder neues Feature): `/security-scan all` ausführen
 - **Vor jedem Release** (`/git-release`): `/audit-code all` ausführen (deckt Security + Performance + WCAG + Konventionen ab)
-- **Nach Framework-Migrationen:** Vollständiges Audit + Migrations-Checkliste (`docs/planung/migrations-checkliste.md`) abarbeiten
+- **Nach Framework-Migrationen:** Vollständiges Audit + Migrations-Checkliste (`docs/planung/migrations-checkliste.md`) abarbeiten. **PFLICHT:** Jeden einzelnen Command in commands.rs per Grep auf Stub-Patterns prüfen (`stub: true`, `json!([])`, `json!(null)`, `"not implemented"`, `todo!()`). Migration ist NICHT fertig wenn die App startet — Migration ist fertig wenn JEDE Funktion echte Daten liefert.
+- **Bei User-Fehlermeldung:** NIEMALS nur den gemeldeten Fall fixen. IMMER ganzheitlich prüfen ob weitere Funktionen betroffen sind. Der User darf NIEMALS zweimal auf dasselbe Problem hinweisen.
 - **Bei neuen PowerShell-Commands:** Security-Checkliste aus `/powershell-cmd` Skill abarbeiten (Escaping, Timeout, Validierung)
 - **Bei CSS-Änderungen an Farben:** `/wcag-check` ausführen
 - **Stub-Status aktuell halten:** `docs/issues/anforderungen.md` Section 12 bei jeder Stub-Implementierung aktualisieren
