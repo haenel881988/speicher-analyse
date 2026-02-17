@@ -2128,7 +2128,7 @@ os=[PSCustomObject]@{name=$os.Caption;version=$os.Version;build=$os.BuildNumber;
 cpu=[PSCustomObject]@{name=$cpu.Name;manufacturer=$cpu.Manufacturer;cores=[int]$cpu.NumberOfCores;threads=[int]$cpu.NumberOfLogicalProcessors;maxClockMHz=[int]$cpu.MaxClockSpeed;currentClockMHz=[int]$cpu.CurrentClockSpeed;l2CacheKB=[int]$cpu.L2CacheSize;l3CacheKB=[int]$cpu.L3CacheSize}
 gpu=@($gpus|ForEach-Object{[PSCustomObject]@{name=$_.Name;manufacturer=$_.AdapterCompatibility;driverVersion=$_.DriverVersion;vramBytes=[long]$_.AdapterRAM;resolution="$($_.CurrentHorizontalResolution)x$($_.CurrentVerticalResolution)";refreshRate=[int]$_.CurrentRefreshRate}})
 ram=[PSCustomObject]@{totalBytes=$ramT;totalFormatted="$([math]::Round($ramT/1GB,1)) GB";usedBytes=$ramU;freeBytes=$ramF;sticks=@($rams|ForEach-Object{[PSCustomObject]@{manufacturer=$_.Manufacturer;capacityBytes=[long]$_.Capacity;capacityFormatted="$([math]::Round($_.Capacity/1GB,1)) GB";speedMHz=[int]$_.Speed;bank=$_.BankLabel}})}
-disks=@($disksP|ForEach-Object{[PSCustomObject]@{model=$_.FriendlyName;sizeBytes=[long]$_.Size;sizeFormatted="$([math]::Round($_.Size/1GB,1)) GB";mediaType=switch([int]$_.MediaType){3{'HDD'}4{'SSD'}default{'Unknown'}};interface="$($_.BusType)";serial="$($_.SerialNumber)".Trim();partitions=0}})
+disks=@($disksP|ForEach-Object{$dk=Get-Disk -Number $_.DeviceId -EA SilentlyContinue;[PSCustomObject]@{model=$_.FriendlyName;sizeBytes=[long]$_.Size;sizeFormatted="$([math]::Round($_.Size/1GB,1)) GB";mediaType=switch([int]$_.MediaType){3{'HDD'}4{'SSD'}default{'Unknown'}};interface="$($_.BusType)";serial="$($_.SerialNumber)".Trim();partitions=if($dk){[int]$dk.NumberOfPartitions}else{0}}})
 network=@($nics|ForEach-Object{[PSCustomObject]@{description=$_.Description;mac=$_.MACAddress;ip=@($_.IPAddress);subnet=@($_.IPSubnet);gateway=@($_.DefaultIPGateway);dhcp=$_.DHCPEnabled;dns=@($_.DNSServerSearchOrder)}})
 bios=[PSCustomObject]@{serialNumber=$biosI.SerialNumber;manufacturer=$biosI.Manufacturer;version=$biosI.SMBIOSBIOSVersion;releaseDate=fD $biosI.ReleaseDate}
 motherboard=[PSCustomObject]@{manufacturer=$mb.Manufacturer;product=$mb.Product;serialNumber=$mb.SerialNumber;version=$mb.Version}
@@ -2220,7 +2220,9 @@ $programs | Sort-Object name | ConvertTo-Json -Depth 2 -Compress"#
 #[tauri::command]
 pub async fn correlate_software(program: Value) -> Result<Value, String> {
     let install_location = program.get("installLocation").and_then(|v| v.as_str()).unwrap_or("");
-    let display_name = program.get("displayName").and_then(|v| v.as_str()).unwrap_or("");
+    let display_name = program.get("displayName")
+        .or_else(|| program.get("name"))
+        .and_then(|v| v.as_str()).unwrap_or("");
     let publisher = program.get("publisher").and_then(|v| v.as_str()).unwrap_or("");
 
     if install_location.is_empty() && display_name.is_empty() {
@@ -2343,17 +2345,18 @@ $sm = @{}; foreach ($s in $stats) { $sm[$s.Name] = $s }
 
     let bandwidth: Vec<Value> = arr.iter().map(|b| {
         let name = b["name"].as_str().unwrap_or("").to_string();
+        let store_key = format!("bw_{}", name); // Prefix to avoid collision with get_polling_data
         let rb = b["receivedBytes"].as_i64().unwrap_or(0);
         let sb = b["sentBytes"].as_i64().unwrap_or(0);
 
-        let (rx_ps, tx_ps) = if let Some(prev) = prev_store.get(&name) {
+        let (rx_ps, tx_ps) = if let Some(prev) = prev_store.get(&store_key) {
             let elapsed = (now_ms - prev.timestamp_ms) as f64 / 1000.0;
             if elapsed > 0.5 {
                 (((rb - prev.received_bytes).max(0) as f64 / elapsed), ((sb - prev.sent_bytes).max(0) as f64 / elapsed))
             } else { (0.0, 0.0) }
         } else { (0.0, 0.0) };
 
-        prev_store.insert(name.clone(), BwPrev { received_bytes: rb, sent_bytes: sb, timestamp_ms: now_ms });
+        prev_store.insert(store_key, BwPrev { received_bytes: rb, sent_bytes: sb, timestamp_ms: now_ms });
 
         // History for sparklines
         if rx_ps > 0.0 || tx_ps > 0.0 || hist_store.contains_key(&name) {
@@ -2413,9 +2416,9 @@ pub async fn unblock_process(rule_name: String) -> Result<Value, String> {
 #[tauri::command]
 pub async fn get_network_summary() -> Result<Value, String> {
     crate::ps::run_ps_json(
-        r#"$tcp = (Get-NetTCPConnection -ErrorAction SilentlyContinue | Where-Object { $_.State -eq 'Established' }).Count
-$udp = (Get-NetUDPEndpoint -ErrorAction SilentlyContinue).Count
-$listening = (Get-NetTCPConnection -ErrorAction SilentlyContinue | Where-Object { $_.State -eq 'Listen' }).Count
+        r#"$tcp = @(Get-NetTCPConnection -ErrorAction SilentlyContinue | Where-Object { $_.State -eq 'Established' }).Count
+$udp = @(Get-NetUDPEndpoint -ErrorAction SilentlyContinue).Count
+$listening = @(Get-NetTCPConnection -ErrorAction SilentlyContinue | Where-Object { $_.State -eq 'Listen' }).Count
 [PSCustomObject]@{ established=$tcp; listening=$listening; udpEndpoints=$udp; totalConnections=($tcp+$listening) } | ConvertTo-Json -Compress"#
     ).await
 }
@@ -2490,14 +2493,12 @@ $result | ConvertTo-Json -Compress"#,
         }
     }
 
-    // Store in cache for use by get_polling_data
+    // Store in cache for use by get_polling_data (including empty to avoid re-resolving)
     {
         let mut cache = IP_RESOLVE_CACHE.lock().unwrap();
         for (ip, info) in &result_map {
             if let Some(company) = info["company"].as_str() {
-                if !company.is_empty() {
-                    cache.insert(ip.clone(), company.to_string());
-                }
+                cache.insert(ip.clone(), company.to_string());
             }
         }
     }
@@ -2746,17 +2747,18 @@ $uips=@($conns|Where-Object{$_.RemoteAddress -ne '0.0.0.0' -and $_.RemoteAddress
 
     let bandwidth: Vec<Value> = bw_raw.iter().map(|b| {
         let name = b["n"].as_str().unwrap_or("").to_string();
+        let store_key = format!("poll_{}", name); // Prefix to avoid collision with get_bandwidth
         let rb = b["rb"].as_i64().unwrap_or(0);
         let sb = b["sb"].as_i64().unwrap_or(0);
 
-        let (rx_ps, tx_ps) = if let Some(prev) = prev_store.get(&name) {
+        let (rx_ps, tx_ps) = if let Some(prev) = prev_store.get(&store_key) {
             let elapsed = (now_ms - prev.timestamp_ms) as f64 / 1000.0;
             if elapsed > 0.5 {
                 (((rb - prev.received_bytes).max(0) as f64 / elapsed), ((sb - prev.sent_bytes).max(0) as f64 / elapsed))
             } else { (0.0, 0.0) }
         } else { (0.0, 0.0) };
 
-        prev_store.insert(name.clone(), BwPrev { received_bytes: rb, sent_bytes: sb, timestamp_ms: now_ms });
+        prev_store.insert(store_key, BwPrev { received_bytes: rb, sent_bytes: sb, timestamp_ms: now_ms });
 
         if rx_ps > 0.0 || tx_ps > 0.0 || hist_store.contains_key(&name) {
             let hist = hist_store.entry(name.clone()).or_default();
@@ -2806,11 +2808,23 @@ $pn = (Get-Process -Id $_.OwningProcess -EA SilentlyContinue).ProcessName
 
     let empty_arr = vec![];
     let current_arr = current_raw.as_array().unwrap_or(&empty_arr);
+
+    // Use HashSets for O(1) lookup instead of O(n*m)
+    let current_set: std::collections::HashSet<&str> = current.iter().map(|s| s.as_str()).collect();
+    let prev_set: std::collections::HashSet<&str> = prev_keys.iter().map(|s| s.as_str()).collect();
+
     let added: Vec<&Value> = current_arr.iter().enumerate()
-        .filter(|(i, _)| !prev_keys.contains(&current[*i]))
+        .filter(|(i, _)| !prev_set.contains(current[*i].as_str()))
         .map(|(_, v)| v)
         .collect();
 
+    // Detect removed connections (were in prev, not in current)
+    let removed: Vec<&Value> = prev_store.iter().enumerate()
+        .filter(|(i, _)| !current_set.contains(prev_keys[*i].as_str()))
+        .map(|(_, v)| v)
+        .collect();
+
+    let now_ms = chrono::Utc::now().timestamp_millis();
     let mut events: Vec<Value> = Vec::new();
     for a in &added {
         events.push(json!({
@@ -2818,11 +2832,20 @@ $pn = (Get-Process -Id $_.OwningProcess -EA SilentlyContinue).ProcessName
             "processName": a["pn"],
             "remoteAddress": a["ra"],
             "remotePort": a["rp"],
-            "timestamp": chrono::Utc::now().timestamp_millis()
+            "timestamp": now_ms
+        }));
+    }
+    for r in &removed {
+        events.push(json!({
+            "type": "closed",
+            "processName": r["processName"],
+            "remoteAddress": r["remoteAddress"],
+            "remotePort": r["remotePort"],
+            "timestamp": now_ms
         }));
     }
 
-    Ok(json!({ "events": events, "added": added, "removed": [] }))
+    Ok(json!({ "events": events, "added": added, "removed": removed }))
 }
 
 #[tauri::command]
@@ -2905,9 +2928,9 @@ pub async fn start_network_recording() -> Result<Value, String> {
     let filename = format!("recording_{}.jsonl", chrono::Local::now().format("%Y-%m-%d_%H-%M-%S"));
     let filepath = get_recordings_dir().join(&filename);
 
-    // Write header line
+    // Write header line (async)
     let header = json!({ "type": "header", "startedAt": now, "version": 1 });
-    std::fs::write(&filepath, format!("{}\n", header)).map_err(|e| e.to_string())?;
+    tokio::fs::write(&filepath, format!("{}\n", header)).await.map_err(|e| e.to_string())?;
 
     let mut rec = NETWORK_RECORDING.lock().unwrap();
     *rec = Some(NetworkRecordingState {
@@ -2922,20 +2945,24 @@ pub async fn start_network_recording() -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn stop_network_recording() -> Result<Value, String> {
-    let mut rec = NETWORK_RECORDING.lock().unwrap();
-    if let Some(state) = rec.take() {
+    // Extract state from mutex quickly, then do I/O outside the lock
+    let state_opt = {
+        let mut rec = NETWORK_RECORDING.lock().unwrap();
+        rec.take()
+    };
+    if let Some(state) = state_opt {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_millis() as i64)
             .unwrap_or(0);
         let duration = now - state.started_at;
 
-        // Write footer line
+        // Write footer line (async, outside mutex)
         let filepath = get_recordings_dir().join(&state.filename);
         let footer = json!({ "type": "footer", "stoppedAt": now, "duration": duration, "totalEvents": state.event_count });
-        if let Ok(mut f) = std::fs::OpenOptions::new().append(true).open(&filepath) {
-            use std::io::Write;
-            let _ = writeln!(f, "{}", footer);
+        if let Ok(mut f) = tokio::fs::OpenOptions::new().append(true).open(&filepath).await {
+            use tokio::io::AsyncWriteExt;
+            let _ = f.write_all(format!("{}\n", footer).as_bytes()).await;
         }
 
         tracing::debug!(filename = %state.filename, events = state.event_count, "Netzwerk-Aufzeichnung gestoppt");
@@ -2967,18 +2994,37 @@ pub async fn get_network_recording_status() -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn append_network_recording_events(events: Value) -> Result<Value, String> {
-    let mut rec = NETWORK_RECORDING.lock().unwrap();
-    if let Some(state) = rec.as_mut() {
-        let filepath = get_recordings_dir().join(&state.filename);
+    // Extract filename and validate under lock, then do I/O outside
+    let (filepath, arr_len) = {
+        let rec = NETWORK_RECORDING.lock().unwrap();
+        if let Some(state) = rec.as_ref() {
+            if let Some(arr) = events.as_array() {
+                (Some(get_recordings_dir().join(&state.filename)), arr.len())
+            } else {
+                return Ok(json!({ "success": false, "error": "events muss ein Array sein" }));
+            }
+        } else {
+            return Ok(json!({ "success": false, "error": "Keine aktive Aufzeichnung" }));
+        }
+    };
+
+    if let Some(fp) = filepath {
         if let Some(arr) = events.as_array() {
-            if let Ok(mut f) = std::fs::OpenOptions::new().append(true).open(&filepath) {
-                use std::io::Write;
+            if let Ok(mut f) = tokio::fs::OpenOptions::new().append(true).open(&fp).await {
+                use tokio::io::AsyncWriteExt;
                 for event in arr {
-                    let _ = writeln!(f, "{}", event);
-                    state.event_count += 1;
+                    let _ = f.write_all(format!("{}\n", event).as_bytes()).await;
                 }
             }
-            Ok(json!({ "success": true, "appended": arr.len(), "totalEvents": state.event_count }))
+            // Update event count under lock
+            let total = {
+                let mut rec = NETWORK_RECORDING.lock().unwrap();
+                if let Some(state) = rec.as_mut() {
+                    state.event_count += arr_len as u32;
+                    state.event_count
+                } else { 0 }
+            };
+            Ok(json!({ "success": true, "appended": arr_len, "totalEvents": total }))
         } else {
             Ok(json!({ "success": false, "error": "events muss ein Array sein" }))
         }
@@ -2990,59 +3036,89 @@ pub async fn append_network_recording_events(events: Value) -> Result<Value, Str
 #[tauri::command]
 pub async fn list_network_recordings() -> Result<Value, String> {
     let dir = get_recordings_dir();
-    let mut recordings = Vec::new();
-    if let Ok(entries) = std::fs::read_dir(&dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.extension().map(|e| e == "jsonl").unwrap_or(false) {
-                let filename = path.file_name().unwrap_or_default().to_string_lossy().to_string();
-                let meta = std::fs::metadata(&path).ok();
-                let file_size = meta.as_ref().map(|m| m.len()).unwrap_or(0);
-                let modified = meta.and_then(|m| m.modified().ok())
-                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                    .map(|d| d.as_millis() as i64)
-                    .unwrap_or(0);
+    // Run blocking I/O in spawn_blocking
+    let recordings = tokio::task::spawn_blocking(move || {
+        use std::io::{BufRead, BufReader, Seek, SeekFrom};
+        let mut recordings = Vec::new();
+        if let Ok(entries) = std::fs::read_dir(&dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().map(|e| e == "jsonl").unwrap_or(false) {
+                    let filename = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+                    let meta = std::fs::metadata(&path).ok();
+                    let file_size = meta.as_ref().map(|m| m.len()).unwrap_or(0);
+                    let modified = meta.and_then(|m| m.modified().ok())
+                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                        .map(|d| d.as_millis() as i64)
+                        .unwrap_or(0);
 
-                // Read first and last line for metadata
-                let content = std::fs::read_to_string(&path).unwrap_or_default();
-                let lines: Vec<&str> = content.lines().collect();
-                let mut started_at = 0i64;
-                let mut duration = 0i64;
-                let mut event_count = 0u32;
-                if let Some(first) = lines.first() {
-                    if let Ok(header) = serde_json::from_str::<Value>(first) {
-                        started_at = header["startedAt"].as_i64().unwrap_or(0);
-                    }
-                }
-                if let Some(last) = lines.last() {
-                    if let Ok(footer) = serde_json::from_str::<Value>(last) {
-                        if footer["type"].as_str() == Some("footer") {
-                            duration = footer["duration"].as_i64().unwrap_or(0);
-                            event_count = footer["totalEvents"].as_u64().unwrap_or(0) as u32;
+                    let mut started_at = 0i64;
+                    let mut duration = 0i64;
+                    let mut event_count = 0u32;
+
+                    // Read only first and last line (not entire file)
+                    if let Ok(file) = std::fs::File::open(&path) {
+                        let mut reader = BufReader::new(file);
+                        let mut first_line = String::new();
+                        if reader.read_line(&mut first_line).is_ok() {
+                            if let Ok(header) = serde_json::from_str::<Value>(first_line.trim()) {
+                                started_at = header["startedAt"].as_i64().unwrap_or(0);
+                            }
+                        }
+                        // Read last line by seeking from end
+                        if file_size > 2 {
+                            if let Ok(file2) = std::fs::File::open(&path) {
+                                let mut reader2 = BufReader::new(file2);
+                                // Seek backwards to find last newline
+                                let mut pos = file_size as i64 - 2;
+                                let mut last_line = String::new();
+                                while pos > 0 {
+                                    if reader2.seek(SeekFrom::Start(pos as u64)).is_ok() {
+                                        let mut byte = [0u8; 1];
+                                        if std::io::Read::read(&mut reader2, &mut byte).is_ok() && byte[0] == b'\n' {
+                                            last_line.clear();
+                                            let _ = reader2.read_line(&mut last_line);
+                                            break;
+                                        }
+                                    }
+                                    pos -= 1;
+                                }
+                                if !last_line.is_empty() {
+                                    if let Ok(footer) = serde_json::from_str::<Value>(last_line.trim()) {
+                                        if footer["type"].as_str() == Some("footer") {
+                                            duration = footer["duration"].as_i64().unwrap_or(0);
+                                            event_count = footer["totalEvents"].as_u64().unwrap_or(0) as u32;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        // Fallback: count lines if no footer (file still being recorded)
+                        if event_count == 0 && file_size > 0 {
+                            if let Ok(file3) = std::fs::File::open(&path) {
+                                // Count non-header/footer lines
+                                event_count = BufReader::new(file3).lines().flatten()
+                                    .filter(|l| !l.contains("\"type\":\"header\"") && !l.contains("\"type\":\"footer\"") && !l.trim().is_empty())
+                                    .count() as u32;
+                            }
                         }
                     }
-                }
-                // Count event lines (non-header, non-footer)
-                if event_count == 0 {
-                    event_count = lines.iter().filter(|l| {
-                        if let Ok(v) = serde_json::from_str::<Value>(l) {
-                            v["type"].as_str() != Some("header") && v["type"].as_str() != Some("footer")
-                        } else { false }
-                    }).count() as u32;
-                }
 
-                recordings.push(json!({
-                    "filename": filename,
-                    "startedAt": started_at,
-                    "duration": duration,
-                    "eventCount": event_count,
-                    "fileSize": file_size,
-                    "modified": modified
-                }));
+                    recordings.push(json!({
+                        "filename": filename,
+                        "startedAt": started_at,
+                        "duration": duration,
+                        "eventCount": event_count,
+                        "fileSize": file_size,
+                        "modified": modified
+                    }));
+                }
             }
         }
-    }
-    recordings.sort_by(|a, b| b["modified"].as_i64().cmp(&a["modified"].as_i64()));
+        recordings.sort_by(|a, b| b["modified"].as_i64().cmp(&a["modified"].as_i64()));
+        recordings
+    }).await.map_err(|e| e.to_string())?;
+
     Ok(json!(recordings))
 }
 
