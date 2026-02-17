@@ -2,6 +2,7 @@ use std::sync::{Mutex, OnceLock};
 use std::collections::HashMap;
 use serde_json::{json, Value};
 
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct FileEntry {
     pub path: String,
     pub name: String,
@@ -285,4 +286,93 @@ pub fn tree_node(scan_id: &str, path: &str, _depth: u32) -> Value {
             "children": children
         })
     }).unwrap_or(json!({"path": path, "name": "", "size": 0, "dir_count": 0, "file_count": 0, "children": []}))
+}
+
+/// Check if a scan_id exists in memory
+pub fn has_scan(scan_id: &str) -> bool {
+    let s = store().lock().unwrap();
+    s.contains_key(scan_id)
+}
+
+/// Persist current scan data to disk (compact JSON for file entries, metadata separate)
+pub fn save_to_disk(data_dir: &std::path::Path) -> Result<Value, String> {
+    let s = store().lock().unwrap();
+    let (_, data) = s.iter().next().ok_or("Keine Scan-Daten vorhanden")?;
+
+    let meta = json!({
+        "scan_id": data.scan_id,
+        "root_path": data.root_path,
+        "dirs_scanned": data.dirs_scanned,
+        "total_size": data.total_size,
+        "elapsed_seconds": data.elapsed_seconds,
+        "files_count": data.files.len(),
+        "saved_at": chrono::Utc::now().timestamp_millis(),
+    });
+
+    // Write metadata (small file)
+    let meta_path = data_dir.join("scan-meta.json");
+    let meta_str = serde_json::to_string_pretty(&meta).map_err(|e| e.to_string())?;
+    std::fs::write(&meta_path, &meta_str).map_err(|e| format!("scan-meta.json schreiben: {}", e))?;
+
+    // Write file entries (compact JSON, streamed via BufWriter)
+    let data_path = data_dir.join("scan-data.json");
+    let file = std::fs::File::create(&data_path).map_err(|e| format!("scan-data.json erstellen: {}", e))?;
+    let writer = std::io::BufWriter::with_capacity(256 * 1024, file);
+    serde_json::to_writer(writer, &data.files).map_err(|e| format!("scan-data.json schreiben: {}", e))?;
+
+    tracing::info!(
+        scan_id = %data.scan_id,
+        files = data.files.len(),
+        "Scan-Daten auf Disk persistiert"
+    );
+
+    Ok(meta)
+}
+
+/// Load scan data from disk into memory store
+pub fn load_from_disk(data_dir: &std::path::Path) -> Result<Value, String> {
+    let meta_path = data_dir.join("scan-meta.json");
+    let data_path = data_dir.join("scan-data.json");
+
+    if !meta_path.exists() || !data_path.exists() {
+        return Err("Keine gespeicherten Scan-Daten".to_string());
+    }
+
+    let meta_str = std::fs::read_to_string(&meta_path)
+        .map_err(|e| format!("scan-meta.json lesen: {}", e))?;
+    let meta: Value = serde_json::from_str(&meta_str)
+        .map_err(|e| format!("scan-meta.json parsen: {}", e))?;
+
+    let file = std::fs::File::open(&data_path)
+        .map_err(|e| format!("scan-data.json öffnen: {}", e))?;
+    let reader = std::io::BufReader::with_capacity(256 * 1024, file);
+    let files: Vec<FileEntry> = serde_json::from_reader(reader)
+        .map_err(|e| format!("scan-data.json parsen: {}", e))?;
+
+    let scan_id = meta["scan_id"].as_str().unwrap_or("restored").to_string();
+    let root_path = meta["root_path"].as_str().unwrap_or("").to_string();
+
+    tracing::info!(
+        scan_id = %scan_id,
+        files = files.len(),
+        "Scan-Daten von Disk geladen"
+    );
+
+    save(ScanData {
+        scan_id: scan_id.clone(),
+        root_path,
+        files,
+        dirs_scanned: meta["dirs_scanned"].as_u64().unwrap_or(0),
+        total_size: meta["total_size"].as_u64().unwrap_or(0),
+        elapsed_seconds: meta["elapsed_seconds"].as_f64().unwrap_or(0.0),
+    });
+
+    Ok(meta)
+}
+
+/// Get scan metadata without loading full data (fast check)
+pub fn read_scan_meta(data_dir: &std::path::Path) -> Option<Value> {
+    let meta_path = data_dir.join("scan-meta.json");
+    let meta_str = std::fs::read_to_string(&meta_path).ok()?;
+    serde_json::from_str(&meta_str).ok()
 }

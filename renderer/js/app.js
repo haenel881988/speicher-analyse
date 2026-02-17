@@ -575,14 +575,21 @@ function onScanError(error) {
 async function loadAllViews(skipPostAnalysis = false) {
     els.treeContent.style.display = 'block';
     els.welcomeState.style.display = 'none';
+
+    // Tree + Treemap sofort starten (nicht-blockierend, zeigt Verzeichnisse sofort)
     treeView.init(state.currentScanId, state.currentPath);
     treemapView.init(state.currentScanId, state.currentPath);
-    await fileTypeChart.init(state.currentScanId);
-    fileTypeChart.setupTableSort(els.typeTable);
-    fileTypeChart.setupDetailPanel();
-    await loadTopFiles();
 
-    // Init tool views with current scan
+    // Charts + Top-Dateien + Tool-Views parallel laden (blockiert Tree nicht)
+    await Promise.allSettled([
+        fileTypeChart.init(state.currentScanId).then(() => {
+            fileTypeChart.setupTableSort(els.typeTable);
+            fileTypeChart.setupDetailPanel();
+        }),
+        loadTopFiles(),
+    ]);
+
+    // Init tool views with current scan (schnell, nur IDs setzen)
     oldFilesView.init(state.currentScanId);
     duplicatesView.init(state.currentScanId);
     cleanupView.init(state.currentScanId);

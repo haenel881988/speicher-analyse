@@ -212,6 +212,27 @@ pub async fn start_scan(app: tauri::AppHandle, path: String) -> Result<Value, St
         });
         tracing::debug!(scan_id = %sid, "Scan-Daten im Store gespeichert");
 
+        // Persist to disk for session restore
+        let data_dir = get_data_dir();
+        match crate::scan::save_to_disk(&data_dir) {
+            Ok(_) => tracing::debug!(scan_id = %sid, "Scan-Daten auf Disk persistiert"),
+            Err(e) => tracing::warn!(scan_id = %sid, error = %e, "Scan-Daten konnten nicht persistiert werden"),
+        }
+
+        // Save scan metadata in session.json for frontend restore
+        let mut session = read_json_file("session.json");
+        if let Some(obj) = session.as_object_mut() {
+            obj.insert("sessions".to_string(), json!([{
+                "scan_id": &sid,
+                "current_path": &path,
+                "dirs_scanned": dirs_scanned,
+                "files_found": files_found,
+                "total_size": total_size,
+                "elapsed_seconds": (elapsed * 10.0).round() / 10.0
+            }]));
+        }
+        let _ = write_json_file("session.json", &session);
+
         // Emit completion
         let emit_result = app.emit("scan-complete", json!({
             "scan_id": &sid,
@@ -1168,13 +1189,21 @@ pub async fn get_name_index_info(scan_id: String) -> Result<Value, String> {
     Ok(json!({ "indexed": count }))
 }
 
+static DEEP_SEARCH_PID: LazyLock<std::sync::atomic::AtomicU32> = LazyLock::new(|| std::sync::atomic::AtomicU32::new(0));
+
 #[tauri::command]
 pub async fn deep_search_start(app: tauri::AppHandle, root_path: String, query: String, _use_regex: Option<bool>) -> Result<Value, String> {
+    // Reset cancel state
+    DEEP_SEARCH_PID.store(0, std::sync::atomic::Ordering::Relaxed);
+
     let app2 = app.clone();
     tokio::spawn(async move {
+        let safe_query = query.replace("'", "''");
+        let safe_path = root_path.replace("'", "''");
+        let utf8_prefix = "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; ";
         let script = format!(
-            r#"$q = '{}'; $count = 0; $dirs = 0
-Get-ChildItem -Path '{}' -Recurse -Force -ErrorAction SilentlyContinue | ForEach-Object {{
+            r#"{utf8}$q = '{q}'; $count = 0; $dirs = 0
+Get-ChildItem -Path '{p}' -Recurse -Force -ErrorAction SilentlyContinue | ForEach-Object {{
     if ($_.PSIsContainer) {{ $dirs++ }}
     if ($_.Name -like "*$q*") {{
         $count++
@@ -1184,28 +1213,77 @@ Get-ChildItem -Path '{}' -Recurse -Force -ErrorAction SilentlyContinue | ForEach
         [PSCustomObject]@{{ path=$_.FullName; name=$_.Name; dirPath=$dirPath; isDir=$_.PSIsContainer; size=[long]$_.Length; modified=$_.LastWriteTime.ToString('o'); matchQuality=$mq }}
     }}
 }} | Select-Object -First 500 | ConvertTo-Json -Compress"#,
-            query.replace("'", "''"), root_path.replace("'", "''")
+            utf8 = utf8_prefix, q = safe_query, p = safe_path
         );
-        match crate::ps::run_ps_json(&script).await {
-            Ok(data) => {
-                let results = if data.is_array() { data.as_array().unwrap().clone() } else if data.is_null() { vec![] } else { vec![data] };
-                // Emit individual results for streaming
-                for r in &results {
-                    let _ = app2.emit("deep-search-result", r.clone());
+
+        let mut cmd = tokio::process::Command::new("powershell.exe");
+        cmd.args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", &script])
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+        #[cfg(windows)]
+        { use std::os::windows::process::CommandExt; cmd.creation_flags(0x08000000); }
+
+        match cmd.spawn() {
+            Ok(child) => {
+                // Store PID for cancellation
+                if let Some(pid) = child.id() {
+                    DEEP_SEARCH_PID.store(pid, std::sync::atomic::Ordering::Relaxed);
                 }
-                let _ = app2.emit("deep-search-complete", json!({ "resultCount": results.len(), "dirsScanned": 0 }));
+                match tokio::time::timeout(std::time::Duration::from_secs(60), child.wait_with_output()).await {
+                    Ok(Ok(output)) if output.status.success() => {
+                        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                        if stdout.is_empty() {
+                            let _ = app2.emit("deep-search-complete", json!({ "resultCount": 0, "dirsScanned": 0 }));
+                        } else {
+                            match serde_json::from_str::<Value>(&stdout) {
+                                Ok(data) => {
+                                    let results = if data.is_array() { data.as_array().unwrap().clone() } else { vec![data] };
+                                    for r in &results {
+                                        let _ = app2.emit("deep-search-result", r.clone());
+                                    }
+                                    let _ = app2.emit("deep-search-complete", json!({ "resultCount": results.len(), "dirsScanned": 0 }));
+                                }
+                                Err(e) => { let _ = app2.emit("deep-search-error", json!({ "error": format!("JSON-Parse-Fehler: {}", e) })); }
+                            }
+                        }
+                    }
+                    Ok(Ok(_)) => {
+                        let _ = app2.emit("deep-search-error", json!({ "error": "PowerShell-Suche fehlgeschlagen" }));
+                    }
+                    Ok(Err(e)) => {
+                        let _ = app2.emit("deep-search-error", json!({ "error": e.to_string() }));
+                    }
+                    Err(_) => {
+                        let _ = app2.emit("deep-search-error", json!({ "error": "Suche abgebrochen (Timeout 60s)" }));
+                    }
+                }
             }
-            Err(e) => { let _ = app2.emit("deep-search-error", json!({ "error": e })); }
+            Err(e) => {
+                let _ = app2.emit("deep-search-error", json!({ "error": format!("PowerShell konnte nicht gestartet werden: {}", e) }));
+            }
         }
+        DEEP_SEARCH_PID.store(0, std::sync::atomic::Ordering::Relaxed);
     });
     Ok(json!({ "started": true }))
 }
 
 #[tauri::command]
 pub async fn deep_search_cancel() -> Result<Value, String> {
-    // Note: The spawned PowerShell process cannot be cancelled from here.
-    // This only signals the frontend to stop processing incoming results.
-    Ok(json!({ "cancelled": true, "note": "Laufende PowerShell-Suche wird im Hintergrund beendet" }))
+    let pid = DEEP_SEARCH_PID.load(std::sync::atomic::Ordering::Relaxed);
+    if pid > 0 {
+        // Kill the PowerShell process tree
+        let mut kill_cmd = std::process::Command::new("taskkill");
+        kill_cmd.args(["/PID", &pid.to_string(), "/T", "/F"]);
+        #[cfg(windows)]
+        { use std::os::windows::process::CommandExt; kill_cmd.creation_flags(0x08000000); }
+        let _ = kill_cmd.spawn();
+        DEEP_SEARCH_PID.store(0, std::sync::atomic::Ordering::Relaxed);
+        tracing::debug!(pid = pid, "Deep-Search abgebrochen (PID gekillt)");
+        Ok(json!({ "cancelled": true }))
+    } else {
+        Ok(json!({ "cancelled": false, "message": "Keine aktive Suche" }))
+    }
 }
 
 // === Explorer ===
@@ -1348,8 +1426,49 @@ pub async fn get_restored_session() -> Result<Value, String> {
     if session.as_object().map(|o| o.is_empty()).unwrap_or(true) {
         return Ok(json!(null));
     }
-    // Return the saved uiState so the frontend can restore the previous session
-    Ok(session.get("uiState").cloned().unwrap_or(json!(null)))
+
+    // Try to restore scan data from disk into memory
+    let data_dir = get_data_dir();
+    let sessions = if let Some(saved_sessions) = session.get("sessions") {
+        // Load actual file data into memory store if not already loaded
+        if let Some(arr) = saved_sessions.as_array() {
+            if let Some(first) = arr.first() {
+                let scan_id = first["scan_id"].as_str().unwrap_or("");
+                if !scan_id.is_empty() && !crate::scan::has_scan(scan_id) {
+                    match crate::scan::load_from_disk(&data_dir) {
+                        Ok(_) => tracing::info!("Scan-Daten von Disk wiederhergestellt"),
+                        Err(e) => tracing::warn!(error = %e, "Scan-Daten konnten nicht von Disk geladen werden"),
+                    }
+                }
+            }
+        }
+        saved_sessions.clone()
+    } else {
+        // Fallback: check if scan-meta.json exists (old sessions without sessions array)
+        if let Some(meta) = crate::scan::read_scan_meta(&data_dir) {
+            let scan_id = meta["scan_id"].as_str().unwrap_or("");
+            if !scan_id.is_empty() && !crate::scan::has_scan(scan_id) {
+                let _ = crate::scan::load_from_disk(&data_dir);
+            }
+            json!([{
+                "scan_id": meta["scan_id"],
+                "current_path": meta["root_path"],
+                "dirs_scanned": meta["dirs_scanned"],
+                "files_found": meta["files_count"],
+                "total_size": meta["total_size"],
+                "elapsed_seconds": meta["elapsed_seconds"]
+            }])
+        } else {
+            json!([])
+        }
+    };
+
+    let ui = session.get("uiState").cloned().unwrap_or(json!(null));
+
+    Ok(json!({
+        "sessions": sessions,
+        "ui": ui
+    }))
 }
 
 // === System ===
@@ -1624,7 +1743,7 @@ pub async fn terminal_write(id: String, data: String) -> Result<Value, String> {
 #[tauri::command]
 pub async fn terminal_resize(_id: String, _cols: u32, _rows: u32) -> Result<Value, String> {
     // Piped terminals don't support resize — would need ConPTY/portable-pty for true PTY
-    Ok(json!({ "success": true }))
+    Ok(json!({ "stub": true, "message": "Terminal-Resize benötigt ConPTY/portable-pty (Piped I/O unterstützt kein Resize)" }))
 }
 
 #[tauri::command]
@@ -3166,9 +3285,70 @@ $result | ConvertTo-Json -Depth 3 -Compress"#,
         std::collections::HashMap::new()
     };
 
-    // Phase 3: Enrich devices with OUI vendor + classification
+    // Phase 3: UPnP/SSDP discovery for model names
     let _ = app.emit("network-scan-progress", json!({
-        "phase": "classify", "message": "Geräte werden identifiziert...", "percent": 80
+        "phase": "identify", "message": "Gerätemodelle werden erkannt (UPnP/SSDP)...", "percent": 60
+    }));
+
+    let ssdp_map: std::collections::HashMap<String, Value> = {
+        let ssdp_script = r#"$udp = New-Object System.Net.Sockets.UdpClient
+$udp.Client.ReceiveTimeout = 3000
+$udp.Client.SendTimeout = 1000
+$msg = "M-SEARCH * HTTP/1.1`r`nHOST: 239.255.255.250:1900`r`nMAN: `"ssdp:discover`"`r`nMX: 3`r`nST: upnp:rootdevice`r`n`r`n"
+$bytes = [Text.Encoding]::UTF8.GetBytes($msg)
+$ep = New-Object System.Net.IPEndPoint([System.Net.IPAddress]::Parse('239.255.255.250'), 1900)
+try { $udp.Send($bytes, $bytes.Length, $ep) | Out-Null } catch { $udp.Close(); '{}'; return }
+$locations = @{}
+$deadline = (Get-Date).AddSeconds(4)
+while ((Get-Date) -lt $deadline) {
+    try {
+        $remEP = New-Object System.Net.IPEndPoint([System.Net.IPAddress]::Any, 0)
+        $resp = [Text.Encoding]::UTF8.GetString($udp.Receive([ref]$remEP))
+        $ip = $remEP.Address.ToString()
+        if ($resp -match 'LOCATION:\s*(http\S+)') {
+            if (-not $locations[$ip]) { $locations[$ip] = $Matches[1] }
+        }
+    } catch { break }
+}
+$udp.Close()
+$result = @{}
+foreach ($ip in $locations.Keys) {
+    try {
+        $xml = [xml](Invoke-WebRequest -Uri $locations[$ip] -TimeoutSec 3 -UseBasicParsing).Content
+        $ns = @{d='urn:schemas-upnp-org:device-1-0'}
+        $dev = $xml | Select-Xml '//d:device' -Namespace $ns | Select-Object -First 1
+        if ($dev) {
+            $result[$ip] = [PSCustomObject]@{
+                modelName = [string]$dev.Node.modelName
+                manufacturer = [string]$dev.Node.manufacturer
+                friendlyName = [string]$dev.Node.friendlyName
+            }
+        }
+    } catch {}
+}
+$result | ConvertTo-Json -Depth 2 -Compress"#;
+
+        match crate::ps::run_ps_json(ssdp_script).await {
+            Ok(ssdp_data) => {
+                let mut sm: std::collections::HashMap<String, Value> = std::collections::HashMap::new();
+                if let Some(obj) = ssdp_data.as_object() {
+                    for (ip, info) in obj {
+                        sm.insert(ip.clone(), info.clone());
+                    }
+                }
+                tracing::info!("SSDP-Erkennung: {} Geräte mit Modell-Info", sm.len());
+                sm
+            }
+            Err(e) => {
+                tracing::warn!("SSDP-Erkennung fehlgeschlagen: {}", e);
+                std::collections::HashMap::new()
+            }
+        }
+    };
+
+    // Phase 4: Enrich devices with OUI vendor + SSDP model + classification
+    let _ = app.emit("network-scan-progress", json!({
+        "phase": "classify", "message": "Geräte werden klassifiziert...", "percent": 85
     }));
 
     let mut enriched_devices: Vec<Value> = Vec::with_capacity(phase1_raw.len());
@@ -3185,6 +3365,28 @@ $result | ConvertTo-Json -Depth 3 -Compress"#,
             crate::oui::lookup(&mac).unwrap_or("").to_string()
         };
 
+        // SSDP model info
+        let ssdp_info = ssdp_map.get(&ip);
+        let model_name = ssdp_info
+            .and_then(|i| i["modelName"].as_str())
+            .unwrap_or("")
+            .to_string();
+        let ssdp_manufacturer = ssdp_info
+            .and_then(|i| i["manufacturer"].as_str())
+            .unwrap_or("")
+            .to_string();
+        let friendly_name = ssdp_info
+            .and_then(|i| i["friendlyName"].as_str())
+            .unwrap_or("")
+            .to_string();
+
+        // Use SSDP manufacturer if OUI vendor is empty
+        let effective_vendor = if vendor.is_empty() && !ssdp_manufacturer.is_empty() {
+            ssdp_manufacturer.clone()
+        } else {
+            vendor.clone()
+        };
+
         // Get open ports for this device
         let open_ports = port_map.get(&ip).cloned().unwrap_or_default();
         let open_port_numbers: Vec<u16> = open_ports.iter()
@@ -3195,7 +3397,17 @@ $result | ConvertTo-Json -Depth 3 -Compress"#,
         let is_local = ip == local_ip;
         let is_gateway = ip == gateway_ip;
         let (device_type, device_label, device_icon) =
-            crate::oui::classify_device(&vendor, &hostname, &open_port_numbers, is_local, is_gateway);
+            crate::oui::classify_device(&effective_vendor, &hostname, &open_port_numbers, is_local, is_gateway);
+
+        // Build identification method string
+        let mut id_methods = Vec::new();
+        if !vendor.is_empty() { id_methods.push("OUI"); }
+        if !open_port_numbers.is_empty() { id_methods.push("Ports"); }
+        if !model_name.is_empty() { id_methods.push("UPnP"); }
+        if id_methods.is_empty() {
+            if !hostname.is_empty() { id_methods.push("DNS"); }
+            else { id_methods.push("Ping"); }
+        }
 
         enriched_devices.push(json!({
             "ip": ip,
@@ -3203,25 +3415,17 @@ $result | ConvertTo-Json -Depth 3 -Compress"#,
             "hostname": hostname,
             "online": true,
             "rtt": rtt,
-            "vendor": vendor,
+            "vendor": effective_vendor,
             "deviceType": device_type,
             "deviceLabel": device_label,
             "deviceIcon": device_icon,
             "openPorts": open_ports,
             "isLocal": is_local,
             "os": "",
-            "modelName": "",
-            "identifiedBy": if !vendor.is_empty() && !open_port_numbers.is_empty() {
-                "OUI + Ports"
-            } else if !vendor.is_empty() {
-                "OUI"
-            } else if !open_port_numbers.is_empty() {
-                "Ports"
-            } else if !hostname.is_empty() {
-                "DNS"
-            } else {
-                "Ping"
-            }
+            "modelName": model_name,
+            "friendlyName": friendly_name,
+            "manufacturer": ssdp_manufacturer,
+            "identifiedBy": id_methods.join(" + ")
         }));
     }
 
@@ -3229,15 +3433,19 @@ $result | ConvertTo-Json -Depth 3 -Compress"#,
         "phase": "done", "message": "Fertig", "percent": 100
     }));
 
-    tracing::info!("Netzwerk-Scan abgeschlossen: {} Geräte", enriched_devices.len());
+    tracing::info!("Netzwerk-Scan abgeschlossen: {} Geräte, davon {} mit Modell-Info",
+        enriched_devices.len(), ssdp_map.len());
 
     let result = json!({
         "devices": enriched_devices,
         "subnet": subnet,
-        "localIP": local_ip
+        "localIP": local_ip,
+        "scannedAt": chrono::Utc::now().timestamp_millis()
     });
 
+    // Persist to memory + disk
     *LAST_NETWORK_SCAN.lock().unwrap() = Some(result.clone());
+    let _ = write_json_file("last-network-scan.json", &result);
 
     Ok(result)
 }
@@ -3245,8 +3453,21 @@ $result | ConvertTo-Json -Depth 3 -Compress"#,
 /// Return cached last network scan result
 #[tauri::command]
 pub async fn get_last_network_scan() -> Result<Value, String> {
-    let guard = LAST_NETWORK_SCAN.lock().unwrap();
-    Ok(guard.clone().unwrap_or(json!(null)))
+    // First check memory cache
+    {
+        let guard = LAST_NETWORK_SCAN.lock().unwrap();
+        if let Some(ref data) = *guard {
+            return Ok(data.clone());
+        }
+    }
+    // If memory empty, try loading from disk (survives app restart)
+    let persisted = read_json_file("last-network-scan.json");
+    if persisted.get("devices").is_some() {
+        // Restore to memory cache
+        *LAST_NETWORK_SCAN.lock().unwrap() = Some(persisted.clone());
+        return Ok(persisted);
+    }
+    Ok(json!(null))
 }
 
 #[tauri::command]
