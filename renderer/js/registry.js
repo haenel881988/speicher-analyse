@@ -1,4 +1,4 @@
-import { formatNumber, isStub } from './utils.js';
+import { formatNumber, isStub, escapeHtml } from './utils.js';
 import { showToast } from './tree.js';
 
 export class RegistryView {
@@ -214,5 +214,5 @@ export class RegistryView {
         }
     }
 
-    esc(text) { return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+    esc(text) { return escapeHtml(text); }
 }

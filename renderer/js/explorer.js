@@ -1,4 +1,4 @@
-import { formatBytes } from './utils.js';
+import { formatBytes, escapeHtml } from './utils.js';
 
 // Quick Access SVG icons
 const QA_ICONS = {
@@ -1182,11 +1182,23 @@ export class ExplorerView {
         else if (e.key === 'Delete' && this.selectedPaths.size > 0) {
             e.preventDefault();
             const paths = [...this.selectedPaths];
-            if (e.shiftKey) {
-                window.api.deletePermanent(paths).then(() => this.refresh());
-            } else {
-                window.api.deleteToTrash(paths).then(() => this.refresh());
-            }
+            const isPermanent = e.shiftKey;
+            const msg = isPermanent
+                ? `${paths.length} Element(e) endgültig löschen?\n\nDieser Vorgang kann nicht rückgängig gemacht werden!`
+                : `${paths.length} Element(e) in den Papierkorb verschieben?`;
+            window.api.showConfirmDialog({
+                type: isPermanent ? 'warning' : 'question',
+                title: isPermanent ? 'Endgültig löschen' : 'In Papierkorb verschieben',
+                message: msg,
+                buttons: ['Abbrechen', 'Löschen'],
+                defaultId: 0,
+            }).then(result => {
+                if (result.response !== 1) return;
+                const op = isPermanent
+                    ? window.api.deletePermanent(paths)
+                    : window.api.deleteToTrash(paths);
+                op.then(() => this.refresh());
+            });
         }
         else if (e.key === 'f' && e.ctrlKey) {
             e.preventDefault();
@@ -1295,8 +1307,7 @@ export class ExplorerView {
     }
 
     esc(text) {
-        if (!text) return '';
-        return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        return escapeHtml(text);
     }
 
     escAttr(text) {

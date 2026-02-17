@@ -1,4 +1,4 @@
-import { formatBytes, formatNumber } from './utils.js';
+import { formatBytes, formatNumber, escapeHtml } from './utils.js';
 import { showToast } from './tree.js';
 
 export class CleanupView {
@@ -185,5 +185,5 @@ export class CleanupView {
         }
     }
 
-    esc(text) { return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+    esc(text) { return escapeHtml(text); }
 }

@@ -1,4 +1,4 @@
-import { formatBytes, formatNumber } from './utils.js';
+import { formatBytes, formatNumber, escapeHtml } from './utils.js';
 import { showToast } from './tree.js';
 
 export class OldFilesView {
@@ -181,12 +181,11 @@ export class OldFilesView {
         if (result.response !== 1) return;
 
         try {
-            const results = await window.api.deleteToTrash(paths);
-            const failed = results.filter(r => !r.success);
-            if (failed.length > 0) {
-                showToast(`${results.length - failed.length} gelöscht, ${failed.length} Fehler`, 'error');
+            const result = await window.api.deleteToTrash(paths);
+            if (result.success) {
+                showToast(`${paths.length} Datei(en) in den Papierkorb verschoben`, 'success');
             } else {
-                showToast(`${results.length} Datei(en) gelöscht`, 'success');
+                showToast(`Fehler beim Löschen: ${result.error || 'Unbekannt'}`, 'error');
             }
             this.search(); // refresh
         } catch (e) {
@@ -261,5 +260,5 @@ export class OldFilesView {
         return icons[icon] || icons['file'];
     }
 
-    esc(text) { return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+    esc(text) { return escapeHtml(text); }
 }

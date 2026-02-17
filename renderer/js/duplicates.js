@@ -1,4 +1,4 @@
-import { formatBytes, formatNumber } from './utils.js';
+import { formatBytes, formatNumber, escapeHtml } from './utils.js';
 import { showToast } from './tree.js';
 
 export class DuplicatesView {
@@ -221,9 +221,12 @@ export class DuplicatesView {
         if (result.response !== 1) return;
 
         try {
-            const results = await window.api.deleteToTrash(paths);
-            const ok = results.filter(r => r.success).length;
-            showToast(`${ok} Duplikat(e) gelöscht`, 'success');
+            const result = await window.api.deleteToTrash(paths);
+            if (result.success) {
+                showToast(`${paths.length} Duplikat(e) in den Papierkorb verschoben`, 'success');
+            } else {
+                showToast(`Fehler beim Löschen: ${result.error || 'Unbekannt'}`, 'error');
+            }
         } catch (e) {
             showToast('Fehler: ' + e.message, 'error');
         }
@@ -240,5 +243,5 @@ export class DuplicatesView {
         return Math.round(num * (m[unit] || 1));
     }
 
-    esc(text) { return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+    esc(text) { return escapeHtml(text); }
 }
