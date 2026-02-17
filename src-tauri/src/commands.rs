@@ -2379,13 +2379,18 @@ $uips=@($conns|Where-Object{$_.RemoteAddress -ne '0.0.0.0' -and $_.RemoteAddress
         _ => vec![],
     };
 
+    // Read IP resolve cache for per-connection company resolution
+    let ip_cache = IP_RESOLVE_CACHE.lock().unwrap().clone();
+
     // Build all connections (TCP + UDP)
     let mut all_conns: Vec<Value> = tcp_arr.iter().map(|c| {
         let ra = c["ra"].as_str().unwrap_or("").to_string();
         let resolved = if is_private_ip(&ra) || ra.is_empty() {
             json!({"isLocal": true, "org": "Lokal", "isp": "", "isTracker": false, "isHighRisk": false, "countryCode": "", "country": ""})
         } else {
-            json!({"isLocal": false, "org": "", "isp": "", "isTracker": false, "isHighRisk": false, "countryCode": "", "country": ""})
+            // Look up company from cache for this specific IP
+            let company = ip_cache.get(&ra).cloned().unwrap_or_default();
+            json!({"isLocal": false, "org": company, "isp": "", "isTracker": false, "isHighRisk": false, "countryCode": "", "country": ""})
         };
         json!({
             "localAddress": c["la"], "localPort": c["lp"],
@@ -2414,9 +2419,6 @@ $uips=@($conns|Where-Object{$_.RemoteAddress -ne '0.0.0.0' -and $_.RemoteAddress
         let key = if pn.is_empty() { "System".to_string() } else { pn };
         groups.entry(key).or_default().push(conn);
     }
-
-    // Read IP resolve cache for company mapping
-    let ip_cache = IP_RESOLVE_CACHE.lock().unwrap().clone();
 
     // Collect all unique public IPs for background resolution
     let mut all_public_ips: std::collections::HashSet<String> = std::collections::HashSet::new();
@@ -3261,7 +3263,7 @@ foreach ($port in $ports) {{
 try {{ [void][System.Threading.Tasks.Task]::WaitAll(@($tasks | ForEach-Object {{ $_.task }}), 3000) }} catch {{}}
 $results = @()
 foreach ($t in $tasks) {{
-    $open = $t.task.IsCompleted -and -not $t.task.IsFaulted
+    $open = $t.task.IsCompleted -and -not $t.task.IsFaulted -and $t.client.Connected
     $results += [PSCustomObject]@{{ port=$t.port; open=$open; label=$portLabels[$t.port] }}
     try {{ $t.client.Close() }} catch {{}}
 }}
