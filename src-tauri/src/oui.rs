@@ -91,7 +91,7 @@ fn oui_table() -> &'static HashMap<&'static str, &'static str> {
         // Zyxel
         for p in ["001349","D0542D","BC3400","BC9680","40B034"] { m.insert(p, "Zyxel"); }
         // Juniper
-        for p in ["0005850","002688","88E0F3","F4CC55"] { m.insert(p, "Juniper"); }
+        for p in ["000585","002688","88E0F3","F4CC55"] { m.insert(p, "Juniper"); }
 
         // === PCs / Laptops ===
 
@@ -170,9 +170,9 @@ fn oui_table() -> &'static HashMap<&'static str, &'static str> {
         // === NAS / Storage ===
 
         // Synology
-        for p in ["001132","0011320"] { m.insert(p, "Synology"); }
+        for p in ["001132"] { m.insert(p, "Synology"); }
         // QNAP
-        for p in ["245EBE","001EAC","24:5E:BE"] { m.insert(p, "QNAP"); }
+        for p in ["245EBE","001EAC"] { m.insert(p, "QNAP"); }
         // Western Digital
         for p in ["0026B7","0090A9"] { m.insert(p, "Western Digital"); }
 
@@ -304,7 +304,9 @@ pub fn classify_device(
     }
 
     // Smart TV / Streaming by hostname
-    if h.contains("tv") || h.contains("fire-tv") || h.contains("firetv") || h.contains("chromecast")
+    if h == "tv" || h.contains("-tv") || h.contains("tv-") || h.starts_with("tv.")
+        || h.contains("smart-tv") || h.contains("smarttv")
+        || h.contains("fire-tv") || h.contains("firetv") || h.contains("chromecast")
         || h.contains("roku") || h.contains("appletv") || h.contains("apple-tv")
     {
         return (s("tv"), vl(vendor, "Smart-TV/Streaming"), s("tv"));
@@ -598,5 +600,6 @@ pub fn is_tracker(hostname: &str) -> bool {
         || h.contains(".rubiconproject.") || h.contains(".pubmatic.")
         || h.contains(".openx.") || h.contains(".bidswitch.")
         || h.contains(".casalemedia.") || h.contains(".bluekai.")
-        || h.contains(".facebook.com/tr") || h.contains(".analytics.")
+        || h.contains("pixel.facebook.") || h.contains("graph.facebook.")
+        || h.contains(".google-analytics.") || h.contains(".googleanalytics.")
 }

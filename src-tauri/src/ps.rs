@@ -7,14 +7,23 @@ use std::os::windows::process::CommandExt;
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
-/// Truncate a script for logging (first 120 chars)
+/// Truncate a script for logging (first ~120 chars, UTF-8 safe)
 fn script_preview(script: &str) -> String {
     let trimmed = script.trim();
     if trimmed.len() <= 120 {
         trimmed.to_string()
     } else {
-        format!("{}...", &trimmed[..120])
+        // Find a valid char boundary at or before byte 120
+        let end = (0..=120).rev().find(|&i| trimmed.is_char_boundary(i)).unwrap_or(0);
+        format!("{}...", &trimmed[..end])
     }
+}
+
+/// Safely truncate a UTF-8 string to at most `max_bytes` bytes at a char boundary
+fn safe_truncate(s: &str, max_bytes: usize) -> &str {
+    if s.len() <= max_bytes { return s; }
+    let end = (0..=max_bytes).rev().find(|&i| s.is_char_boundary(i)).unwrap_or(0);
+    &s[..end]
 }
 
 /// Run a PowerShell script and return stdout as String.
@@ -88,8 +97,9 @@ pub async fn run_ps_json(script: &str) -> Result<serde_json::Value, String> {
         return Ok(serde_json::Value::Null);
     }
     serde_json::from_str(&output).map_err(|e| {
-        tracing::warn!(error = %e, output_start = %&output[..output.len().min(200)], "JSON-Parse fehlgeschlagen");
-        format!("JSON parse error: {} — output: {}", e, &output[..output.len().min(200)])
+        let preview = safe_truncate(&output, 200);
+        tracing::warn!(error = %e, output_start = %preview, "JSON-Parse fehlgeschlagen");
+        format!("JSON parse error: {} — output: {}", e, preview)
     })
 }
 

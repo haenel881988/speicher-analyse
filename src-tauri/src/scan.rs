@@ -194,8 +194,7 @@ pub fn export_csv(scan_id: &str) -> String {
         sorted.sort_by(|a, b| b.size.cmp(&a.size));
         for f in sorted {
             let cat = file_category(&f.extension);
-            lines.push(format!(
-                "\"{}\";\"{}\";\"{}\";\"{}\";\"{}\";",
+            lines.push(format!("\"{}\";\"{}\";\"{}\";\"{}\";\"{}\"",
                 f.path.replace('"', "\"\""),
                 f.name.replace('"', "\"\""),
                 f.size,
@@ -237,7 +236,7 @@ pub fn tree_node(_scan_id: &str, path: &str, _depth: u32) -> Value {
                 "size": entry.total_size,
                 "own_size": entry.own_size,
                 "dir_count": entry.children.len(),
-                "file_count": entry.own_file_count,
+                "file_count": entry.total_file_count,
                 "is_own_files": false,
                 "children": children
             })
@@ -389,7 +388,8 @@ fn dir_index() -> &'static Mutex<HashMap<String, DirIndexEntry>> {
 fn normalize_dir_key(path: &str) -> String {
     let p = path.replace('/', "\\");
     let trimmed = p.trim_end_matches('\\');
-    if trimmed.is_empty() { p } else { trimmed.to_string() }
+    // Windows is case-insensitive — normalize to lowercase for consistent lookups
+    if trimmed.is_empty() { p.to_lowercase() } else { trimmed.to_lowercase() }
 }
 
 /// Build directory index from flat file list. Single pass O(N) to accumulate sizes,
@@ -404,17 +404,18 @@ fn build_dir_index(files: &[FileEntry]) {
     let mut child_sets: HashMap<String, HashSet<String>> = HashMap::with_capacity(estimated_dirs);
 
     // Phase 1: Accumulate own_size per directory + register parent→child
+    // All keys are lowercased for case-insensitive lookups (Windows filesystem)
     for file in files {
         let parent = match file.path.rfind('\\') {
-            Some(pos) => &file.path[..pos],
+            Some(pos) => file.path[..pos].to_lowercase(),
             None => continue,
         };
 
-        *own_sizes.entry(parent.to_string()).or_default() += file.size;
-        *own_counts.entry(parent.to_string()).or_default() += 1;
+        *own_sizes.entry(parent.clone()).or_default() += file.size;
+        *own_counts.entry(parent.clone()).or_default() += 1;
 
         // Walk up to register parent→child relationships (early exit on duplicate)
-        let mut child_path = parent.to_string();
+        let mut child_path = parent;
         loop {
             match child_path.rfind('\\') {
                 Some(pos) if pos >= 2 => {
