@@ -530,6 +530,12 @@ export class PrivacyView {
         }
     }
 
+    destroy() {
+        this.container.innerHTML = '';
+        this._loaded = false;
+        this._recsLoaded = false;
+    }
+
     getScore() {
         return this.score;
     }

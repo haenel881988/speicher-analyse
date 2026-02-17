@@ -606,7 +606,7 @@ if(!Uint8Array.fromHex){Uint8Array.fromHex=function(s){const b=new Uint8Array(s.
     }
 
     escapeHtml(text) {
-        return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
     _showToast(msg, type) {

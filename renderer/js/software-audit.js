@@ -350,6 +350,14 @@ export class SoftwareAuditView {
         return this.categories[catId]?.color || '#adb5bd';
     }
 
+    destroy() {
+        this.container.innerHTML = '';
+        this._loaded = false;
+        this.updateData = null;
+        this.updateCheckActive = false;
+        this.updatingPackage = null;
+    }
+
     getAuditData() {
         return { orphanedCount: this.orphanedCount, totalPrograms: this.programs.length };
     }

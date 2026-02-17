@@ -419,7 +419,7 @@ pub async fn show_in_explorer(file_path: String) -> Result<Value, String> {
 pub async fn show_context_menu(app: tauri::AppHandle, menu_type: String, context: Option<Value>) -> Result<Value, String> {
     // Context menus are handled by the frontend in Tauri v2 (native menus require window handle)
     // We emit an event so the frontend can show a custom context menu
-    let _ = app.emit("context-menu-request", json!({
+    let _ = app.emit("context-menu-action", json!({
         "menuType": menu_type,
         "context": context
     }));
@@ -908,13 +908,15 @@ pub async fn toggle_autostart(entry: Value, enabled: bool) -> Result<Value, Stri
 
     match source {
         "registry" => {
-            // Determine registry path from locationLabel
-            let reg_path = if location_label.contains("HKCU\\Run") {
+            // Determine registry path from locationLabel (specific matches FIRST!)
+            let reg_path = if location_label.contains("HKCU\\RunOnce") {
+                "HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnce"
+            } else if location_label.contains("HKLM\\RunOnce") {
+                "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnce"
+            } else if location_label.contains("HKCU\\Run") {
                 "HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run"
             } else if location_label.contains("HKLM\\Run") {
                 "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run"
-            } else if location_label.contains("HKCU\\RunOnce") {
-                "HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnce"
             } else {
                 return Err("Unbekannter Registry-Pfad".to_string());
             };
@@ -956,12 +958,15 @@ pub async fn delete_autostart(entry: Value) -> Result<Value, String> {
 
     match source {
         "registry" => {
-            let reg_path = if location_label.contains("HKCU\\Run") {
+            // Specific matches FIRST (RunOnce before Run)
+            let reg_path = if location_label.contains("HKCU\\RunOnce") {
+                "HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnce"
+            } else if location_label.contains("HKLM\\RunOnce") {
+                "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnce"
+            } else if location_label.contains("HKCU\\Run") {
                 "HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run"
             } else if location_label.contains("HKLM\\Run") {
                 "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run"
-            } else if location_label.contains("HKCU\\RunOnce") {
-                "HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnce"
             } else {
                 return Err("Unbekannter Registry-Pfad".to_string());
             };
@@ -1712,7 +1717,7 @@ pub async fn terminal_create(app: tauri::AppHandle, cwd: Option<String>, shell_t
     match cmd.spawn() {
         Ok(mut child) => {
             let id = format!("term-{}", child.id());
-            let stdin = child.stdin.take();
+            let mut stdin = child.stdin.take();
             let stdout = child.stdout.take();
             let stderr = child.stderr.take();
 
@@ -1767,6 +1772,23 @@ pub async fn terminal_create(app: tauri::AppHandle, cwd: Option<String>, shell_t
                 });
             }
 
+            // Send UTF-8 encoding init commands immediately after spawn
+            if let Some(ref mut stdin_ref) = stdin {
+                use std::io::Write;
+                let init_cmd = match shell.as_str() {
+                    "cmd" => "chcp 65001 >nul\r\n".to_string(),
+                    "wsl" | "git-bash" => String::new(), // Already UTF-8
+                    _ => {
+                        // PowerShell (both powershell.exe and pwsh.exe)
+                        "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; [Console]::InputEncoding = [System.Text.Encoding]::UTF8; cls\r\n".to_string()
+                    }
+                };
+                if !init_cmd.is_empty() {
+                    let _ = stdin_ref.write_all(init_cmd.as_bytes());
+                    let _ = stdin_ref.flush();
+                }
+            }
+
             let mut sessions = TERMINAL_SESSIONS.lock().unwrap();
             sessions.insert(id.clone(), TerminalSession { child, stdin });
             tracing::debug!(id = %id, shell = %shell_path, "Terminal erstellt");
@@ -1816,7 +1838,13 @@ pub async fn terminal_destroy(id: String) -> Result<Value, String> {
 #[tauri::command]
 pub async fn terminal_open_external(cwd: Option<String>, _command: Option<String>) -> Result<Value, String> {
     let dir = cwd.unwrap_or_else(|| std::env::var("USERPROFILE").unwrap_or_default());
-    crate::ps::run_ps(&format!("Start-Process wt -ArgumentList '-d', '{}'", dir.replace("'", "''"))).await?;
+    let dir_escaped = dir.replace("'", "''");
+    // Try Windows Terminal first, fall back to cmd.exe
+    let script = format!(
+        r#"try {{ Start-Process wt -ArgumentList '-d', '{}' -EA Stop }} catch {{ Start-Process cmd -ArgumentList '/k', 'cd /d {}' }}"#,
+        dir_escaped, dir_escaped
+    );
+    crate::ps::run_ps(&script).await?;
     Ok(json!({ "success": true }))
 }
 
@@ -1856,6 +1884,10 @@ $sl=(Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelU
 
 // Privacy settings database: (id, registry_path, registry_key, recommended_value, default_value, tier)
 // tier: "standard" = safe HKCU, "advanced" = HKLM or risky
+fn is_consent_store_setting(id: &str) -> bool {
+    matches!(id, "app-diagnose" | "standort-zugriff")
+}
+
 fn privacy_setting_lookup(id: &str) -> Option<(&'static str, &'static str, i32, i32, &'static str)> {
     match id {
         "werbung-id" => Some(("HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\AdvertisingInfo", "Enabled", 0, 1, "standard")),
@@ -1879,10 +1911,13 @@ pub async fn apply_privacy_setting(id: String) -> Result<Value, String> {
     tracing::info!(setting = %id, "Privacy-Einstellung anwenden");
     let (reg_path, reg_key, recommended, _, _) = privacy_setting_lookup(&id)
         .ok_or_else(|| format!("Einstellung '{}' nicht gefunden", id))?;
-    let script = format!(
-        "reg add '{}' /v '{}' /t REG_DWORD /d {} /f",
-        reg_path, reg_key, recommended
-    );
+    // ConsentStore settings use REG_SZ "Deny"/"Allow", not REG_DWORD
+    let script = if is_consent_store_setting(&id) {
+        let val = if recommended == 0 { "Deny" } else { "Allow" };
+        format!("reg add '{}' /v '{}' /t REG_SZ /d {} /f", reg_path, reg_key, val)
+    } else {
+        format!("reg add '{}' /v '{}' /t REG_DWORD /d {} /f", reg_path, reg_key, recommended)
+    };
     match crate::ps::run_ps(&script).await {
         Ok(_) => Ok(json!({ "success": true })),
         Err(e) => {
@@ -1905,7 +1940,12 @@ pub async fn apply_all_privacy() -> Result<Value, String> {
     let mut errors: Vec<String> = Vec::new();
     for id in &ids {
         if let Some((reg_path, reg_key, recommended, _, _)) = privacy_setting_lookup(id) {
-            let script = format!("reg add '{}' /v '{}' /t REG_DWORD /d {} /f", reg_path, reg_key, recommended);
+            let script = if is_consent_store_setting(id) {
+                let val = if recommended == 0 { "Deny" } else { "Allow" };
+                format!("reg add '{}' /v '{}' /t REG_SZ /d {} /f", reg_path, reg_key, val)
+            } else {
+                format!("reg add '{}' /v '{}' /t REG_DWORD /d {} /f", reg_path, reg_key, recommended)
+            };
             match crate::ps::run_ps(&script).await {
                 Ok(_) => applied += 1,
                 Err(e) => { failed += 1; errors.push(format!("{}: {}", id, e)); }
@@ -1920,10 +1960,12 @@ pub async fn apply_all_privacy() -> Result<Value, String> {
 pub async fn reset_privacy_setting(id: String) -> Result<Value, String> {
     let (reg_path, reg_key, _, default_val, _) = privacy_setting_lookup(&id)
         .ok_or_else(|| format!("Einstellung '{}' nicht gefunden", id))?;
-    let script = format!(
-        "reg add '{}' /v '{}' /t REG_DWORD /d {} /f",
-        reg_path, reg_key, default_val
-    );
+    let script = if is_consent_store_setting(&id) {
+        let val = if default_val == 0 { "Deny" } else { "Allow" };
+        format!("reg add '{}' /v '{}' /t REG_SZ /d {} /f", reg_path, reg_key, val)
+    } else {
+        format!("reg add '{}' /v '{}' /t REG_DWORD /d {} /f", reg_path, reg_key, default_val)
+    };
     match crate::ps::run_ps(&script).await {
         Ok(_) => Ok(json!({ "success": true })),
         Err(e) => {
@@ -1945,7 +1987,12 @@ pub async fn reset_all_privacy() -> Result<Value, String> {
     let mut errors: Vec<String> = Vec::new();
     for id in &ids {
         if let Some((reg_path, reg_key, _, default_val, _)) = privacy_setting_lookup(id) {
-            let script = format!("reg add '{}' /v '{}' /t REG_DWORD /d {} /f", reg_path, reg_key, default_val);
+            let script = if is_consent_store_setting(id) {
+                let val = if default_val == 0 { "Deny" } else { "Allow" };
+                format!("reg add '{}' /v '{}' /t REG_SZ /d {} /f", reg_path, reg_key, val)
+            } else {
+                format!("reg add '{}' /v '{}' /t REG_DWORD /d {} /f", reg_path, reg_key, default_val)
+            };
             match crate::ps::run_ps(&script).await {
                 Ok(_) => reset += 1,
                 Err(e) => { failed += 1; errors.push(format!("{}: {}", id, e)); }
@@ -2028,9 +2075,9 @@ $telemetryApps = @{
     'Microsoft Edge' = 'Sendet Diagnosedaten an Microsoft. Einstellungen > Datenschutz > Diagnosedaten deaktivieren.'
     'Cortana' = 'Sammelt Sprach- und Suchdaten. In den Windows-Einstellungen deaktivieren.'
     'OneDrive' = 'Synchronisiert Dateien in die Cloud. Nur bei Bedarf aktivieren.'
-    'CCleaner' = 'Seit Avast-Uebernahme mit Telemetrie. Alternativen in Betracht ziehen.'
-    'Avast' = 'Verkauft Nutzungsdaten ueber Tochter Jumpshot. Alternativen in Betracht ziehen.'
-    'AVG' = 'Gehoert zu Avast, gleiche Datenschutzbedenken.'
+    'CCleaner' = 'Seit Avast-Übernahme mit Telemetrie. Alternativen in Betracht ziehen.'
+    'Avast' = 'Verkauft Nutzungsdaten über Tochter Jumpshot. Alternativen in Betracht ziehen.'
+    'AVG' = 'Gehört zu Avast, gleiche Datenschutzbedenken.'
 }
 
 foreach ($prog in $programs) {
@@ -2389,10 +2436,10 @@ pub async fn resolve_ips(ip_addresses: Vec<String>) -> Result<Value, String> {
         return Ok(json!({}));
     }
 
-    // Filter out local/private IPs — only resolve public IPs
+    // Filter out local/private IPs, validate format — only resolve valid public IPs
     let public_ips: Vec<&str> = ip_addresses.iter()
         .map(|s| s.as_str())
-        .filter(|ip| !is_private_ip(ip))
+        .filter(|ip| validate_ip(ip).is_ok() && !is_private_ip(ip))
         .take(100)
         .collect();
 
@@ -3133,8 +3180,9 @@ fn detect_os(ttl: i64, ssdp_server: &str, ssh_banner: &str, open_ports: &[u16]) 
     // 1. SSDP SERVER header is most reliable (e.g. "Windows/10.0 UPnP/2.0 ..." or "Linux/3.x ...")
     let server_lower = ssdp_server.to_lowercase();
     if server_lower.contains("windows") {
+        // Use server_lower consistently to avoid byte-index mismatch
         if let Some(start) = server_lower.find("windows/") {
-            let ver = &ssdp_server[start..];
+            let ver = &server_lower[start..];
             let end = ver.find(' ').unwrap_or(ver.len());
             return ver[..end].replace('/', " ").to_string();
         }
@@ -3207,6 +3255,7 @@ foreach ($dt in $dnsTasks) {
         $dnsMap[$dt.ip] = $dt.task.Result.HostName
     }
 }
+arp -a | ForEach-Object { if ($_ -match '(\d+\.\d+\.\d+\.\d+)\s+([0-9a-f-]+)\s+') { $arp[$Matches[1]] = $Matches[2].Replace('-',':') } }
 $results = @()
 foreach ($t in $alive) {
     $ip = $t.ip
@@ -3297,6 +3346,7 @@ foreach ($dt in $dnsTasks) {{
         $dnsMap[$dt.ip] = $dt.task.Result.HostName
     }}
 }}
+arp -a | ForEach-Object {{ if ($_ -match '(\d+\.\d+\.\d+\.\d+)\s+([0-9a-f-]+)\s+') {{ $arp[$Matches[1]] = $Matches[2].Replace('-',':') }} }}
 $results = @()
 foreach ($t in $alive) {{
     $ip = $t.ip
@@ -3637,8 +3687,23 @@ $result | ConvertTo-Json -Compress"#, ips = http_ips_str);
         // Classify device
         let is_local = ip == local_ip;
         let is_gateway = ip == gateway_ip;
-        let (device_type, device_label, device_icon) =
+        let (device_type, base_label, device_icon) =
             crate::oui::classify_device(&effective_vendor, &hostname, &open_port_numbers, is_local, is_gateway);
+
+        // Build enriched device label: prefer friendlyName/modelName over generic label
+        let device_label = if !friendly_name.is_empty() && !is_local && !is_gateway {
+            // SSDP friendlyName is the best user-readable label (e.g. "Wohnzimmer-Drucker")
+            friendly_name.clone()
+        } else if !model_name.is_empty() && !is_local && !is_gateway {
+            // Model name from UPnP (e.g. "HL-L2350DW")
+            if !effective_vendor.is_empty() && !model_name.to_lowercase().contains(&effective_vendor.to_lowercase()) {
+                format!("{} {}", effective_vendor, model_name)
+            } else {
+                model_name.clone()
+            }
+        } else {
+            base_label
+        };
 
         // OS detection: TTL heuristic + SSDP SERVER header + SSH banner
         let ttl = raw_device["ttl"].as_i64().unwrap_or(0);
@@ -3756,8 +3821,22 @@ $results | ConvertTo-Json -Compress"#, ip
 #[tauri::command]
 pub async fn get_smb_shares(ip: String) -> Result<Value, String> {
     validate_ip(&ip)?;
+    let safe_ip = ip.replace("'", "''");
     let script = format!(
-        r#"@(Get-SmbConnection -ServerName '{}' -ErrorAction SilentlyContinue | ForEach-Object {{ [PSCustomObject]@{{ name=$_.ShareName; path="\\$($_.ServerName)\$($_.ShareName)" }} }}) | ConvertTo-Json -Compress"#, ip
+        r#"$shares = @()
+try {{
+    $shares += @(Get-SmbConnection -ServerName '{}' -EA SilentlyContinue | ForEach-Object {{ [PSCustomObject]@{{ name=$_.ShareName; path="\\$($_.ServerName)\$($_.ShareName)"; source='SmbConnection' }} }})
+}} catch {{}}
+if ($shares.Count -eq 0) {{
+    try {{
+        $net = net view '\\{}' 2>$null
+        $net | Select-String '^\s*(\S+)\s+(Platte|Disk)' | ForEach-Object {{
+            $name = $_.Matches[0].Groups[1].Value
+            $shares += [PSCustomObject]@{{ name=$name; path="\\{}\$name"; source='NetView' }}
+        }}
+    }} catch {{}}
+}}
+@($shares) | ConvertTo-Json -Compress"#, safe_ip, safe_ip, safe_ip
     );
     crate::ps::run_ps_json_array(&script).await
 }

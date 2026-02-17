@@ -5,6 +5,35 @@ mod scan;
 
 use tauri::{Emitter, Manager};
 
+/// Log-Rotation: Löscht die ältesten Log-Dateien wenn mehr als `max_files` vorhanden sind.
+fn rotate_logs(log_dir: &std::path::Path, max_files: usize) {
+    let mut log_files: Vec<std::path::PathBuf> = match std::fs::read_dir(log_dir) {
+        Ok(entries) => entries
+            .filter_map(|e| e.ok())
+            .map(|e| e.path())
+            .filter(|p| p.extension().map(|e| e == "log").unwrap_or(false))
+            .collect(),
+        Err(_) => return,
+    };
+
+    if log_files.len() <= max_files {
+        return;
+    }
+
+    // Nach Änderungsdatum sortieren (älteste zuerst)
+    log_files.sort_by(|a, b| {
+        let ma = a.metadata().and_then(|m| m.modified()).unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+        let mb = b.metadata().and_then(|m| m.modified()).unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+        ma.cmp(&mb)
+    });
+
+    // Älteste löschen bis nur noch max_files - 1 übrig (Platz für neue Datei)
+    let to_delete = log_files.len() - (max_files - 1);
+    for file in log_files.iter().take(to_delete) {
+        let _ = std::fs::remove_file(file);
+    }
+}
+
 fn init_logging() {
     #[cfg(debug_assertions)]
     {
@@ -16,6 +45,10 @@ fn init_logging() {
         // Log-Datei in docs/logs/ anlegen
         let log_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../docs/logs");
         let _ = std::fs::create_dir_all(&log_dir);
+
+        // Log-Rotation: Max 20 Dateien, älteste löschen
+        rotate_logs(&log_dir, 20);
+
         let timestamp = chrono::Local::now().format("%Y-%m-%d_%H-%M-%S");
         let log_file = std::fs::File::create(log_dir.join(format!("dev_{}.log", timestamp)))
             .expect("Log-Datei konnte nicht erstellt werden");

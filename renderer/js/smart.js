@@ -105,6 +105,11 @@ export class SmartView {
         return years + ' Jahre';
     }
 
+    destroy() {
+        this.container.innerHTML = '';
+        this._loaded = false;
+    }
+
     getDisks() {
         return this.disks;
     }

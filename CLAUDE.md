@@ -223,5 +223,17 @@ cargo tauri build # Release-Build (MSI/NSIS)
 | `docs/planung/projektplan.md` | Nur Historie (abgeschlossene Versionen) |
 | `docs/planung/visionen.md` | Simons Ideensammlung |
 | `docs/protokoll/aenderungsprotokoll.md` | Änderungsprotokoll (max. 30, dann archivieren) |
+| `docs/lessons-learned/lessons-learned.md` | **PFLICHT** — Jeder Fehler wird dokumentiert (max. 70, archivieren nach Kategorie) |
 
 **Regel:** issue.md = Single Source of Truth für Planung. projektplan.md = nur Historie.
+
+## Lessons-Learned-Policy (ABSOLUT)
+
+**JEDER Fehler wird in `docs/lessons-learned/lessons-learned.md` dokumentiert, egal wie klein.**
+
+- **Maximal 70 Einträge.** Bei Überschreitung die ältesten in `docs/lessons-learned/archiv/<kategorie>/` verschieben
+- **Archivkategorien:** `netzwerk/`, `terminal/`, `ui/`, `performance/`, `security/`, `migration/`, `allgemein/`
+- **Pflicht:** Jeder Fehler wird dokumentiert — auch wenn er trivial erscheint
+- **Ziel:** Kein Fehler darf ein zweites Mal auftreten. Das Lessons-Learned-System ist die erste Anlaufstelle bei neuen Problemen
+- **Format:** `| # | Datum | Kategorie | **Kurztitel** - Beschreibung + Ursache + Fix + Lehre |`
+- **Bei jedem Bug-Fix:** Lessons-Learned UND Changelog gleichzeitig aktualisieren

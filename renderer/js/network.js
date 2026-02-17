@@ -94,6 +94,14 @@ export class NetworkView {
         }
 
         await this.refresh();
+
+        // Zweiter Refresh nach 12s: IP-Auflösung läuft async im Backend (8-10s),
+        // erst nach dem zweiten Aufruf sind Firmen-Namen sichtbar
+        this._companyRefreshTimer = setTimeout(async () => {
+            if (this._loaded) {
+                await this.refresh();
+            }
+        }, 12000);
     }
 
     /** Aktiviert Auto-Live (Bandwidth-Polling + Feed-Polling) wenn der Netzwerk-Tab sichtbar wird. */
@@ -634,7 +642,7 @@ export class NetworkView {
             return `<tr class="${stateClass}">
                 <td>${this._esc(d.hostname) || '<span style="color:var(--text-muted)">—</span>'}</td>
                 <td class="network-ip">${this._esc(d.ip)}</td>
-                <td style="font-family:monospace;font-size:11px">${this._esc(d.mac)}</td>
+                <td style="font-family:monospace;font-size:11px">${this._esc(d.mac) || '\u2014'}</td>
                 <td>${this._esc(d.vendor) || '<span style="color:var(--text-muted)">Unbekannt</span>'}</td>
                 <td><span class="network-device-state ${stateClass}">${this._esc(d.state)}</span></td>
             </tr>`;
@@ -665,7 +673,8 @@ export class NetworkView {
         const rttClass = d.rtt < 5 ? 'network-rtt-fast' : d.rtt < 50 ? 'network-rtt-medium' : 'network-rtt-slow';
         const typeLabel = d.deviceLabel || 'Unbekannt';
         const typeIcon = this._deviceIcon(d.deviceIcon || 'help-circle');
-        const name = d.hostname || d.ip;
+        // Prefer friendlyName > hostname > IP for display name
+        const name = d.friendlyName || d.hostname || d.ip;
 
         const modelParts = [];
         if (d.modelName) {
@@ -1569,6 +1578,16 @@ export class NetworkView {
                 this._activeScanProgress = null;
                 this.render();
                 try {
+                    // OUI-Datenbank automatisch herunterladen wenn noch nicht vorhanden
+                    if (!this._ouiDownloaded && window.api.updateOUIDatabase) {
+                        try {
+                            const ouiResult = await window.api.updateOUIDatabase();
+                            if (ouiResult?.success) {
+                                this._ouiDownloaded = true;
+                                console.log(`OUI-Datenbank geladen: ${ouiResult.lines} Einträge`);
+                            }
+                        } catch { /* Ignorieren — Static-Fallback greift */ }
+                    }
                     this._activeScanResult = await window.api.scanNetworkActive();
                     showToast(`${this._activeScanResult.devices.length} Geräte gefunden`, 'success');
                 } catch (err) {
@@ -1752,6 +1771,29 @@ export class NetworkView {
                 }
             };
         }
+    }
+
+    /** Cleanup: alle Intervalle, Timer und Ressourcen freigeben */
+    destroy() {
+        this.stopPolling();
+        this._stopFeedPolling();
+        if (this._recordingTimer) {
+            clearInterval(this._recordingTimer);
+            this._recordingTimer = null;
+        }
+        if (this._companyRefreshTimer) {
+            clearTimeout(this._companyRefreshTimer);
+            this._companyRefreshTimer = null;
+        }
+        if (this._searchDebounce) {
+            clearTimeout(this._searchDebounce);
+            this._searchDebounce = null;
+        }
+        // Sparkline-Charts zerstören
+        for (const [, chart] of this._sparklineCharts) {
+            chart.destroy();
+        }
+        this._sparklineCharts.clear();
     }
 
     _esc(text) {

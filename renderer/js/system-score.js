@@ -16,6 +16,7 @@ export class SystemScoreView {
 
     update(scoreData) {
         this.scoreData = scoreData;
+        this._loaded = true;
         this.render();
     }
 
@@ -61,6 +62,12 @@ export class SystemScoreView {
                 <span class="score-cat-desc">${escapeHtml(cat.description)}</span>
             </div>
         </div>`;
+    }
+
+    destroy() {
+        this.container.innerHTML = '';
+        this._loaded = false;
+        this.scoreData = null;
     }
 
     _getSummary(score) {

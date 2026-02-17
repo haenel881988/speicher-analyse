@@ -250,19 +250,25 @@ pub fn lookup(mac: &str) -> Option<String> {
 
 /// Classify device based on open ports, hostname, vendor, and role flags.
 /// Returns (deviceType, deviceLabel, deviceIcon).
+/// Labels include vendor name when known (e.g. "Brother Drucker" instead of "Drucker").
 pub fn classify_device(
     vendor: &str,
     hostname: &str,
     open_ports: &[u16],
     is_local: bool,
     is_gateway: bool,
-) -> (&'static str, &'static str, &'static str) {
+) -> (String, String, String) {
     // Known roles
     if is_local {
-        return ("pc", "Eigener PC", "monitor");
+        return (s("pc"), s("Eigener PC"), s("monitor"));
     }
     if is_gateway {
-        return ("router", "Router/Gateway", "wifi");
+        let label = if vendor.is_empty() {
+            s("Router/Gateway")
+        } else {
+            format!("{} Router/Gateway", vendor)
+        };
+        return (s("router"), label, s("wifi"));
     }
 
     let has_http = open_ports.contains(&80) || open_ports.contains(&443);
@@ -273,43 +279,42 @@ pub fn classify_device(
     let has_jetdirect = open_ports.contains(&9100);
     let has_dns = open_ports.contains(&53);
 
-    // Printer detection (strong signal: IPP or JetDirect port)
-    if has_ipp || has_jetdirect {
-        return ("printer", "Drucker", "printer");
-    }
-
-    // Hostname-based patterns (case-insensitive)
     let h = hostname.to_lowercase();
     let v = vendor.to_lowercase();
+
+    // Printer detection (strong signal: IPP or JetDirect port)
+    if has_ipp || has_jetdirect {
+        return (s("printer"), vl(vendor, "Drucker"), s("printer"));
+    }
 
     // Printer by hostname pattern
     if h.contains("printer") || h.contains("brn") || h.contains("brw")
         || h.contains("canon") || h.contains("epson") || h.contains("lexmark")
     {
-        return ("printer", "Drucker", "printer");
+        return (s("printer"), vl(vendor, "Drucker"), s("printer"));
     }
     // Printer by vendor
     if v.contains("brother") || v.contains("canon") || v.contains("epson") || v.contains("lexmark") {
-        return ("printer", "Drucker", "printer");
+        return (s("printer"), vl(vendor, "Drucker"), s("printer"));
     }
 
     // Smart speaker / voice assistant by hostname
     if h.contains("echo") || h.contains("alexa") || h.contains("google-home") || h.contains("homepod") {
-        return ("speaker", "Smart-Speaker", "speaker");
+        return (s("speaker"), vl(vendor, "Smart-Speaker"), s("speaker"));
     }
 
     // Smart TV / Streaming by hostname
     if h.contains("tv") || h.contains("fire-tv") || h.contains("firetv") || h.contains("chromecast")
         || h.contains("roku") || h.contains("appletv") || h.contains("apple-tv")
     {
-        return ("tv", "Smart-TV/Streaming", "tv");
+        return (s("tv"), vl(vendor, "Smart-TV/Streaming"), s("tv"));
     }
     // Smart TV by vendor
-    if v.contains("roku") || v.contains("sonos") {
-        if v.contains("sonos") {
-            return ("speaker", "Sonos-Lautsprecher", "speaker");
-        }
-        return ("tv", "Streaming-Gerät", "tv");
+    if v.contains("sonos") {
+        return (s("speaker"), s("Sonos-Lautsprecher"), s("speaker"));
+    }
+    if v.contains("roku") {
+        return (s("tv"), s("Roku Streaming-Gerät"), s("tv"));
     }
 
     // Mobile phone/tablet by hostname
@@ -318,12 +323,17 @@ pub fn classify_device(
         || h.contains("huawei") || h.contains("xiaomi") || h.contains("redmi")
         || h.contains("oppo") || h.contains("realme")
     {
-        return ("mobile", "Smartphone/Tablet", "smartphone");
+        return (s("mobile"), vl(vendor, "Smartphone/Tablet"), s("smartphone"));
+    }
+
+    // Game console by vendor
+    if v.contains("nintendo") {
+        return (s("gaming"), s("Nintendo Konsole"), s("gamepad-2"));
     }
 
     // Windows PC/Server (SMB + RDP)
     if has_smb && has_rdp {
-        return ("pc", "Windows-PC", "monitor");
+        return (s("pc"), vl(vendor, "Windows-PC"), s("monitor"));
     }
 
     // NAS/Server (SMB + HTTP, no RDP) — check vendor for known NAS brands
@@ -331,47 +341,64 @@ pub fn classify_device(
         if v.contains("synology") || v.contains("qnap") || v.contains("western digital")
             || v.contains("asustor") || h.contains("nas") || h.contains("diskstation")
         {
-            return ("nas", "NAS-Speicher", "hard-drive");
+            return (s("nas"), vl(vendor, "NAS-Speicher"), s("hard-drive"));
         }
-        return ("server", "Server/NAS", "server");
+        return (s("server"), vl(vendor, "Server/NAS"), s("server"));
     }
 
     // DNS Server (could be a Pi-hole, router, etc.)
     if has_dns && !has_http {
-        return ("server", "DNS-Server", "server");
+        return (s("server"), vl(vendor, "DNS-Server"), s("server"));
     }
 
     // Linux device (SSH, possibly HTTP, no Windows indicators)
     if has_ssh && !has_rdp && !has_smb {
         if v.contains("raspberry") || h.contains("raspberry") || h.contains("raspberrypi") {
-            return ("iot", "Raspberry Pi", "cpu");
+            return (s("iot"), s("Raspberry Pi"), s("cpu"));
         }
-        return ("linux", "Linux-Gerät", "terminal");
+        return (s("linux"), vl(vendor, "Linux-Gerät"), s("terminal"));
     }
 
     // IoT / Smart Home by vendor
     if v.contains("espressif") || v.contains("shelly") || v.contains("tuya")
         || v.contains("tp-link (smart") || v.contains("philips") || v.contains("signify")
     {
-        return ("iot", "Smart-Home-Gerät", "cpu");
+        return (s("iot"), vl(vendor, "Smart-Home-Gerät"), s("cpu"));
     }
 
     // Hikvision / Dahua = IP camera
     if v.contains("hikvision") || v.contains("dahua") {
-        return ("camera", "IP-Kamera", "camera");
+        return (s("camera"), vl(vendor, "IP-Kamera"), s("camera"));
     }
 
     // Generic HTTP device without other identifiers
     if has_http && !has_smb && !has_rdp && !has_ssh {
-        return ("iot", "Netzwerkgerät", "cpu");
+        return (s("iot"), vl(vendor, "Netzwerkgerät"), s("cpu"));
     }
 
     // Windows machine with just SMB
     if has_smb && !has_rdp {
-        return ("pc", "Netzwerk-PC", "monitor");
+        return (s("pc"), vl(vendor, "Netzwerk-PC"), s("monitor"));
     }
 
-    ("unknown", "Unbekanntes Gerät", "help-circle")
+    // Unknown — still try to use vendor if we have one
+    if !vendor.is_empty() {
+        return (s("unknown"), format!("{} (Gerät)", vendor), s("help-circle"));
+    }
+
+    (s("unknown"), s("Unbekanntes Gerät"), s("help-circle"))
+}
+
+/// Helper: &str → String
+fn s(val: &str) -> String { val.to_string() }
+
+/// Helper: vendor-prefixed label (e.g. "Brother Drucker")
+fn vl(vendor: &str, label: &str) -> String {
+    if vendor.is_empty() {
+        label.to_string()
+    } else {
+        format!("{} {}", vendor, label)
+    }
 }
 
 /// Map a reverse DNS hostname to a company name.
