@@ -169,6 +169,17 @@ window.api.onNewTerminal?.(() => {
     globalTerminal.destroy().then(() => globalTerminal.show(cwd));
 });
 
+// Wire menu bar "Über" action
+window.api.onMenuAction?.((data) => {
+    if (data.action === 'about') {
+        window.api.showConfirmDialog({
+            title: 'Über Speicher Analyse',
+            message: 'Speicher Analyse v7.2.1\nDisk Space Analyzer & System Optimizer\n\nTauri v2 + Rust Backend',
+            okLabel: 'OK'
+        });
+    }
+});
+
 // Auto-sync terminal CWD when navigating in Explorer
 document.addEventListener('explorer-navigate', (e) => {
     if (e.detail?.path) globalTerminal.changeCwd(e.detail.path);

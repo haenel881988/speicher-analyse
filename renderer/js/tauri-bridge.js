@@ -306,6 +306,9 @@
         onToggleTerminal: makeListener('toggle-terminal'),
         onNewTerminal: makeListener('new-terminal'),
 
+        // === Menu Actions ===
+        onMenuAction: makeListener('menu-action'),
+
         // === Tray Actions ===
         onTrayAction: makeListener('tray-action'),
         onOpenFolder: makeListener('open-folder'),
@@ -317,5 +320,5 @@
         logFrontend: (level, message, context) => invoke('log_frontend', { level, message, context }),
     };
 
-    console.log('[Tauri Bridge] window.api mapped — 148 methods + 20 event listeners');
+    console.log('[Tauri Bridge] window.api mapped — 149 methods + 22 event listeners');
 })();
