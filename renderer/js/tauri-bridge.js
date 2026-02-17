@@ -228,7 +228,7 @@
         resetPrivacySetting: makeInvoke('reset_privacy_setting', 'id'),
         resetAllPrivacy: makeInvoke('reset_all_privacy'),
         getScheduledTasksAudit: makeInvoke('get_scheduled_tasks_audit'),
-        disableScheduledTask: makeInvoke('disable_scheduled_task', 'task_path'),
+        disableScheduledTask: makeInvoke('disable_scheduled_task', 'task_path', 'task_name'),
         checkSideloading: makeInvoke('check_sideloading'),
         fixSideloading: makeInvoke('fix_sideloading'),
         fixSideloadingWithElevation: makeInvoke('fix_sideloading_with_elevation'),

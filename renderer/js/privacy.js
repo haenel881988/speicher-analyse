@@ -173,7 +173,7 @@ export class PrivacyView {
                             <td title="${this._esc(t.description || '')}">${this._esc(t.name)}</td>
                             <td class="privacy-task-path">${this._esc(t.path)}</td>
                             <td><span class="risk-badge risk-${t.state === 'Deaktiviert' ? 'safe' : 'high'}">${t.state === 'Deaktiviert' ? 'Deaktiviert' : 'Aktiv'}</span></td>
-                            <td>${t.state !== 'Deaktiviert' ? `<button class="privacy-btn-small" data-task="${this._esc(t.path + t.name)}">Deaktivieren</button>` : ''}</td>
+                            <td>${t.state !== 'Deaktiviert' ? `<button class="privacy-btn-small" data-task-path="${this._esc(t.path)}" data-task-name="${this._esc(t.name)}">Deaktivieren</button>` : ''}</td>
                         </tr>`).join('')}
                     </tbody>
                 </table>
@@ -503,11 +503,11 @@ export class PrivacyView {
         }
 
         // Disable tasks
-        this.container.querySelectorAll('button[data-task]').forEach(btn => {
+        this.container.querySelectorAll('button[data-task-name]').forEach(btn => {
             btn.onclick = async () => {
                 btn.disabled = true;
                 try {
-                    const result = await window.api.disableScheduledTask(btn.dataset.task);
+                    const result = await window.api.disableScheduledTask(btn.dataset.taskPath, btn.dataset.taskName);
                     if (result.success) {
                         showToast('Task deaktiviert', 'success');
                         await this.scan();

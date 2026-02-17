@@ -1097,10 +1097,15 @@ Get-AppxPackage | Where-Object { $_.IsFramework -eq $false -and $_.SignatureKind
 pub async fn uninstall_bloatware(entry: Value) -> Result<Value, String> {
     tracing::warn!(package = ?entry.get("packageFullName"), "Bloatware deinstallieren");
     if let Some(pkg) = entry.get("packageFullName").and_then(|v| v.as_str()) {
+        if pkg.is_empty() {
+            return Err("packageFullName ist leer".to_string());
+        }
         let safe_pkg = pkg.replace("'", "''");
         crate::ps::run_ps(&format!("Remove-AppxPackage '{}'", safe_pkg)).await?;
+        Ok(json!({ "success": true }))
+    } else {
+        Err("packageFullName fehlt im Eintrag".to_string())
     }
-    Ok(json!({ "success": true }))
 }
 
 // === Updates ===
@@ -1120,13 +1125,15 @@ pub async fn check_windows_updates() -> Result<Value, String> {
 #[tauri::command]
 pub async fn get_update_history() -> Result<Value, String> {
     crate::ps::run_ps_json_array(
-        r#"$session = New-Object -ComObject Microsoft.Update.Session
+        r#"try {
+$session = New-Object -ComObject Microsoft.Update.Session
 $searcher = $session.CreateUpdateSearcher()
 $count = $searcher.GetTotalHistoryCount()
 @($searcher.QueryHistory(0, [Math]::Min($count, 50)) | ForEach-Object {
     $st = switch([int]$_.ResultCode){0{'NotStarted'}1{'InProgress'}2{'Succeeded'}3{'SucceededWithErrors'}4{'Failed'}5{'Aborted'}default{'Unknown'}}
     [PSCustomObject]@{ Date=$_.Date.ToString('o'); Title=$_.Title; ResultCode=[int]$_.ResultCode; Status=$st }
-}) | ConvertTo-Json -Compress"#
+}) | ConvertTo-Json -Compress
+} catch { ConvertTo-Json @() -Compress }"#
     ).await
 }
 
@@ -1197,28 +1204,40 @@ pub async fn get_name_index_info(scan_id: String) -> Result<Value, String> {
 static DEEP_SEARCH_PID: LazyLock<std::sync::atomic::AtomicU32> = LazyLock::new(|| std::sync::atomic::AtomicU32::new(0));
 
 #[tauri::command]
-pub async fn deep_search_start(app: tauri::AppHandle, root_path: String, query: String, _use_regex: Option<bool>) -> Result<Value, String> {
+pub async fn deep_search_start(app: tauri::AppHandle, root_path: String, query: String, use_regex: Option<bool>) -> Result<Value, String> {
     // Reset cancel state
     DEEP_SEARCH_PID.store(0, std::sync::atomic::Ordering::Relaxed);
 
     let app2 = app.clone();
+    let is_regex = use_regex.unwrap_or(false);
     tokio::spawn(async move {
         let safe_query = query.replace("'", "''");
         let safe_path = root_path.replace("'", "''");
         let utf8_prefix = "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; ";
+        let match_op = if is_regex { "-match" } else { "-like" };
+        let match_pattern = if is_regex {
+            format!("$q")  // Regex: use pattern directly
+        } else {
+            format!("\"*$q*\"")  // Wildcard: wrap in *...*
+        };
+        let exact_check = if is_regex {
+            "$mq = if ($_.Name -match \"^$q$\") { 2.0 } else { 1.0 }".to_string()
+        } else {
+            "$mq = 1.0; if ($_.Name -eq $q) { $mq = 2.0 }".to_string()
+        };
         let script = format!(
             r#"{utf8}$q = '{q}'; $count = 0; $dirs = 0
 Get-ChildItem -Path '{p}' -Recurse -Force -ErrorAction SilentlyContinue | ForEach-Object {{
     if ($_.PSIsContainer) {{ $dirs++ }}
-    if ($_.Name -like "*$q*") {{
+    if ($_.Name {match_op} {match_pattern}) {{
         $count++
         $dirPath = Split-Path $_.FullName -Parent
-        $mq = 1.0
-        if ($_.Name -eq $q) {{ $mq = 2.0 }}
+        {exact_check}
         [PSCustomObject]@{{ path=$_.FullName; name=$_.Name; dirPath=$dirPath; isDir=$_.PSIsContainer; size=[long]$_.Length; modified=$_.LastWriteTime.ToString('o'); matchQuality=$mq }}
     }}
 }} | Select-Object -First 500 | ConvertTo-Json -Compress"#,
-            utf8 = utf8_prefix, q = safe_query, p = safe_path
+            utf8 = utf8_prefix, q = safe_query, p = safe_path,
+            match_op = match_op, match_pattern = match_pattern, exact_check = exact_check
         );
 
         let mut cmd = tokio::process::Command::new("powershell.exe");
@@ -1374,7 +1393,7 @@ pub async fn open_in_terminal(dir_path: String) -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn open_with_dialog(file_path: String) -> Result<Value, String> {
-    let safe_path = file_path.replace("'", "''");
+    let safe_path = file_path.replace("'", "''").replace('"', "`\"");
     crate::ps::run_ps(&format!("Start-Process rundll32.exe -ArgumentList 'shell32.dll,OpenAs_RunDLL \"{}\"'", safe_path)).await?;
     Ok(json!({ "success": true }))
 }
@@ -1656,9 +1675,9 @@ pub async fn terminal_get_shells() -> Result<Value, String> {
     shells.push(json!({ "id": "powershell", "label": "Windows PowerShell", "available": true }));
     // CMD
     shells.push(json!({ "id": "cmd", "label": "Eingabeaufforderung", "available": true }));
-    // Git Bash
-    let git_bash = r"C:\Program Files\Git\bin\bash.exe";
-    if Path::new(git_bash).exists() {
+    // Git Bash — try `where git` to find install path dynamically, fallback to common locations
+    let git_bash_path = find_git_bash();
+    if !git_bash_path.is_empty() {
         shells.push(json!({ "id": "git-bash", "label": "Git Bash", "available": true }));
     }
     // WSL
@@ -1667,6 +1686,37 @@ pub async fn terminal_get_shells() -> Result<Value, String> {
     }
 
     Ok(json!(shells))
+}
+
+fn find_git_bash() -> String {
+    // Try to find Git's bash.exe dynamically
+    if let Ok(output) = std::process::Command::new("where")
+        .arg("git")
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .output()
+    {
+        if output.status.success() {
+            // `where git` returns e.g. "C:\Program Files\Git\cmd\git.exe"
+            // bash.exe is at ../bin/bash.exe relative to cmd/
+            if let Some(line) = String::from_utf8_lossy(&output.stdout).lines().next() {
+                let git_path = Path::new(line.trim());
+                if let Some(parent) = git_path.parent().and_then(|p| p.parent()) {
+                    let bash = parent.join("bin").join("bash.exe");
+                    if bash.exists() {
+                        return bash.to_string_lossy().to_string();
+                    }
+                }
+            }
+        }
+    }
+    // Fallback to common locations
+    for path in &[r"C:\Program Files\Git\bin\bash.exe", r"C:\Program Files (x86)\Git\bin\bash.exe"] {
+        if Path::new(path).exists() {
+            return path.to_string();
+        }
+    }
+    String::new()
 }
 
 fn which_exists(name: &str) -> bool {
@@ -1696,7 +1746,7 @@ pub async fn terminal_create(app: tauri::AppHandle, cwd: Option<String>, shell_t
     let shell_path = match shell.as_str() {
         "pwsh" => "pwsh.exe".to_string(),
         "cmd" => "cmd.exe".to_string(),
-        "git-bash" => r"C:\Program Files\Git\bin\bash.exe".to_string(),
+        "git-bash" => { let p = find_git_bash(); if p.is_empty() { return Err("Git Bash nicht gefunden".to_string()); } p },
         "wsl" => "wsl.exe".to_string(),
         _ => "powershell.exe".to_string(),
     };
@@ -1794,7 +1844,7 @@ pub async fn terminal_create(app: tauri::AppHandle, cwd: Option<String>, shell_t
             tracing::debug!(id = %id, shell = %shell_path, "Terminal erstellt");
             Ok(json!({ "id": id, "shell": shell_path, "cwd": dir }))
         }
-        Err(e) => Ok(json!({ "id": null, "error": format!("Terminal konnte nicht erstellt werden: {}", e) }))
+        Err(e) => Err(format!("Terminal konnte nicht erstellt werden: {}", e))
     }
 }
 
@@ -1824,10 +1874,16 @@ pub async fn terminal_resize(_id: String, _cols: u32, _rows: u32) -> Result<Valu
 
 #[tauri::command]
 pub async fn terminal_destroy(id: String) -> Result<Value, String> {
-    let mut sessions = TERMINAL_SESSIONS.lock().unwrap();
-    if let Some(mut session) = sessions.remove(&id) {
-        let _ = session.child.kill();
-        let _ = session.child.wait();
+    let session_opt = {
+        let mut sessions = TERMINAL_SESSIONS.lock().unwrap();
+        sessions.remove(&id)
+    };
+    if let Some(mut session) = session_opt {
+        // kill + wait can block briefly, run outside mutex
+        tokio::task::spawn_blocking(move || {
+            let _ = session.child.kill();
+            let _ = session.child.wait();
+        }).await.map_err(|e| e.to_string())?;
         tracing::debug!(id = %id, "Terminal beendet");
         Ok(json!({ "success": true }))
     } else {
@@ -2020,8 +2076,16 @@ Get-ScheduledTask | Where-Object { $_.State -eq 'Ready' -or $_.State -eq 'Disabl
 }
 
 #[tauri::command]
-pub async fn disable_scheduled_task(task_path: String) -> Result<Value, String> {
-    crate::ps::run_ps(&format!("Disable-ScheduledTask -TaskPath '{}' -TaskName '*'", task_path.replace("'", "''"))).await?;
+pub async fn disable_scheduled_task(task_path: String, task_name: Option<String>) -> Result<Value, String> {
+    let safe_path = task_path.replace("'", "''");
+    let script = if let Some(name) = task_name {
+        let safe_name = name.replace("'", "''");
+        format!("Disable-ScheduledTask -TaskPath '{}' -TaskName '{}'", safe_path, safe_name)
+    } else {
+        // Only disable a specific task, never wildcard — require task_name
+        return Err("task_name ist erforderlich (Wildcard deaktiviert ist nicht erlaubt)".to_string());
+    };
+    crate::ps::run_ps(&script).await?;
     Ok(json!({ "success": true }))
 }
 
