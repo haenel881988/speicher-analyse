@@ -677,8 +677,14 @@ export class NetworkView {
         if (d.serialNumber) {
             modelParts.push(`<span class="netinv-serial" title="Seriennummer: ${this._esc(d.serialNumber)}">S/N ${this._esc(d.serialNumber.length > 12 ? d.serialNumber.substring(0, 12) + '...' : d.serialNumber)}</span>`);
         }
+        if (d.os) {
+            modelParts.push(`<span class="netinv-os-badge" title="Betriebssystem: ${this._esc(d.os)}">${this._esc(d.os)}</span>`);
+        }
         if (d.sshBanner) {
             modelParts.push(`<span class="netinv-ssh-badge" title="${this._esc(d.sshBanner)}">SSH</span>`);
+        }
+        if (d.httpServer) {
+            modelParts.push(`<span class="netinv-http-badge" title="HTTP-Server: ${this._esc(d.httpServer)}">HTTP</span>`);
         }
         if (d.snmpSysName) {
             modelParts.push(`<span class="netinv-snmp-name" title="SNMP-Gerätename: ${this._esc(d.snmpSysName)}${d.snmpLocation ? ' | Standort: ' + this._esc(d.snmpLocation) : ''}">${this._esc(d.snmpSysName)}</span>`);

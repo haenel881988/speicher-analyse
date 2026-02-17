@@ -97,6 +97,15 @@ pub fn run() {
 
             tracing::info!("App gestartet, Menüleiste erstellt");
 
+            // Dynamische OUI-Datenbank laden (falls vorhanden)
+            // Gleicher Pfad wie get_data_dir() in commands.rs: %APPDATA%/speicher-analyse
+            let appdata = std::env::var("APPDATA").unwrap_or_else(|_| ".".to_string());
+            let data_dir = std::path::PathBuf::from(appdata).join("speicher-analyse");
+            let oui_count = oui::load_dynamic_oui(&data_dir);
+            if oui_count > 0 {
+                tracing::info!("OUI-Datenbank geladen: {} Einträge", oui_count);
+            }
+
             Ok(())
         })
         .on_menu_event(|app, event| {

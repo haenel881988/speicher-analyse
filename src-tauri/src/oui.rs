@@ -2,10 +2,62 @@
 //!
 //! Maps first 3 octets of MAC address to manufacturer name.
 //! Used ONLY for display labels AFTER dynamic device discovery.
-//! This is a curated subset (~200 entries) of the IEEE OUI database.
+//! Static table (~200 entries) + dynamic IEEE OUI database (~30,000+ entries).
 
 use std::collections::HashMap;
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
+
+/// Dynamic OUI database loaded from downloaded oui.txt file
+static DYNAMIC_OUI: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
+
+fn dynamic_oui() -> &'static Mutex<HashMap<String, String>> {
+    DYNAMIC_OUI.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Load the IEEE OUI database from the downloaded oui.txt file.
+/// Format: "XX-XX-XX   (hex)\t\tVendor Name"
+/// Returns the number of entries loaded.
+pub fn load_dynamic_oui(data_dir: &std::path::Path) -> usize {
+    let oui_path = data_dir.join("oui.txt");
+    if !oui_path.exists() {
+        return 0;
+    }
+
+    let content = match std::fs::read_to_string(&oui_path) {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::warn!("OUI-Datei konnte nicht gelesen werden: {}", e);
+            return 0;
+        }
+    };
+
+    let mut map = HashMap::with_capacity(32000);
+    for line in content.lines() {
+        // Match lines like: "00-00-00   (hex)\t\tXEROX CORPORATION"
+        if let Some(pos) = line.find("(hex)") {
+            let prefix_part = line[..pos].trim();
+            let vendor_part = line[pos + 5..].trim();
+            if !vendor_part.is_empty() {
+                // Convert "AA-BB-CC" to "AABBCC"
+                let key: String = prefix_part
+                    .chars()
+                    .filter(|c| c.is_ascii_hexdigit())
+                    .collect::<String>()
+                    .to_uppercase();
+                if key.len() == 6 {
+                    map.insert(key, vendor_part.to_string());
+                }
+            }
+        }
+    }
+
+    let count = map.len();
+    if count > 0 {
+        *dynamic_oui().lock().unwrap() = map;
+        tracing::info!("Dynamische OUI-Datenbank geladen: {} Einträge", count);
+    }
+    count
+}
 
 fn oui_table() -> &'static HashMap<&'static str, &'static str> {
     static TABLE: OnceLock<HashMap<&str, &str>> = OnceLock::new();
@@ -172,8 +224,8 @@ fn oui_table() -> &'static HashMap<&'static str, &'static str> {
 
 /// Look up the vendor/manufacturer from a MAC address.
 /// MAC can be in any format: "AA:BB:CC:DD:EE:FF", "AA-BB-CC-DD-EE-FF", "AABBCCDDEEFF"
-/// Returns None if the prefix is not in the database.
-pub fn lookup(mac: &str) -> Option<&'static str> {
+/// Checks dynamic IEEE database first (if loaded), falls back to static table.
+pub fn lookup(mac: &str) -> Option<String> {
     let hex: String = mac
         .chars()
         .filter(|c| c.is_ascii_hexdigit())
@@ -185,7 +237,15 @@ pub fn lookup(mac: &str) -> Option<&'static str> {
         return None;
     }
 
-    oui_table().get(hex.as_str()).copied()
+    // Check dynamic database first (full IEEE OUI, ~30,000+ entries)
+    if let Ok(db) = dynamic_oui().lock() {
+        if let Some(vendor) = db.get(&hex) {
+            return Some(vendor.clone());
+        }
+    }
+
+    // Fall back to static curated table (~200 entries)
+    oui_table().get(hex.as_str()).map(|s| s.to_string())
 }
 
 /// Classify device based on open ports, hostname, vendor, and role flags.

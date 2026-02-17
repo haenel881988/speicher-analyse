@@ -2975,7 +2975,45 @@ textarea::placeholder {
     width: 32px;
     text-align: center;
     font-size: 16px;
+    line-height: 0;
 }
+
+.explorer-col-icon svg {
+    width: 18px;
+    height: 18px;
+    vertical-align: middle;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+}
+
+/* Dateityp-spezifische Icon-Farben */
+.explorer-col-icon svg.icon-folder,
+.omni-result-icon svg.icon-folder,
+.omni-result-icon svg.icon-folderOpen { color: #e8b730; }
+.explorer-col-icon svg.icon-pdf,
+.omni-result-icon svg.icon-pdf { color: #e05252; }
+.explorer-col-icon svg.icon-document,
+.omni-result-icon svg.icon-document { color: #5b9bd5; }
+.explorer-col-icon svg.icon-spreadsheet,
+.omni-result-icon svg.icon-spreadsheet { color: #4caf50; }
+.explorer-col-icon svg.icon-image,
+.omni-result-icon svg.icon-image { color: #ab47bc; }
+.explorer-col-icon svg.icon-audio,
+.omni-result-icon svg.icon-audio { color: #ff9800; }
+.explorer-col-icon svg.icon-video,
+.omni-result-icon svg.icon-video { color: #e91e63; }
+.explorer-col-icon svg.icon-archive,
+.omni-result-icon svg.icon-archive { color: #8d6e63; }
+.explorer-col-icon svg.icon-code,
+.omni-result-icon svg.icon-code { color: #66bb6a; }
+.explorer-col-icon svg.icon-exe,
+.omni-result-icon svg.icon-exe { color: #42a5f5; }
+.explorer-col-icon svg.icon-system,
+.omni-result-icon svg.icon-system { color: #78909c; }
+.explorer-col-icon svg.icon-database,
+.omni-result-icon svg.icon-database { color: #7e57c2; }
+.explorer-col-icon svg.icon-font,
+.omni-result-icon svg.icon-font { color: #ec407a; }
 
 .explorer-col-name {
     font-weight: 500;
@@ -3321,6 +3359,13 @@ textarea::placeholder {
     flex-shrink: 0;
     width: 16px;
     text-align: center;
+    line-height: 0;
+}
+
+.omni-result-icon svg {
+    width: 16px;
+    height: 16px;
+    color: var(--text-secondary);
 }
 .omni-result-name {
     font-weight: 500;
@@ -4793,7 +4838,7 @@ textarea::placeholder {
 .netinv-col-vendor { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .netinv-col-model { white-space: normal; line-height: 1.4; word-break: break-word; }
 .netinv-model-name { color: var(--text-primary); font-size: 12px; }
-.netinv-serial, .netinv-fw-badge, .netinv-ssh-badge, .netinv-mdns-badge, .netinv-source-badge {
+.netinv-serial, .netinv-fw-badge, .netinv-ssh-badge, .netinv-http-badge, .netinv-os-badge, .netinv-mdns-badge, .netinv-source-badge {
     display: inline-block; font-size: 9px; font-weight: 700; letter-spacing: 0.5px;
     padding: 1px 5px; border-radius: 3px; margin-left: 4px; cursor: help; vertical-align: middle;
 }
@@ -4805,6 +4850,12 @@ textarea::placeholder {
 }
 .netinv-ssh-badge {
     background: rgba(255, 165, 2, 0.12); color: var(--text-primary);
+}
+.netinv-http-badge {
+    background: rgba(52, 152, 219, 0.12); color: var(--text-primary);
+}
+.netinv-os-badge {
+    background: rgba(155, 89, 182, 0.15); color: var(--text-primary);
 }
 .netinv-mdns-badge {
     background: rgba(30, 144, 255, 0.12); color: var(--text-primary);

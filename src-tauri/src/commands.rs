@@ -1645,20 +1645,20 @@ pub async fn terminal_get_shells() -> Result<Value, String> {
 
     // PowerShell Core (pwsh)
     if which_exists("pwsh.exe") {
-        shells.push(json!({ "id": "pwsh", "name": "PowerShell 7", "path": "pwsh.exe" }));
+        shells.push(json!({ "id": "pwsh", "label": "PowerShell 7", "available": true }));
     }
     // Windows PowerShell
-    shells.push(json!({ "id": "powershell", "name": "Windows PowerShell", "path": "powershell.exe" }));
+    shells.push(json!({ "id": "powershell", "label": "Windows PowerShell", "available": true }));
     // CMD
-    shells.push(json!({ "id": "cmd", "name": "Eingabeaufforderung", "path": "cmd.exe" }));
+    shells.push(json!({ "id": "cmd", "label": "Eingabeaufforderung", "available": true }));
     // Git Bash
     let git_bash = r"C:\Program Files\Git\bin\bash.exe";
     if Path::new(git_bash).exists() {
-        shells.push(json!({ "id": "git-bash", "name": "Git Bash", "path": git_bash }));
+        shells.push(json!({ "id": "git-bash", "label": "Git Bash", "available": true }));
     }
     // WSL
     if which_exists("wsl.exe") {
-        shells.push(json!({ "id": "wsl", "name": "WSL", "path": "wsl.exe" }));
+        shells.push(json!({ "id": "wsl", "label": "WSL", "available": true }));
     }
 
     Ok(json!(shells))
@@ -1684,7 +1684,7 @@ struct TerminalSession {
 }
 
 #[tauri::command]
-pub async fn terminal_create(cwd: Option<String>, shell_type: Option<String>, _cols: Option<u32>, _rows: Option<u32>) -> Result<Value, String> {
+pub async fn terminal_create(app: tauri::AppHandle, cwd: Option<String>, shell_type: Option<String>, _cols: Option<u32>, _rows: Option<u32>) -> Result<Value, String> {
     let shell = shell_type.unwrap_or_else(|| "powershell".to_string());
     let dir = cwd.unwrap_or_else(|| std::env::var("USERPROFILE").unwrap_or_else(|_| "C:\\".to_string()));
 
@@ -1713,6 +1713,60 @@ pub async fn terminal_create(cwd: Option<String>, shell_type: Option<String>, _c
         Ok(mut child) => {
             let id = format!("term-{}", child.id());
             let stdin = child.stdin.take();
+            let stdout = child.stdout.take();
+            let stderr = child.stderr.take();
+
+            // Background thread: read stdout and emit terminal-data events
+            if let Some(stdout) = stdout {
+                let id_out = id.clone();
+                let app_out = app.clone();
+                std::thread::spawn(move || {
+                    use std::io::Read;
+                    let mut reader = std::io::BufReader::new(stdout);
+                    let mut buf = [0u8; 4096];
+                    loop {
+                        match reader.read(&mut buf) {
+                            Ok(0) => break,
+                            Ok(n) => {
+                                let data = String::from_utf8_lossy(&buf[..n]).to_string();
+                                let _ = app_out.emit("terminal-data", json!({ "id": &id_out, "data": data }));
+                            }
+                            Err(_) => break,
+                        }
+                    }
+                    // stdout closed → process likely exited, get exit code
+                    let code = {
+                        let mut sessions = TERMINAL_SESSIONS.lock().unwrap();
+                        sessions.get_mut(&id_out)
+                            .and_then(|s| s.child.try_wait().ok().flatten())
+                            .and_then(|s| s.code())
+                            .unwrap_or(-1)
+                    };
+                    let _ = app_out.emit("terminal-exit", json!({ "id": &id_out, "code": code }));
+                });
+            }
+
+            // Background thread: read stderr and emit as terminal-data
+            if let Some(stderr) = stderr {
+                let id_err = id.clone();
+                let app_err = app.clone();
+                std::thread::spawn(move || {
+                    use std::io::Read;
+                    let mut reader = std::io::BufReader::new(stderr);
+                    let mut buf = [0u8; 4096];
+                    loop {
+                        match reader.read(&mut buf) {
+                            Ok(0) => break,
+                            Ok(n) => {
+                                let data = String::from_utf8_lossy(&buf[..n]).to_string();
+                                let _ = app_err.emit("terminal-data", json!({ "id": &id_err, "data": data }));
+                            }
+                            Err(_) => break,
+                        }
+                    }
+                });
+            }
+
             let mut sessions = TERMINAL_SESSIONS.lock().unwrap();
             sessions.insert(id.clone(), TerminalSession { child, stdin });
             tracing::debug!(id = %id, shell = %shell_path, "Terminal erstellt");
@@ -3073,6 +3127,53 @@ pub async fn export_network_history(format: Option<String>) -> Result<Value, Str
     Ok(json!({ "success": true, "path": export_path.to_string_lossy().to_string(), "count": all_snapshots.len() }))
 }
 
+/// Detect OS from TTL, SSDP SERVER header, SSH banner, and port profile.
+/// TTL heuristic: 64 = Linux/macOS, 128 = Windows, 255 = Network Equipment
+fn detect_os(ttl: i64, ssdp_server: &str, ssh_banner: &str, open_ports: &[u16]) -> String {
+    // 1. SSDP SERVER header is most reliable (e.g. "Windows/10.0 UPnP/2.0 ..." or "Linux/3.x ...")
+    let server_lower = ssdp_server.to_lowercase();
+    if server_lower.contains("windows") {
+        if let Some(start) = server_lower.find("windows/") {
+            let ver = &ssdp_server[start..];
+            let end = ver.find(' ').unwrap_or(ver.len());
+            return ver[..end].replace('/', " ").to_string();
+        }
+        return "Windows".to_string();
+    }
+    if server_lower.contains("linux") {
+        return "Linux".to_string();
+    }
+
+    // 2. SSH banner (e.g. "SSH-2.0-OpenSSH_8.9p1 Ubuntu-3ubuntu0.1")
+    let ssh_lower = ssh_banner.to_lowercase();
+    if ssh_lower.contains("ubuntu") { return "Linux (Ubuntu)".to_string(); }
+    if ssh_lower.contains("debian") { return "Linux (Debian)".to_string(); }
+    if ssh_lower.contains("raspbian") || ssh_lower.contains("raspberry") {
+        return "Linux (Raspberry Pi)".to_string();
+    }
+    if ssh_lower.contains("openssh") && !ssh_lower.contains("windows") {
+        return "Linux/Unix".to_string();
+    }
+    if ssh_lower.contains("dropbear") { return "Linux (Embedded)".to_string(); }
+
+    // 3. TTL-based heuristic
+    if ttl > 0 {
+        if ttl <= 64 {
+            // iOS devices have port 62078
+            if open_ports.contains(&62078) { return "iOS".to_string(); }
+            return "Linux/macOS".to_string();
+        }
+        if ttl <= 128 {
+            return "Windows".to_string();
+        }
+        if ttl <= 255 {
+            return "Netzwerkgerät".to_string();
+        }
+    }
+
+    String::new()
+}
+
 /// Quick passive scan: ARP table + parallel ping, parallel DNS (5s limit) + OUI vendor
 #[tauri::command]
 pub async fn scan_local_network() -> Result<Value, String> {
@@ -3122,7 +3223,7 @@ $results | ConvertTo-Json -Compress"#
         let vendor = if mac.is_empty() {
             String::new()
         } else {
-            crate::oui::lookup(mac).unwrap_or("").to_string()
+            crate::oui::lookup(mac).unwrap_or_default()
         };
         let hostname = d["hostname"].as_str().unwrap_or("");
         // Basic ARP state classification
@@ -3204,6 +3305,7 @@ foreach ($t in $alive) {{
         mac=$arp[$ip]
         hostname=$dnsMap[$ip]
         rtt=[int]$t.task.Result.RoundtripTime
+        ttl=[int]$t.task.Result.Options.Ttl
     }}
 }}
 $results | ConvertTo-Json -Compress"#,
@@ -3285,9 +3387,9 @@ $result | ConvertTo-Json -Depth 3 -Compress"#,
         std::collections::HashMap::new()
     };
 
-    // Phase 3: UPnP/SSDP discovery for model names
+    // Phase 3: UPnP/SSDP discovery for model names + SERVER header for OS
     let _ = app.emit("network-scan-progress", json!({
-        "phase": "identify", "message": "Gerätemodelle werden erkannt (UPnP/SSDP)...", "percent": 60
+        "phase": "identify", "message": "Gerätemodelle werden erkannt (UPnP/SSDP)...", "percent": 55
     }));
 
     let ssdp_map: std::collections::HashMap<String, Value> = {
@@ -3297,9 +3399,14 @@ $udp.Client.SendTimeout = 1000
 $msg = "M-SEARCH * HTTP/1.1`r`nHOST: 239.255.255.250:1900`r`nMAN: `"ssdp:discover`"`r`nMX: 3`r`nST: upnp:rootdevice`r`n`r`n"
 $bytes = [Text.Encoding]::UTF8.GetBytes($msg)
 $ep = New-Object System.Net.IPEndPoint([System.Net.IPAddress]::Parse('239.255.255.250'), 1900)
-try { $udp.Send($bytes, $bytes.Length, $ep) | Out-Null } catch { $udp.Close(); '{}'; return }
+try {
+    $udp.Send($bytes, $bytes.Length, $ep) | Out-Null
+    Start-Sleep -Milliseconds 500
+    $udp.Send($bytes, $bytes.Length, $ep) | Out-Null
+} catch { $udp.Close(); '{}'; return }
 $locations = @{}
-$deadline = (Get-Date).AddSeconds(4)
+$servers = @{}
+$deadline = (Get-Date).AddSeconds(5)
 while ((Get-Date) -lt $deadline) {
     try {
         $remEP = New-Object System.Net.IPEndPoint([System.Net.IPAddress]::Any, 0)
@@ -3307,6 +3414,9 @@ while ((Get-Date) -lt $deadline) {
         $ip = $remEP.Address.ToString()
         if ($resp -match 'LOCATION:\s*(http\S+)') {
             if (-not $locations[$ip]) { $locations[$ip] = $Matches[1] }
+        }
+        if ($resp -match 'SERVER:\s*(.+)') {
+            if (-not $servers[$ip]) { $servers[$ip] = $Matches[1].Trim() }
         }
     } catch { break }
 }
@@ -3320,11 +3430,18 @@ foreach ($ip in $locations.Keys) {
         if ($dev) {
             $result[$ip] = [PSCustomObject]@{
                 modelName = [string]$dev.Node.modelName
+                modelNumber = [string]$dev.Node.modelNumber
                 manufacturer = [string]$dev.Node.manufacturer
                 friendlyName = [string]$dev.Node.friendlyName
+                serialNumber = [string]$dev.Node.serialNumber
+                modelDescription = [string]$dev.Node.modelDescription
+                server = [string]$servers[$ip]
             }
         }
     } catch {}
+}
+foreach ($ip in $servers.Keys) {
+    if (-not $result[$ip]) { $result[$ip] = [PSCustomObject]@{ server=[string]$servers[$ip] } }
 }
 $result | ConvertTo-Json -Depth 2 -Compress"#;
 
@@ -3346,6 +3463,103 @@ $result | ConvertTo-Json -Depth 2 -Compress"#;
         }
     };
 
+    // Phase 3b: SSH banner grabbing + HTTP Server header for devices with those ports open
+    let _ = app.emit("network-scan-progress", json!({
+        "phase": "identify", "message": "SSH/HTTP-Banner werden geprüft...", "percent": 65
+    }));
+
+    let banner_map: std::collections::HashMap<String, Value> = {
+        // Collect IPs with SSH (22) or HTTP (80/443) ports open
+        let mut ssh_ips: Vec<String> = Vec::new();
+        let mut http_ips: Vec<String> = Vec::new();
+        for (ip, ports) in &port_map {
+            let port_nums: Vec<u16> = ports.iter()
+                .filter_map(|p| p["port"].as_u64().map(|n| n as u16))
+                .collect();
+            if port_nums.contains(&22) { ssh_ips.push(ip.clone()); }
+            if port_nums.contains(&80) || port_nums.contains(&443) { http_ips.push(ip.clone()); }
+        }
+
+        let mut bm: std::collections::HashMap<String, Value> = std::collections::HashMap::new();
+
+        // SSH banner grab (parallel, 3s timeout)
+        if !ssh_ips.is_empty() {
+            let ssh_ips_str = ssh_ips.iter()
+                .map(|ip| format!("'{}'", ip.replace('\'', "''")))
+                .collect::<Vec<_>>()
+                .join(",");
+            let ssh_script = format!(r#"$ips = @({ips})
+$tasks = @()
+foreach ($ip in $ips) {{
+    $tcp = New-Object System.Net.Sockets.TcpClient
+    $tasks += @{{ ip=$ip; tcp=$tcp; task=$tcp.ConnectAsync($ip, 22) }}
+}}
+try {{ [void][System.Threading.Tasks.Task]::WaitAll(@($tasks | ForEach-Object {{ $_.task }}), 3000) }} catch {{}}
+$result = @{{}}
+foreach ($t in $tasks) {{
+    try {{
+        if ($t.task.IsCompleted -and -not $t.task.IsFaulted -and $t.tcp.Connected) {{
+            $stream = $t.tcp.GetStream()
+            $stream.ReadTimeout = 2000
+            $buf = New-Object byte[] 512
+            $n = $stream.Read($buf, 0, 512)
+            if ($n -gt 0) {{ $result[$t.ip] = [Text.Encoding]::UTF8.GetString($buf, 0, $n).Trim() }}
+        }}
+    }} catch {{}}
+    try {{ $t.tcp.Close() }} catch {{}}
+}}
+$result | ConvertTo-Json -Compress"#, ips = ssh_ips_str);
+
+            match crate::ps::run_ps_json(&ssh_script).await {
+                Ok(data) => {
+                    if let Some(obj) = data.as_object() {
+                        for (ip, banner) in obj {
+                            bm.entry(ip.clone()).or_insert_with(|| json!({}));
+                            if let Some(entry) = bm.get_mut(ip) {
+                                entry["sshBanner"] = banner.clone();
+                            }
+                        }
+                    }
+                }
+                Err(e) => tracing::warn!("SSH-Banner-Grab fehlgeschlagen: {}", e),
+            }
+        }
+
+        // HTTP Server header (parallel, 3s timeout)
+        if !http_ips.is_empty() {
+            let http_ips_str = http_ips.iter()
+                .map(|ip| format!("'{}'", ip.replace('\'', "''")))
+                .collect::<Vec<_>>()
+                .join(",");
+            let http_script = format!(r#"$ips = @({ips})
+$result = @{{}}
+foreach ($ip in $ips) {{
+    try {{
+        $resp = Invoke-WebRequest -Uri "http://$ip/" -Method HEAD -TimeoutSec 3 -UseBasicParsing -EA Stop
+        $server = $resp.Headers['Server']
+        if ($server) {{ $result[$ip] = [string]$server }}
+    }} catch {{}}
+}}
+$result | ConvertTo-Json -Compress"#, ips = http_ips_str);
+
+            match crate::ps::run_ps_json(&http_script).await {
+                Ok(data) => {
+                    if let Some(obj) = data.as_object() {
+                        for (ip, server) in obj {
+                            bm.entry(ip.clone()).or_insert_with(|| json!({}));
+                            if let Some(entry) = bm.get_mut(ip) {
+                                entry["httpServer"] = server.clone();
+                            }
+                        }
+                    }
+                }
+                Err(e) => tracing::warn!("HTTP-Header-Grab fehlgeschlagen: {}", e),
+            }
+        }
+
+        bm
+    };
+
     // Phase 4: Enrich devices with OUI vendor + SSDP model + classification
     let _ = app.emit("network-scan-progress", json!({
         "phase": "classify", "message": "Geräte werden klassifiziert...", "percent": 85
@@ -3362,13 +3576,17 @@ $result | ConvertTo-Json -Depth 2 -Compress"#;
         let vendor = if mac.is_empty() {
             String::new()
         } else {
-            crate::oui::lookup(&mac).unwrap_or("").to_string()
+            crate::oui::lookup(&mac).unwrap_or_default()
         };
 
-        // SSDP model info
+        // SSDP model info (extended)
         let ssdp_info = ssdp_map.get(&ip);
         let model_name = ssdp_info
             .and_then(|i| i["modelName"].as_str())
+            .unwrap_or("")
+            .to_string();
+        let model_number = ssdp_info
+            .and_then(|i| i["modelNumber"].as_str())
             .unwrap_or("")
             .to_string();
         let ssdp_manufacturer = ssdp_info
@@ -3377,6 +3595,29 @@ $result | ConvertTo-Json -Depth 2 -Compress"#;
             .to_string();
         let friendly_name = ssdp_info
             .and_then(|i| i["friendlyName"].as_str())
+            .unwrap_or("")
+            .to_string();
+        let ssdp_serial = ssdp_info
+            .and_then(|i| i["serialNumber"].as_str())
+            .unwrap_or("")
+            .to_string();
+        let ssdp_description = ssdp_info
+            .and_then(|i| i["modelDescription"].as_str())
+            .unwrap_or("")
+            .to_string();
+        let ssdp_server = ssdp_info
+            .and_then(|i| i["server"].as_str())
+            .unwrap_or("")
+            .to_string();
+
+        // Banner/header info
+        let banner_info = banner_map.get(&ip);
+        let ssh_banner = banner_info
+            .and_then(|i| i["sshBanner"].as_str())
+            .unwrap_or("")
+            .to_string();
+        let http_server = banner_info
+            .and_then(|i| i["httpServer"].as_str())
             .unwrap_or("")
             .to_string();
 
@@ -3399,11 +3640,26 @@ $result | ConvertTo-Json -Depth 2 -Compress"#;
         let (device_type, device_label, device_icon) =
             crate::oui::classify_device(&effective_vendor, &hostname, &open_port_numbers, is_local, is_gateway);
 
+        // OS detection: TTL heuristic + SSDP SERVER header + SSH banner
+        let ttl = raw_device["ttl"].as_i64().unwrap_or(0);
+        let os = detect_os(ttl, &ssdp_server, &ssh_banner, &open_port_numbers);
+
+        // Firmware version from SSDP modelNumber or modelDescription
+        let firmware_version = if !model_number.is_empty() {
+            model_number.clone()
+        } else if !ssdp_description.is_empty() && ssdp_description.len() < 60 {
+            ssdp_description.clone()
+        } else {
+            String::new()
+        };
+
         // Build identification method string
         let mut id_methods = Vec::new();
         if !vendor.is_empty() { id_methods.push("OUI"); }
         if !open_port_numbers.is_empty() { id_methods.push("Ports"); }
         if !model_name.is_empty() { id_methods.push("UPnP"); }
+        if !ssh_banner.is_empty() { id_methods.push("SSH"); }
+        if !http_server.is_empty() { id_methods.push("HTTP"); }
         if id_methods.is_empty() {
             if !hostname.is_empty() { id_methods.push("DNS"); }
             else { id_methods.push("Ping"); }
@@ -3421,10 +3677,14 @@ $result | ConvertTo-Json -Depth 2 -Compress"#;
             "deviceIcon": device_icon,
             "openPorts": open_ports,
             "isLocal": is_local,
-            "os": "",
+            "os": os,
             "modelName": model_name,
             "friendlyName": friendly_name,
             "manufacturer": ssdp_manufacturer,
+            "firmwareVersion": firmware_version,
+            "serialNumber": ssdp_serial,
+            "sshBanner": ssh_banner,
+            "httpServer": http_server,
             "identifiedBy": id_methods.join(" + ")
         }));
     }
@@ -3519,7 +3779,16 @@ try {{
     [PSCustomObject]@{{ success=$false; error=$_.Exception.Message }} | ConvertTo-Json -Compress
 }}"#, path = oui_path_escaped);
 
-    crate::ps::run_ps_json(&script).await
+    let result = crate::ps::run_ps_json(&script).await?;
+
+    // Immediately reload into memory after successful download
+    if result["success"].as_bool().unwrap_or(false) {
+        let data_dir = get_data_dir();
+        let count = crate::oui::load_dynamic_oui(&data_dir);
+        tracing::info!("OUI-Datenbank nach Download geladen: {} Einträge", count);
+    }
+
+    Ok(result)
 }
 
 // === System Info ===

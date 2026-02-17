@@ -281,7 +281,10 @@ if(!Uint8Array.fromHex){Uint8Array.fromHex=function(s){const b=new Uint8Array(s.
                 return;
             }
 
-            const data = new Uint8Array(result.data);
+            // Backend returns base64-encoded binary — decode to Uint8Array
+            const binaryStr = atob(result.data);
+            const data = new Uint8Array(binaryStr.length);
+            for (let i = 0; i < binaryStr.length; i++) data[i] = binaryStr.charCodeAt(i);
             const pdf = await pdfjsLib.getDocument({ data }).promise;
             const totalPages = pdf.numPages;
             let currentPage = 1;
@@ -372,7 +375,11 @@ if(!Uint8Array.fromHex){Uint8Array.fromHex=function(s){const b=new Uint8Array(s.
                 return;
             }
 
-            const arrayBuffer = result.data;
+            // Backend returns base64-encoded binary — decode to ArrayBuffer
+            const binaryStr = atob(result.data);
+            const bytes = new Uint8Array(binaryStr.length);
+            for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+            const arrayBuffer = bytes.buffer;
             const converted = await mammoth.convertToHtml({ arrayBuffer });
 
             this.container.innerHTML = '';
@@ -422,7 +429,10 @@ if(!Uint8Array.fromHex){Uint8Array.fromHex=function(s){const b=new Uint8Array(s.
                 return;
             }
 
-            const data = new Uint8Array(result.data);
+            // Backend returns base64-encoded binary — decode to Uint8Array
+            const binaryStr = atob(result.data);
+            const data = new Uint8Array(binaryStr.length);
+            for (let i = 0; i < binaryStr.length; i++) data[i] = binaryStr.charCodeAt(i);
             const workbook = XLSX.read(data, { type: 'array' });
 
             this.container.innerHTML = '';
