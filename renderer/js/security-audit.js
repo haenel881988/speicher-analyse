@@ -1,6 +1,7 @@
 /**
  * Security Audit View - Sicherheits-Check mit Ampel-System und Historie.
  */
+import { escapeHtml } from './utils.js';
 import { showToast } from './tree.js';
 import { generateSecurityReport } from './report-gen.js';
 
@@ -27,7 +28,7 @@ export class SecurityAuditView {
             this.container.innerHTML = `<div class="security-page">
                 <div class="security-header"><h2>Sicherheits-Check</h2></div>
                 <div class="error-state" style="padding:24px">
-                    <p><strong>Fehler beim Laden:</strong> ${this._esc(err.message)}</p>
+                    <p><strong>Fehler beim Laden:</strong> ${escapeHtml(err.message)}</p>
                     <button class="network-btn" id="security-retry" style="margin-top:12px">Erneut versuchen</button>
                 </div>
             </div>`;
@@ -103,11 +104,11 @@ export class SecurityAuditView {
             <h3>Änderungen seit dem letzten Scan</h3>
             ${diff.map(d => `<div class="security-diff-item ${d.improved ? 'security-diff-improved' : 'security-diff-degraded'}">
                 <span class="security-diff-icon">${d.improved ? '&#9650;' : '&#9660;'}</span>
-                <strong>${this._esc(d.label)}</strong>:
+                <strong>${escapeHtml(d.label)}</strong>:
                 <span class="security-diff-old">${this._statusLabel(d.oldStatus)}</span>
                 &#8594;
                 <span class="security-diff-new">${this._statusLabel(d.newStatus)}</span>
-                <div class="security-diff-detail">${this._esc(d.newMessage)}</div>
+                <div class="security-diff-detail">${escapeHtml(d.newMessage)}</div>
             </div>`).join('')}
         </div>`;
     }
@@ -147,8 +148,8 @@ export class SecurityAuditView {
         return `<div class="security-check-card security-status-${check.status}">
             <div class="security-check-icon">${icon}</div>
             <div class="security-check-content">
-                <div class="security-check-label">${this._esc(check.label)}</div>
-                <div class="security-check-message">${this._esc(check.message)}</div>
+                <div class="security-check-label">${escapeHtml(check.label)}</div>
+                <div class="security-check-message">${escapeHtml(check.message)}</div>
             </div>
         </div>`;
     }
@@ -236,11 +237,6 @@ export class SecurityAuditView {
             console.error('Report-Generierung fehlgeschlagen:', err);
             showToast('Bericht konnte nicht erstellt werden: ' + err.message, 'error');
         }
-    }
-
-    _esc(text) {
-        if (!text) return '';
-        return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
     /**

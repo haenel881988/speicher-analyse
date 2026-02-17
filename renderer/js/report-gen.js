@@ -2,6 +2,7 @@
  * IT-Sicherheitsbericht — PDF-Report-Generator.
  * Nutzt html2pdf.bundle.min.js (global geladen via index.html).
  */
+import { escapeHtml } from './utils.js';
 import { showToast } from './tree.js';
 
 /**
@@ -68,11 +69,6 @@ async function _getComputerName() {
     }
 }
 
-function _esc(text) {
-    if (!text) return '';
-    return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
 function _statusIcon(status) {
     if (status === 'ok') return '<span style="color:#2ed573">&#10004;</span>';
     if (status === 'warning') return '<span style="color:#ffa502">&#9888;</span>';
@@ -123,7 +119,7 @@ function _buildReportHTML({ dateStr, timeStr, pcName, auditResult, scoreData, de
     if (scoreData) {
         const cls = scoreData.score >= 70 ? 'score-ok' : scoreData.score >= 40 ? 'score-warn' : 'score-danger';
         const catCards = (scoreData.categories || []).map(c =>
-            `<div class="cat-card"><div class="cat-name">${_esc(c.name)}</div><div class="cat-score ${c.score >= 70 ? 'score-ok' : c.score >= 40 ? 'score-warn' : 'score-danger'}">${c.score}</div></div>`
+            `<div class="cat-card"><div class="cat-name">${escapeHtml(c.name)}</div><div class="cat-score ${c.score >= 70 ? 'score-ok' : c.score >= 40 ? 'score-warn' : 'score-danger'}">${c.score}</div></div>`
         ).join('');
 
         scoreSection = `<div class="section">
@@ -139,7 +135,7 @@ function _buildReportHTML({ dateStr, timeStr, pcName, auditResult, scoreData, de
     let auditSection = '';
     if (auditResult?.checks) {
         const rows = auditResult.checks.map(c =>
-            `<tr class="check-row-${c.status}"><td>${_statusIcon(c.status)}</td><td>${_esc(c.label)}</td><td>${_statusText(c.status)}</td><td>${_esc(c.message)}</td></tr>`
+            `<tr class="check-row-${c.status}"><td>${_statusIcon(c.status)}</td><td>${escapeHtml(c.label)}</td><td>${_statusText(c.status)}</td><td>${escapeHtml(c.message)}</td></tr>`
         ).join('');
         auditSection = `<div class="section">
             <div class="section-title">Sicherheits-Check</div>
@@ -156,10 +152,10 @@ function _buildReportHTML({ dateStr, timeStr, pcName, auditResult, scoreData, de
 
         let connRows = top10.map(g =>
             `<tr class="${g.hasHighRisk ? 'check-row-danger' : g.hasTrackers ? 'check-row-warning' : ''}">
-                <td>${_esc(g.processName)}</td>
+                <td>${escapeHtml(g.processName)}</td>
                 <td>${g.connectionCount}</td>
                 <td>${g.uniqueIPCount}</td>
-                <td>${_esc((g.resolvedCompanies || []).slice(0, 3).join(', '))}</td>
+                <td>${escapeHtml((g.resolvedCompanies || []).slice(0, 3).join(', '))}</td>
                 <td>${g.hasHighRisk ? '<span style="color:#ff4757">&#9888; Ja</span>' : g.hasTrackers ? '<span style="color:#ffa502">Tracker</span>' : '—'}</td>
             </tr>`
         ).join('');
@@ -174,7 +170,7 @@ function _buildReportHTML({ dateStr, timeStr, pcName, auditResult, scoreData, de
     let devicesSection = '';
     if (devices && devices.length > 0) {
         const devRows = devices.slice(0, 20).map(d =>
-            `<tr><td>${_esc(d.hostname) || '—'}</td><td>${_esc(d.ip)}</td><td>${_esc(d.mac)}</td><td>${_esc(d.vendor) || '—'}</td></tr>`
+            `<tr><td>${escapeHtml(d.hostname) || '—'}</td><td>${escapeHtml(d.ip)}</td><td>${escapeHtml(d.mac)}</td><td>${escapeHtml(d.vendor) || '—'}</td></tr>`
         ).join('');
         devicesSection = `<div class="section">
             <div class="section-title">Erkannte Geräte im Netzwerk (${devices.length})</div>
@@ -201,7 +197,7 @@ function _buildReportHTML({ dateStr, timeStr, pcName, auditResult, scoreData, de
     if (risks.length > 0) {
         const riskItems = risks.map(r => {
             const color = r.level === 'Kritisch' ? '#ff4757' : r.level === 'Warnung' ? '#ffa502' : '#888';
-            return `<li><span style="color:${color};font-weight:600">${_esc(r.level)}:</span> ${_esc(r.text)}</li>`;
+            return `<li><span style="color:${color};font-weight:600">${escapeHtml(r.level)}:</span> ${escapeHtml(r.text)}</li>`;
         }).join('');
         riskSection = `<div class="section">
             <div class="section-title">Empfehlungen & Risiken</div>
@@ -217,7 +213,7 @@ function _buildReportHTML({ dateStr, timeStr, pcName, auditResult, scoreData, de
                 <p>Erstellt mit Speicher Analyse</p>
             </div>
             <div class="header-right">
-                <div><strong>${_esc(pcName)}</strong></div>
+                <div><strong>${escapeHtml(pcName)}</strong></div>
                 <div>${dateStr} um ${timeStr}</div>
             </div>
         </div>

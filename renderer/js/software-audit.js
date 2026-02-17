@@ -2,6 +2,7 @@
  * Software Audit View - Shows installed programs with categories, orphaned entries,
  * system footprint, and optional update check via winget.
  */
+import { escapeHtml } from './utils.js';
 import { showToast } from './tree.js';
 
 export class SoftwareAuditView {
@@ -55,7 +56,7 @@ export class SoftwareAuditView {
             this.container.innerHTML = `
                 <div class="error-state" style="padding:24px">
                     <p><strong>Fehler beim Laden der Software-Daten:</strong></p>
-                    <p style="color:var(--text-secondary);margin:8px 0">${this._esc(err.message)}</p>
+                    <p style="color:var(--text-secondary);margin:8px 0">${escapeHtml(err.message)}</p>
                     <button class="network-btn" id="audit-retry" style="margin-top:12px">Erneut versuchen</button>
                 </div>`;
             const retryBtn = this.container.querySelector('#audit-retry');
@@ -76,7 +77,7 @@ export class SoftwareAuditView {
 
         // Kategorie-Dropdown-Optionen
         const catOptions = Object.values(this.categories)
-            .map(c => `<option value="${this._esc(c.id)}" ${this.categoryFilter === c.id ? 'selected' : ''}>${this._esc(c.label)} (${this.categoryStats[c.id] || 0})</option>`)
+            .map(c => `<option value="${escapeHtml(c.id)}" ${this.categoryFilter === c.id ? 'selected' : ''}>${escapeHtml(c.label)} (${this.categoryStats[c.id] || 0})</option>`)
             .join('');
 
         // Update-Status-Text
@@ -86,7 +87,7 @@ export class SoftwareAuditView {
         } else if (hasUpdateData && this.updateData.available) {
             updateStatusHtml = `<span class="audit-update-count">${this.updateData.totalUpdates || 0} Update${this.updateData.totalUpdates !== 1 ? 's' : ''} verfügbar</span>`;
         } else if (hasUpdateData && !this.updateData.available) {
-            updateStatusHtml = `<span class="audit-loading-updates">${this._esc(this.updateData.error || 'Nicht verfügbar')}</span>`;
+            updateStatusHtml = `<span class="audit-loading-updates">${escapeHtml(this.updateData.error || 'Nicht verfügbar')}</span>`;
         }
 
         this.container.innerHTML = `
@@ -100,7 +101,7 @@ export class SoftwareAuditView {
                     </div>
                 </div>
                 <div class="audit-toolbar">
-                    <input type="text" class="audit-search" placeholder="Programme durchsuchen..." value="${this._esc(this.filter)}">
+                    <input type="text" class="audit-search" placeholder="Programme durchsuchen..." value="${escapeHtml(this.filter)}">
                     <select class="audit-category-filter" id="audit-category-filter">
                         <option value="">Alle Kategorien</option>
                         ${catOptions}
@@ -160,8 +161,8 @@ export class SoftwareAuditView {
             if (updateInfo) {
                 const isUpdating = this.updatingPackage === updateInfo.wingetId;
                 updateCell = `<td>
-                    <span class="audit-update-badge">${this._esc(updateInfo.availableVersion)}</span>
-                    <button class="audit-btn-update" data-winget-id="${this._esc(updateInfo.wingetId)}" data-name="${this._esc(p.name)}" ${isUpdating ? 'disabled' : ''}>
+                    <span class="audit-update-badge">${escapeHtml(updateInfo.availableVersion)}</span>
+                    <button class="audit-btn-update" data-winget-id="${escapeHtml(updateInfo.wingetId)}" data-name="${escapeHtml(p.name)}" ${isUpdating ? 'disabled' : ''}>
                         ${isUpdating ? '...' : 'Update'}
                     </button>
                 </td>`;
@@ -170,17 +171,17 @@ export class SoftwareAuditView {
             }
         }
 
-        return `<tr class="${p.isOrphaned ? 'audit-row-orphaned' : ''}" data-path="${this._esc(p.registryPath)}">
-            <td class="audit-name" title="${this._esc(p.installLocation || '')}">${this._esc(p.name)}</td>
-            <td><span class="audit-category-badge" style="background:${this._esc(catColor)}20;color:${this._esc(catColor)}">${this._esc(catLabel)}</span></td>
-            <td>${this._esc(p.publisher || '-')}</td>
-            <td>${this._esc(p.version || '-')}</td>
+        return `<tr class="${p.isOrphaned ? 'audit-row-orphaned' : ''}" data-path="${escapeHtml(p.registryPath)}">
+            <td class="audit-name" title="${escapeHtml(p.installLocation || '')}">${escapeHtml(p.name)}</td>
+            <td><span class="audit-category-badge" style="background:${escapeHtml(catColor)}20;color:${escapeHtml(catColor)}">${escapeHtml(catLabel)}</span></td>
+            <td>${escapeHtml(p.publisher || '-')}</td>
+            <td>${escapeHtml(p.version || '-')}</td>
             <td class="audit-size">${sizeMB}</td>
             <td>${sourceLabel}</td>
             <td><span class="risk-badge risk-${statusClass}">${statusText}</span></td>
             ${updateCell}
             <td>
-                <button class="audit-btn-detail" data-name="${this._esc(p.name)}" title="Details">Details</button>
+                <button class="audit-btn-detail" data-name="${escapeHtml(p.name)}" title="Details">Details</button>
             </td>
         </tr>`;
     }
@@ -362,8 +363,4 @@ export class SoftwareAuditView {
         return { orphanedCount: this.orphanedCount, totalPrograms: this.programs.length };
     }
 
-    _esc(text) {
-        if (!text) return '';
-        return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-    }
 }

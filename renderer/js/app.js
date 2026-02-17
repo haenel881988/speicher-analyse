@@ -672,83 +672,88 @@ function pushUiState() {
 async function autoLoadTab(tabName) {
     if (tabLoaded[tabName]) return;
 
-    switch (tabName) {
-        case 'autostart':
-            tabLoaded.autostart = true;
-            setStatus('Autostart wird geladen...', true);
-            await autostartView.scan();
-            setStatus('Bereit');
-            break;
-        case 'services':
-            tabLoaded.services = true;
-            setStatus('Dienste werden geladen...', true);
-            await servicesView.load();
-            setStatus('Bereit');
-            break;
-        case 'bloatware':
-            tabLoaded.bloatware = true;
-            setStatus('Bloatware wird gesucht...', true);
-            await bloatwareView.scan();
-            setStatus('Bereit');
-            break;
-        case 'updates':
-            tabLoaded.updates = true;
-            setStatus('Updates werden geprüft...', true);
-            await updatesView.checkAll();
-            setStatus('Bereit');
-            break;
-        case 'duplicates':
-            // Duplikat-Scan bleibt manuell (braucht dirFiles, die nach Analyse freigegeben werden)
-            break;
-        case 'optimizer':
-            if (!optimizerView._cache) {
-                tabLoaded.optimizer = true;
-                setStatus('System wird analysiert...', true);
-                await optimizerView.scan();
+    try {
+        switch (tabName) {
+            case 'autostart':
+                setStatus('Autostart wird geladen...', true);
+                await autostartView.scan();
+                tabLoaded.autostart = true;
                 setStatus('Bereit');
-            }
-            break;
-        case 'settings':
-            tabLoaded.settings = true;
-            await settingsView.load();
-            break;
-        case 'privacy':
-            tabLoaded.privacy = true;
-            setStatus('Datenschutz wird analysiert...', true);
-            await privacyView.init();
-            setStatus('Bereit');
-            break;
-        case 'smart':
-            tabLoaded.smart = true;
-            setStatus('Festplatten werden geprüft...', true);
-            await smartView.init();
-            setStatus('Bereit');
-            break;
-        case 'software-audit':
-            tabLoaded['software-audit'] = true;
-            setStatus('Software wird analysiert...', true);
-            await softwareAuditView.init();
-            setStatus('Bereit');
-            break;
-        case 'security-audit':
-            tabLoaded['security-audit'] = true;
-            setStatus('Sicherheits-Check wird geladen...', true);
-            await securityAuditView.init();
-            setStatus('Bereit');
-            break;
-        case 'network':
-            setStatus('Netzwerk wird analysiert...', true);
-            await networkView.init();
-            tabLoaded.network = true;
-            setStatus('Bereit');
-            networkView.activate(); // Auto-Live: Polling starten nach erstem Laden
-            break;
-        case 'system-profil':
-            tabLoaded['system-profil'] = true;
-            setStatus('System-Profil wird geladen...', true);
-            await systemProfilView.init();
-            setStatus('Bereit');
-            break;
+                break;
+            case 'services':
+                setStatus('Dienste werden geladen...', true);
+                await servicesView.load();
+                tabLoaded.services = true;
+                setStatus('Bereit');
+                break;
+            case 'bloatware':
+                setStatus('Bloatware wird gesucht...', true);
+                await bloatwareView.scan();
+                tabLoaded.bloatware = true;
+                setStatus('Bereit');
+                break;
+            case 'updates':
+                setStatus('Updates werden geprüft...', true);
+                await updatesView.checkAll();
+                tabLoaded.updates = true;
+                setStatus('Bereit');
+                break;
+            case 'duplicates':
+                // Duplikat-Scan bleibt manuell (braucht dirFiles, die nach Analyse freigegeben werden)
+                break;
+            case 'optimizer':
+                if (!optimizerView._cache) {
+                    setStatus('System wird analysiert...', true);
+                    await optimizerView.scan();
+                    tabLoaded.optimizer = true;
+                    setStatus('Bereit');
+                }
+                break;
+            case 'settings':
+                await settingsView.load();
+                tabLoaded.settings = true;
+                break;
+            case 'privacy':
+                setStatus('Datenschutz wird analysiert...', true);
+                await privacyView.init();
+                tabLoaded.privacy = true;
+                setStatus('Bereit');
+                break;
+            case 'smart':
+                setStatus('Festplatten werden geprüft...', true);
+                await smartView.init();
+                tabLoaded.smart = true;
+                setStatus('Bereit');
+                break;
+            case 'software-audit':
+                setStatus('Software wird analysiert...', true);
+                await softwareAuditView.init();
+                tabLoaded['software-audit'] = true;
+                setStatus('Bereit');
+                break;
+            case 'security-audit':
+                setStatus('Sicherheits-Check wird geladen...', true);
+                await securityAuditView.init();
+                tabLoaded['security-audit'] = true;
+                setStatus('Bereit');
+                break;
+            case 'network':
+                setStatus('Netzwerk wird analysiert...', true);
+                await networkView.init();
+                tabLoaded.network = true;
+                setStatus('Bereit');
+                networkView.activate(); // Auto-Live: Polling starten nach erstem Laden
+                break;
+            case 'system-profil':
+                setStatus('System-Profil wird geladen...', true);
+                await systemProfilView.init();
+                tabLoaded['system-profil'] = true;
+                setStatus('Bereit');
+                break;
+        }
+    } catch (e) {
+        console.error(`Tab '${tabName}' laden fehlgeschlagen:`, e);
+        setStatus('Bereit');
     }
 }
 
@@ -1348,7 +1353,7 @@ async function updateBatteryUI() {
             // One-time low-battery warning during scan
             if (state.scanning && percentage !== null && percentage < 20 && !lowBatteryWarningShown) {
                 lowBatteryWarningShown = true;
-                showToast('Niedriger Akkustand: ' + percentage + '% - Netzteil anschliessen empfohlen', 'warning');
+                showToast('Niedriger Akkustand: ' + percentage + '% - Netzteil anschließen empfohlen', 'warning');
             }
         } else {
             badge.style.display = 'none';

@@ -2,7 +2,7 @@
  * Settings View - Zentrale Konfiguration (v7.4)
  * 7 Sektionen: Session, Energie, Allgemein, Hotkey, Terminal, Integration, Über
  */
-import { isStub } from './utils.js';
+import { isStub, escapeHtml } from './utils.js';
 
 export class SettingsView {
     constructor(container) {
@@ -88,7 +88,7 @@ export class SettingsView {
                     <div class="settings-row">
                         <div class="settings-label">
                             <strong>Session-Status</strong>
-                            <span class="settings-desc" id="settings-session-info">${this._esc(sessionInfoText)}</span>
+                            <span class="settings-desc" id="settings-session-info">${escapeHtml(sessionInfoText)}</span>
                         </div>
                         <div class="settings-value">
                             <button class="settings-btn" id="settings-save-session">Jetzt speichern</button>
@@ -135,7 +135,7 @@ export class SettingsView {
                     <div class="settings-row">
                         <div class="settings-label">
                             <strong>Stromversorgung</strong>
-                            <span class="settings-desc" id="settings-battery-status">${this._esc(batteryText)}</span>
+                            <span class="settings-desc" id="settings-battery-status">${escapeHtml(batteryText)}</span>
                         </div>
                         <div class="settings-value">
                             <span class="settings-badge ${batteryStatus.onBattery ? 'settings-badge-inactive' : 'settings-badge-active'}">
@@ -529,9 +529,9 @@ export class SettingsView {
                 const dir = tag.path.substring(0, tag.path.lastIndexOf('\\'));
                 html += `<tr>
                     <td><span class="settings-tag-sample" style="background:${hex}"></span></td>
-                    <td>${this._esc(name)}</td>
-                    <td class="settings-tag-path" title="${this._esc(tag.path)}">${this._esc(dir)}</td>
-                    <td><button class="settings-tag-remove" data-path="${this._esc(tag.path)}">Entfernen</button></td>
+                    <td>${escapeHtml(name)}</td>
+                    <td class="settings-tag-path" title="${escapeHtml(tag.path)}">${escapeHtml(dir)}</td>
+                    <td><button class="settings-tag-remove" data-path="${escapeHtml(tag.path)}">Entfernen</button></td>
                 </tr>`;
             }
             html += '</tbody></table>';
@@ -558,8 +558,4 @@ export class SettingsView {
         return `${size.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
     }
 
-    _esc(text) {
-        if (!text) return '';
-        return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-    }
 }

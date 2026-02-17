@@ -3,7 +3,7 @@
  * and scheduled tasks audit. Settings split into Standard + Erweitert tiers.
  */
 import { showToast } from './tree.js';
-import { isStub } from './utils.js';
+import { isStub, escapeHtml } from './utils.js';
 
 export class PrivacyView {
     constructor(container) {
@@ -57,7 +57,7 @@ export class PrivacyView {
             this.container.innerHTML = `
                 <div class="error-state" style="padding:24px">
                     <p><strong>Fehler beim Laden der Datenschutz-Daten:</strong></p>
-                    <p style="color:var(--text-secondary);margin:8px 0">${this._esc(err.message)}</p>
+                    <p style="color:var(--text-secondary);margin:8px 0">${escapeHtml(err.message)}</p>
                     <button class="network-btn" id="privacy-retry" style="margin-top:12px">Erneut versuchen</button>
                 </div>`;
             const retryBtn = this.container.querySelector('#privacy-retry');
@@ -97,11 +97,6 @@ export class PrivacyView {
         }
     }
 
-    _esc(text) {
-        if (!text) return '';
-        return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-    }
-
     _calcScore() {
         if (this.settings.length === 0) return 50;
         const priv = this.settings.filter(s => s.isPrivate).length;
@@ -129,8 +124,8 @@ export class PrivacyView {
         // Windows-Edition Info
         let editionHtml = '';
         if (this.edition) {
-            editionHtml = `<span class="privacy-edition-badge" title="${this._esc(this.edition.edition)}">
-                ${this._esc(this.edition.edition)}${!this.edition.isEnterprise ? ' — Erweiterte Einstellungen mit Vorsicht verwenden' : ''}
+            editionHtml = `<span class="privacy-edition-badge" title="${escapeHtml(this.edition.edition)}">
+                ${escapeHtml(this.edition.edition)}${!this.edition.isEnterprise ? ' — Erweiterte Einstellungen mit Vorsicht verwenden' : ''}
             </span>`;
         }
 
@@ -170,10 +165,10 @@ export class PrivacyView {
                     <thead><tr><th>Task</th><th>Pfad</th><th>Status</th><th></th></tr></thead>
                     <tbody>${this.tasks.map(t => `
                         <tr>
-                            <td title="${this._esc(t.description || '')}">${this._esc(t.name)}</td>
-                            <td class="privacy-task-path">${this._esc(t.path)}</td>
+                            <td title="${escapeHtml(t.description || '')}">${escapeHtml(t.name)}</td>
+                            <td class="privacy-task-path">${escapeHtml(t.path)}</td>
                             <td><span class="risk-badge risk-${t.state === 'Deaktiviert' ? 'safe' : 'high'}">${t.state === 'Deaktiviert' ? 'Deaktiviert' : 'Aktiv'}</span></td>
-                            <td>${t.state !== 'Deaktiviert' ? `<button class="privacy-btn-small" data-task-path="${this._esc(t.path)}" data-task-name="${this._esc(t.name)}">Deaktivieren</button>` : ''}</td>
+                            <td>${t.state !== 'Deaktiviert' ? `<button class="privacy-btn-small" data-task-path="${escapeHtml(t.path)}" data-task-name="${escapeHtml(t.name)}">Deaktivieren</button>` : ''}</td>
                         </tr>`).join('')}
                     </tbody>
                 </table>
@@ -257,7 +252,7 @@ export class PrivacyView {
     _renderSetting(s, isAdvanced = false) {
         const statusClass = s.isPrivate ? 'safe' : 'high';
         const statusText = s.isPrivate ? 'Geschützt' : 'Offen';
-        const warningHtml = s.warning ? `<div class="privacy-setting-warning">${this._esc(s.warning)}</div>` : '';
+        const warningHtml = s.warning ? `<div class="privacy-setting-warning">${escapeHtml(s.warning)}</div>` : '';
 
         // Smarte Empfehlung (kompakt)
         const rec = this.recommendations.get(s.id);
@@ -273,7 +268,7 @@ export class PrivacyView {
             recHtml = `<div class="privacy-recommendation privacy-rec-${rec.recommendation}">
                 <span class="risk-badge ${badgeClass}">${badgeIcon} ${badgeLabel}</span>
                 ${rec.affectedApps.length > 0 ? `<span class="privacy-rec-apps-inline">${rec.affectedApps.slice(0, 3).map(a =>
-                    this._esc(a.name)).join(', ')}${rec.affectedApps.length > 3 ? ` +${rec.affectedApps.length - 3}` : ''}</span>` : ''}
+                    escapeHtml(a.name)).join(', ')}${rec.affectedApps.length > 3 ? ` +${rec.affectedApps.length - 3}` : ''}</span>` : ''}
             </div>`;
         }
 
@@ -281,9 +276,9 @@ export class PrivacyView {
         const hasDetails = s.explanation || s.riskExplanation || (s.impacts?.length > 0) || s.warning;
         let detailsHtml = '';
         if (hasDetails) {
-            const riskPart = s.riskExplanation ? `<div class="privacy-detail-risk"><strong>Warum ist das ein Risiko?</strong><p>${this._esc(s.riskExplanation)}</p></div>` : '';
-            const explanationPart = s.explanation ? `<p class="privacy-detail-text">${this._esc(s.explanation)}</p>` : '';
-            const impactsPart = s.impacts?.length > 0 ? `<div class="privacy-detail-impacts"><strong>Beim Deaktivieren:</strong><ul>${s.impacts.map(i => `<li>${this._esc(i)}</li>`).join('')}</ul></div>` : '';
+            const riskPart = s.riskExplanation ? `<div class="privacy-detail-risk"><strong>Warum ist das ein Risiko?</strong><p>${escapeHtml(s.riskExplanation)}</p></div>` : '';
+            const explanationPart = s.explanation ? `<p class="privacy-detail-text">${escapeHtml(s.explanation)}</p>` : '';
+            const impactsPart = s.impacts?.length > 0 ? `<div class="privacy-detail-impacts"><strong>Beim Deaktivieren:</strong><ul>${s.impacts.map(i => `<li>${escapeHtml(i)}</li>`).join('')}</ul></div>` : '';
             detailsHtml = `<details class="privacy-details">
                 <summary>Details</summary>
                 <div class="privacy-details-content">
@@ -298,14 +293,14 @@ export class PrivacyView {
         return `<div class="privacy-setting ${isAdvanced ? 'privacy-setting-advanced' : ''}" data-id="${s.id}">
             <div class="privacy-setting-info">
                 <div class="privacy-setting-header">
-                    <strong>${this._esc(s.name)}</strong>
+                    <strong>${escapeHtml(s.name)}</strong>
                     <span class="risk-badge risk-${statusClass}">${statusText}</span>
                     ${!s.isPrivate
                         ? `<button class="privacy-btn-small ${isAdvanced ? 'privacy-btn-advanced' : ''}" data-setting="${s.id}" ${isAdvanced ? 'data-advanced="true"' : ''}>${isAdvanced ? 'Ändern...' : 'Schützen'}</button>`
                         : `<button class="privacy-btn-small privacy-btn-reset" data-reset="${s.id}" ${isAdvanced ? 'data-advanced="true"' : ''}>Zurücksetzen</button>`
                     }
                 </div>
-                <span class="privacy-setting-desc">${this._esc(s.description)}</span>
+                <span class="privacy-setting-desc">${escapeHtml(s.description)}</span>
                 ${recHtml}
                 ${detailsHtml}
             </div>

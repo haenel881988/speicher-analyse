@@ -1,3 +1,5 @@
+import { escapeHtml } from './utils.js';
+
 /**
  * BatchRenameModal - Pattern-based batch renaming for multiple files.
  *
@@ -171,9 +173,9 @@ export class BatchRenameModal {
             const changed = newName !== file.name;
             tr.innerHTML = `
                 <td>${i + 1}</td>
-                <td class="batch-rename-old">${this._esc(file.name)}</td>
+                <td class="batch-rename-old">${escapeHtml(file.name)}</td>
                 <td>\u2192</td>
-                <td class="batch-rename-new${changed ? ' changed' : ''}">${this._esc(newName)}</td>
+                <td class="batch-rename-new${changed ? ' changed' : ''}">${escapeHtml(newName)}</td>
             `;
             this.previewBody.appendChild(tr);
         }
@@ -259,8 +261,4 @@ export class BatchRenameModal {
 
     // ===== Helpers =====
 
-    _esc(text) {
-        if (!text) return '';
-        return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    }
 }

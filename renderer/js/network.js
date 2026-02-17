@@ -2,6 +2,7 @@
  * Network Monitor View - Grouped connections by process, IP resolution,
  * snapshot mode with optional real-time polling, ghost process detection.
  */
+import { escapeHtml } from './utils.js';
 import { showToast } from './tree.js';
 
 export class NetworkView {
@@ -158,7 +159,7 @@ export class NetworkView {
                     <div class="network-header"><h2>Netzwerk-Monitor</h2></div>
                     <div class="error-state" style="padding:24px">
                         <p><strong>Fehler beim Laden der Netzwerkdaten:</strong></p>
-                        <p style="color:var(--text-secondary);margin:8px 0">${this._esc(err.message)}</p>
+                        <p style="color:var(--text-secondary);margin:8px 0">${escapeHtml(err.message)}</p>
                         <p style="color:var(--text-muted);font-size:12px;margin:8px 0">
                             Mögliche Ursachen: PowerShell-Berechtigungen, Netzwerk-Cmdlets nicht verfügbar, oder Timeout.
                             Versuche es erneut oder starte die App als Administrator.
@@ -247,7 +248,7 @@ export class NetworkView {
                     <button class="network-tab ${this.activeSubTab === 'devices' ? 'active' : ''}" data-subtab="devices">Lokale Geräte${devCount > 0 ? ` <span class="network-tab-count">${devCount}</span>` : ''}</button>
                 </div>
                 ${showToolbar ? `<div class="network-toolbar">
-                    <input type="text" class="network-search" placeholder="Filtern nach Prozess oder IP..." value="${this._esc(this.filter)}">
+                    <input type="text" class="network-search" placeholder="Filtern nach Prozess oder IP..." value="${escapeHtml(this.filter)}">
                 </div>` : ''}
                 <div class="network-content">
                     ${this._renderSubTab()}
@@ -389,13 +390,13 @@ export class NetworkView {
                     : '';
                 const companyTooltip = allCompanies.length > 3 ? allCompanies.join(', ') : '';
 
-                return `<div class="network-group ${ghostWarning ? 'network-group-ghost' : ''}" data-process="${this._esc(g.processName)}">
-                    <div class="network-group-header" data-toggle="${this._esc(g.processName)}">
+                return `<div class="network-group ${ghostWarning ? 'network-group-ghost' : ''}" data-process="${escapeHtml(g.processName)}">
+                    <div class="network-group-header" data-toggle="${escapeHtml(g.processName)}">
                         <span class="network-group-arrow">${expanded ? '&#9660;' : '&#9654;'}</span>
                         <span class="network-status-dot network-status-${statusColor}"></span>
-                        <strong class="network-group-name">${this._esc(g.processName)}</strong>
+                        <strong class="network-group-name">${escapeHtml(g.processName)}</strong>
                         <span class="network-group-badge">${g.connectionCount}</span>
-                        <span class="network-group-ips"${companyTooltip ? ` title="${this._esc(companyTooltip)}"` : ''}>${g.uniqueIPCount} IP${g.uniqueIPCount !== 1 ? 's' : ''}${companySummary ? ' (' + this._esc(companySummary) + ')' : ''}</span>
+                        <span class="network-group-ips"${companyTooltip ? ` title="${escapeHtml(companyTooltip)}"` : ''}>${g.uniqueIPCount} IP${g.uniqueIPCount !== 1 ? 's' : ''}${companySummary ? ' (' + escapeHtml(companySummary) + ')' : ''}</span>
                         ${g.hasTrackers ? '<span class="network-tracker-badge">Tracker</span>' : ''}
                         ${g.hasHighRisk ? '<span class="network-highrisk-badge">&#9888; Hochrisiko</span>' : ''}
                         <span class="network-group-states">
@@ -405,7 +406,7 @@ export class NetworkView {
                             }).join('')}
                         </span>
                         ${ghostWarning ? '<span class="network-ghost-warning">Hintergrund-Aktivität!</span>' : ''}
-                        ${g.processPath ? `<button class="network-btn-small" data-block="${this._esc(g.processName)}" data-path="${this._esc(g.processPath)}" data-tier="experte">Blockieren</button>` : ''}
+                        ${g.processPath ? `<button class="network-btn-small" data-block="${escapeHtml(g.processName)}" data-path="${escapeHtml(g.processPath)}" data-tier="experte">Blockieren</button>` : ''}
                     </div>
                     ${expanded ? this._renderGroupDetail(g) : ''}
                 </div>`;
@@ -446,9 +447,9 @@ export class NetworkView {
             const rowClass = isHighRisk ? 'network-row-highrisk' : isTracker ? 'network-row-tracker' : '';
 
             rows += `<tr class="${rowClass}">
-                <td class="network-ip">${this._esc(ip)}</td>
-                <td class="network-company ${isHighRisk ? 'network-highrisk' : isTracker ? 'network-tracker' : ''}">${flag ? flag + ' ' : ''}${this._esc(info.org || 'Unbekannt')}${isHighRisk ? ' &#9888;' : isTracker ? ' &#128065;' : ''}${isHighRisk ? ` <span class="network-highrisk-label">${this._esc(info.country)}</span>` : ''}</td>
-                <td class="network-isp" title="${this._esc(info.isp || '')}">${this._esc(info.isp && info.isp !== info.org ? info.isp : '')}</td>
+                <td class="network-ip">${escapeHtml(ip)}</td>
+                <td class="network-company ${isHighRisk ? 'network-highrisk' : isTracker ? 'network-tracker' : ''}">${flag ? flag + ' ' : ''}${escapeHtml(info.org || 'Unbekannt')}${isHighRisk ? ' &#9888;' : isTracker ? ' &#128065;' : ''}${isHighRisk ? ` <span class="network-highrisk-label">${escapeHtml(info.country)}</span>` : ''}</td>
+                <td class="network-isp" title="${escapeHtml(info.isp || '')}">${escapeHtml(info.isp && info.isp !== info.org ? info.isp : '')}</td>
                 <td>${ports.map(p => { const label = this._portLabel(p); return label ? `<span title="${label}">${p}</span>` : p; }).join(', ') || '-'}</td>
                 <td>${connections.length}</td>
                 <td>${protoBadges} <span class="network-state-pills">${stateStr}</span></td>
@@ -498,11 +499,11 @@ export class NetworkView {
             const pct = Math.round((p.current / p.total) * 100);
             return `${spinner}<span>${label} (${p.current}/${p.total})</span>
                 <div class="network-progress-bar"><div class="network-progress-fill" style="width:${pct}%"></div></div>
-                <span class="network-progress-msg">${this._esc(p.message || '')}</span>`;
+                <span class="network-progress-msg">${escapeHtml(p.message || '')}</span>`;
         }
         return `${spinner}<span>${label}</span>
             <div class="network-progress-bar network-progress-indeterminate"><div class="network-progress-fill"></div></div>
-            <span class="network-progress-msg">${this._esc(p.message || '')}</span>`;
+            <span class="network-progress-msg">${escapeHtml(p.message || '')}</span>`;
     }
 
     _renderLocalDevices() {
@@ -513,8 +514,8 @@ export class NetworkView {
         const toolbar = `<div class="network-devices-toolbar">
             <button class="network-btn" id="network-scan-active" ${this._activeScanRunning ? 'disabled' : ''}>${this._activeScanRunning ? 'Scan läuft...' : 'Netzwerk scannen'}</button>
             <button class="network-btn network-btn-secondary" id="network-scan-passive" ${this._activeScanRunning ? 'disabled' : ''} title="Schneller passiver Scan (nur ARP-Tabelle)">Schnellscan</button>
-            ${devices.length > 0 ? `<input type="text" class="network-device-search" id="network-device-filter" placeholder="Filtern..." value="${this._esc(this._deviceFilter || '')}" style="max-width:180px">` : ''}
-            ${hasActiveScan ? `<span class="network-timestamp">Subnetz: ${this._esc(this._activeScanResult.subnet)} | Eigene IP: ${this._esc(this._activeScanResult.localIP)}</span>` : ''}
+            ${devices.length > 0 ? `<input type="text" class="network-device-search" id="network-device-filter" placeholder="Filtern..." value="${escapeHtml(this._deviceFilter || '')}" style="max-width:180px">` : ''}
+            ${hasActiveScan ? `<span class="network-timestamp">Subnetz: ${escapeHtml(this._activeScanResult.subnet)} | Eigene IP: ${escapeHtml(this._activeScanResult.localIP)}</span>` : ''}
             ${hasActiveScan ? `<button class="network-btn network-btn-secondary" id="network-export-devices">Export CSV</button>` : ''}
         </div>`;
 
@@ -557,7 +558,7 @@ export class NetworkView {
             }
             const sortedTypes = Object.entries(typeCounts).sort((a, b) => b[1] - a[1]);
             const summaryBadges = sortedTypes
-                .map(([label, count]) => `<span class="netinv-type-badge netinv-type-badge-clickable" data-scroll-group="${this._esc(label)}">${count}x ${this._esc(label)}</span>`)
+                .map(([label, count]) => `<span class="netinv-type-badge netinv-type-badge-clickable" data-scroll-group="${escapeHtml(label)}">${count}x ${escapeHtml(label)}</span>`)
                 .join('');
 
             const toggleLabel = this._groupByType ? 'Liste' : 'Gruppiert';
@@ -596,11 +597,11 @@ export class NetworkView {
                     const typeClass = firstDev?.deviceType || 'unknown';
                     const isExpanded = !this._collapsedGroups.has(label);
                     const arrow = isExpanded ? '\u25BC' : '\u25B6';
-                    tableContent += `<tr class="netinv-group-header" data-group-toggle="${this._esc(label)}">
+                    tableContent += `<tr class="netinv-group-header" data-group-toggle="${escapeHtml(label)}">
                         <td colspan="8"><div class="netinv-group-header-inner">
                             <span class="netinv-group-arrow">${arrow}</span>
-                            <span class="netinv-type-dot netinv-type-${this._esc(typeClass)}">${typeIcon}</span>
-                            <strong class="netinv-group-label">${this._esc(label)}</strong>
+                            <span class="netinv-type-dot netinv-type-${escapeHtml(typeClass)}">${typeIcon}</span>
+                            <strong class="netinv-group-label">${escapeHtml(label)}</strong>
                             <span class="netinv-group-count">${devs.length}</span>
                         </div></td>
                     </tr>`;
@@ -640,11 +641,11 @@ export class NetworkView {
             const stateClass = d.state === 'Erreichbar' ? 'network-device-reachable' :
                 d.state === 'Veraltet' ? 'network-device-stale' : '';
             return `<tr class="${stateClass}">
-                <td>${this._esc(d.hostname) || '<span style="color:var(--text-muted)">—</span>'}</td>
-                <td class="network-ip">${this._esc(d.ip)}</td>
-                <td style="font-family:monospace;font-size:11px">${this._esc(d.mac) || '\u2014'}</td>
-                <td>${this._esc(d.vendor) || '<span style="color:var(--text-muted)">Unbekannt</span>'}</td>
-                <td><span class="network-device-state ${stateClass}">${this._esc(d.state)}</span></td>
+                <td>${escapeHtml(d.hostname) || '<span style="color:var(--text-muted)">—</span>'}</td>
+                <td class="network-ip">${escapeHtml(d.ip)}</td>
+                <td style="font-family:monospace;font-size:11px">${escapeHtml(d.mac) || '\u2014'}</td>
+                <td>${escapeHtml(d.vendor) || '<span style="color:var(--text-muted)">Unbekannt</span>'}</td>
+                <td><span class="network-device-state ${stateClass}">${escapeHtml(d.state)}</span></td>
             </tr>`;
         }).join('');
 
@@ -666,7 +667,7 @@ export class NetworkView {
 
     _renderDeviceRow(d) {
         const portBadges = (d.openPorts || []).slice(0, 4).map(p =>
-            `<span class="network-port-badge">${p.port} <small>${this._esc(p.label)}</small></span>`
+            `<span class="network-port-badge">${p.port} <small>${escapeHtml(p.label)}</small></span>`
         ).join(' ');
         const morePortsHint = (d.openPorts || []).length > 4 ? `<span class="network-port-badge">+${d.openPorts.length - 4}</span>` : '';
         const localBadge = d.isLocal ? ' <span class="network-local-badge">Du</span>' : '';
@@ -678,43 +679,43 @@ export class NetworkView {
 
         const modelParts = [];
         if (d.modelName) {
-            modelParts.push(`<span class="netinv-model-name">${this._esc(d.modelName)}</span>`);
+            modelParts.push(`<span class="netinv-model-name">${escapeHtml(d.modelName)}</span>`);
         }
         if (d.firmwareVersion) {
-            modelParts.push(`<span class="netinv-fw-badge" title="Firmware: ${this._esc(d.firmwareVersion)}">FW ${this._esc(d.firmwareVersion)}</span>`);
+            modelParts.push(`<span class="netinv-fw-badge" title="Firmware: ${escapeHtml(d.firmwareVersion)}">FW ${escapeHtml(d.firmwareVersion)}</span>`);
         }
         if (d.serialNumber) {
-            modelParts.push(`<span class="netinv-serial" title="Seriennummer: ${this._esc(d.serialNumber)}">S/N ${this._esc(d.serialNumber.length > 12 ? d.serialNumber.substring(0, 12) + '...' : d.serialNumber)}</span>`);
+            modelParts.push(`<span class="netinv-serial" title="Seriennummer: ${escapeHtml(d.serialNumber)}">S/N ${escapeHtml(d.serialNumber.length > 12 ? d.serialNumber.substring(0, 12) + '...' : d.serialNumber)}</span>`);
         }
         if (d.os) {
-            modelParts.push(`<span class="netinv-os-badge" title="Betriebssystem: ${this._esc(d.os)}">${this._esc(d.os)}</span>`);
+            modelParts.push(`<span class="netinv-os-badge" title="Betriebssystem: ${escapeHtml(d.os)}">${escapeHtml(d.os)}</span>`);
         }
         if (d.sshBanner) {
-            modelParts.push(`<span class="netinv-ssh-badge" title="${this._esc(d.sshBanner)}">SSH</span>`);
+            modelParts.push(`<span class="netinv-ssh-badge" title="${escapeHtml(d.sshBanner)}">SSH</span>`);
         }
         if (d.httpServer) {
-            modelParts.push(`<span class="netinv-http-badge" title="HTTP-Server: ${this._esc(d.httpServer)}">HTTP</span>`);
+            modelParts.push(`<span class="netinv-http-badge" title="HTTP-Server: ${escapeHtml(d.httpServer)}">HTTP</span>`);
         }
         if (d.snmpSysName) {
-            modelParts.push(`<span class="netinv-snmp-name" title="SNMP-Gerätename: ${this._esc(d.snmpSysName)}${d.snmpLocation ? ' | Standort: ' + this._esc(d.snmpLocation) : ''}">${this._esc(d.snmpSysName)}</span>`);
+            modelParts.push(`<span class="netinv-snmp-name" title="SNMP-Gerätename: ${escapeHtml(d.snmpSysName)}${d.snmpLocation ? ' | Standort: ' + escapeHtml(d.snmpLocation) : ''}">${escapeHtml(d.snmpSysName)}</span>`);
         }
         if (d.mdnsServices && d.mdnsServices.length > 0) {
-            modelParts.push(`<span class="netinv-mdns-badge" title="mDNS: ${this._esc(d.mdnsServices.join(', '))}">${d.mdnsServices.length} Service${d.mdnsServices.length > 1 ? 's' : ''}</span>`);
+            modelParts.push(`<span class="netinv-mdns-badge" title="mDNS: ${escapeHtml(d.mdnsServices.join(', '))}">${d.mdnsServices.length} Service${d.mdnsServices.length > 1 ? 's' : ''}</span>`);
         }
         if (d.identifiedBy) {
-            modelParts.push(`<span class="netinv-source-badge" title="Erkannt via: ${this._esc(d.identifiedBy)}">&#9432;</span>`);
+            modelParts.push(`<span class="netinv-source-badge" title="Erkannt via: ${escapeHtml(d.identifiedBy)}">&#9432;</span>`);
         }
         const modelHtml = modelParts.length > 0
             ? modelParts.join('')
             : '<span style="color:var(--text-muted)">\u2014</span>';
 
         return `<tr class="network-device-row">
-            <td class="netinv-col-icon"><span class="netinv-type-dot netinv-type-${this._esc(d.deviceType || 'unknown')}">${typeIcon}</span></td>
-            <td class="netinv-col-name"><span class="netinv-device-name">${this._esc(name)}${localBadge}</span>${d.hostname ? `<span class="netinv-device-ip">${this._esc(d.ip)}</span>` : ''}</td>
-            <td class="netinv-col-type">${this._esc(typeLabel)}</td>
-            <td class="netinv-col-vendor">${this._esc(d.vendor) || '<span style="color:var(--text-muted)">\u2014</span>'}</td>
+            <td class="netinv-col-icon"><span class="netinv-type-dot netinv-type-${escapeHtml(d.deviceType || 'unknown')}">${typeIcon}</span></td>
+            <td class="netinv-col-name"><span class="netinv-device-name">${escapeHtml(name)}${localBadge}</span>${d.hostname ? `<span class="netinv-device-ip">${escapeHtml(d.ip)}</span>` : ''}</td>
+            <td class="netinv-col-type">${escapeHtml(typeLabel)}</td>
+            <td class="netinv-col-vendor">${escapeHtml(d.vendor) || '<span style="color:var(--text-muted)">\u2014</span>'}</td>
             <td class="netinv-col-model">${modelHtml}</td>
-            <td class="netinv-col-mac" style="font-family:monospace;font-size:11px">${this._esc(d.mac) || '\u2014'}</td>
+            <td class="netinv-col-mac" style="font-family:monospace;font-size:11px">${escapeHtml(d.mac) || '\u2014'}</td>
             <td class="netinv-col-ports">${portBadges || morePortsHint || '\u2014'}</td>
             <td class="netinv-col-rtt"><span class="${rttClass}">${d.rtt > 0 ? d.rtt + ' ms' : '\u2014'}</span></td>
         </tr>`;
@@ -733,7 +734,7 @@ export class NetworkView {
 
                 if (isInactive && isDown) {
                     return `<div class="network-adapter-card network-adapter-down" style="padding:10px 14px">
-                        <div class="network-adapter-name" style="margin:0">${this._esc(b.name)} <span style="font-weight:400;font-size:11px;color:var(--text-muted)">\u2014 Offline</span></div>
+                        <div class="network-adapter-name" style="margin:0">${escapeHtml(b.name)} <span style="font-weight:400;font-size:11px;color:var(--text-muted)">\u2014 Offline</span></div>
                     </div>`;
                 }
 
@@ -754,9 +755,9 @@ export class NetworkView {
                 const hasHistory = this._bandwidthHistory[b.name] && this._bandwidthHistory[b.name].length > 1;
 
                 return `<div class="network-adapter-card ${isDown ? 'network-adapter-down' : ''}">
-                    <div class="network-adapter-name">${this._esc(b.name)}</div>
-                    <div class="network-adapter-desc">${this._esc(b.description || '')}${linkLabel !== '\u2014' ? ` \u2014 ${linkLabel}` : ''}</div>
-                    ${hasHistory ? `<div class="network-sparkline-container"><canvas class="network-sparkline" data-adapter="${this._esc(b.name)}"></canvas></div>` : ''}
+                    <div class="network-adapter-name">${escapeHtml(b.name)}</div>
+                    <div class="network-adapter-desc">${escapeHtml(b.description || '')}${linkLabel !== '\u2014' ? ` \u2014 ${linkLabel}` : ''}</div>
+                    ${hasHistory ? `<div class="network-sparkline-container"><canvas class="network-sparkline" data-adapter="${escapeHtml(b.name)}"></canvas></div>` : ''}
                     <div class="network-adapter-stats">
                         <div class="network-adapter-stat">
                             <span class="network-stat-label">\u2193 Empfangen</span>
@@ -790,21 +791,21 @@ export class NetworkView {
             <h4 class="network-section-title">WLAN-Details</h4>
             <div class="network-wifi-grid">
                 <div class="network-wifi-signal">
-                    <span class="network-wifi-ssid">${this._esc(w.ssid || '—')}</span>
+                    <span class="network-wifi-ssid">${escapeHtml(w.ssid || '—')}</span>
                     <div class="network-wifi-signal-bar-bg">
                         <div class="network-wifi-signal-bar" style="width:${sigWidth}%;background:${sigColor}"></div>
                     </div>
                     <span class="network-wifi-signal-pct" style="color:${sigColor}">${pct}%</span>
                 </div>
                 <div class="network-wifi-info-grid">
-                    ${w.channel ? `<div class="network-wifi-item"><span class="network-wifi-label">Kanal</span><span class="network-wifi-value">${this._esc(w.channel)}</span></div>` : ''}
-                    ${w.radioType ? `<div class="network-wifi-item"><span class="network-wifi-label">Funk</span><span class="network-wifi-value">${this._esc(w.radioType)}</span></div>` : ''}
-                    ${w.band ? `<div class="network-wifi-item"><span class="network-wifi-label">Band</span><span class="network-wifi-value">${this._esc(w.band)}</span></div>` : ''}
-                    ${w.auth ? `<div class="network-wifi-item"><span class="network-wifi-label">Auth</span><span class="network-wifi-value">${this._esc(w.auth)}</span></div>` : ''}
-                    ${w.cipher ? `<div class="network-wifi-item"><span class="network-wifi-label">Verschl.</span><span class="network-wifi-value">${this._esc(w.cipher)}</span></div>` : ''}
-                    ${w.rxRate ? `<div class="network-wifi-item"><span class="network-wifi-label">Empfang</span><span class="network-wifi-value">${this._esc(w.rxRate)}</span></div>` : ''}
-                    ${w.txRate ? `<div class="network-wifi-item"><span class="network-wifi-label">Senden</span><span class="network-wifi-value">${this._esc(w.txRate)}</span></div>` : ''}
-                    ${w.bssid ? `<div class="network-wifi-item"><span class="network-wifi-label">BSSID</span><span class="network-wifi-value">${this._esc(w.bssid)}</span></div>` : ''}
+                    ${w.channel ? `<div class="network-wifi-item"><span class="network-wifi-label">Kanal</span><span class="network-wifi-value">${escapeHtml(w.channel)}</span></div>` : ''}
+                    ${w.radioType ? `<div class="network-wifi-item"><span class="network-wifi-label">Funk</span><span class="network-wifi-value">${escapeHtml(w.radioType)}</span></div>` : ''}
+                    ${w.band ? `<div class="network-wifi-item"><span class="network-wifi-label">Band</span><span class="network-wifi-value">${escapeHtml(w.band)}</span></div>` : ''}
+                    ${w.auth ? `<div class="network-wifi-item"><span class="network-wifi-label">Auth</span><span class="network-wifi-value">${escapeHtml(w.auth)}</span></div>` : ''}
+                    ${w.cipher ? `<div class="network-wifi-item"><span class="network-wifi-label">Verschl.</span><span class="network-wifi-value">${escapeHtml(w.cipher)}</span></div>` : ''}
+                    ${w.rxRate ? `<div class="network-wifi-item"><span class="network-wifi-label">Empfang</span><span class="network-wifi-value">${escapeHtml(w.rxRate)}</span></div>` : ''}
+                    ${w.txRate ? `<div class="network-wifi-item"><span class="network-wifi-label">Senden</span><span class="network-wifi-value">${escapeHtml(w.txRate)}</span></div>` : ''}
+                    ${w.bssid ? `<div class="network-wifi-item"><span class="network-wifi-label">BSSID</span><span class="network-wifi-value">${escapeHtml(w.bssid)}</span></div>` : ''}
                 </div>
             </div>
         </div>`;
@@ -829,7 +830,7 @@ export class NetworkView {
                 <thead><tr><th>Domain</th><th>IP-Adresse</th><th>TTL</th><th>Typ</th></tr></thead>
                 <tbody>
                     ${sorted.map(([domain, entries]) => entries.map(e =>
-                        `<tr><td>${this._esc(domain)}</td><td>${this._esc(e.ip)}</td><td>${e.ttl}s</td><td>${this._esc(e.type)}</td></tr>`
+                        `<tr><td>${escapeHtml(domain)}</td><td>${escapeHtml(e.ip)}</td><td>${e.ttl}s</td><td>${escapeHtml(e.type)}</td></tr>`
                     ).join('')).join('')}
                 </tbody>
             </table>
@@ -985,7 +986,7 @@ export class NetworkView {
             html += `<div class="network-security-group network-security-danger">
                 <div class="network-security-group-title">\u26a0 Hochrisiko-Verbindungen (${highRiskProcs.length})</div>
                 ${highRiskProcs.map(g => `<div class="network-security-item">
-                    <span class="network-security-proc">${this._esc(g.processName)}</span>
+                    <span class="network-security-proc">${escapeHtml(g.processName)}</span>
                     <span class="network-security-detail">${g.uniqueIPCount} IP${g.uniqueIPCount !== 1 ? 's' : ''}</span>
                 </div>`).join('')}
             </div>`;
@@ -995,7 +996,7 @@ export class NetworkView {
             html += `<div class="network-security-group network-security-warn">
                 <div class="network-security-group-title">\u{1f50d} Tracker-Verbindungen (${trackerProcs.length})</div>
                 ${trackerProcs.map(g => `<div class="network-security-item">
-                    <span class="network-security-proc">${this._esc(g.processName)}</span>
+                    <span class="network-security-proc">${escapeHtml(g.processName)}</span>
                     <span class="network-security-detail">${(g.resolvedCompanies || []).join(', ') || g.uniqueIPCount + ' IPs'}</span>
                 </div>`).join('')}
             </div>`;
@@ -1005,7 +1006,7 @@ export class NetworkView {
             html += `<div class="network-security-group network-security-unknown">
                 <div class="network-security-group-title">\u2753 Nicht zugeordnete Verbindungen (${unknownProcs.length})</div>
                 ${unknownProcs.slice(0, 5).map(g => `<div class="network-security-item">
-                    <span class="network-security-proc">${this._esc(g.processName)}</span>
+                    <span class="network-security-proc">${escapeHtml(g.processName)}</span>
                     <span class="network-security-detail">${g.uniqueIPCount} IP${g.uniqueIPCount !== 1 ? 's' : ''}</span>
                 </div>`).join('')}
                 ${unknownProcs.length > 5 ? `<div class="network-security-more">+ ${unknownProcs.length - 5} weitere</div>` : ''}
@@ -1036,16 +1037,16 @@ export class NetworkView {
             const riskClass = e.isHighRisk ? 'network-feed-risk' : e.isTracker ? 'network-feed-tracker' : '';
             const isLocal = this._isLocalIP(e.remoteAddress);
             const orgLabel = isLocal ? '<span style="color:var(--text-muted)">Lokal</span>' :
-                (flag ? flag + ' ' : '') + this._esc(e.org || 'Unbekannt') + (e.isTracker ? ' \u{1f441}' : '') + (e.isHighRisk ? ' \u26a0' : '');
+                (flag ? flag + ' ' : '') + escapeHtml(e.org || 'Unbekannt') + (e.isTracker ? ' \u{1f441}' : '') + (e.isHighRisk ? ' \u26a0' : '');
 
             return `<tr class="${typeClass} ${riskClass}">
                 <td class="network-feed-time">${time}</td>
                 <td class="network-feed-type"><span class="network-feed-badge ${typeClass}-badge">${typeLabel}</span></td>
-                <td class="network-feed-proc">${this._esc(e.processName)}</td>
-                <td class="network-feed-ip" title="${this._esc(e.remoteAddress)}">${this._esc(e.remoteAddress)}</td>
+                <td class="network-feed-proc">${escapeHtml(e.processName)}</td>
+                <td class="network-feed-ip" title="${escapeHtml(e.remoteAddress)}">${escapeHtml(e.remoteAddress)}</td>
                 <td class="network-feed-port">${port}${protocol ? ` <span class="network-feed-proto">${protocol}</span>` : ''}</td>
                 <td class="network-feed-org">${orgLabel}</td>
-                <td class="network-feed-state">${this._esc(e.state)}${e.prevState ? ` \u2190 ${e.prevState}` : ''}</td>
+                <td class="network-feed-state">${escapeHtml(e.state)}${e.prevState ? ` \u2190 ${e.prevState}` : ''}</td>
             </tr>`;
         }).join('');
 
@@ -1084,7 +1085,7 @@ export class NetworkView {
                             <td>${dur}</td>
                             <td>${r.eventCount}</td>
                             <td>${size}</td>
-                            <td>${r.isActive ? '<span style="color:var(--danger)">Aktiv</span>' : `<button class="network-btn-small network-btn-danger" data-delete-recording="${this._esc(r.filename)}" title="Löschen">&#10005;</button>`}</td>
+                            <td>${r.isActive ? '<span style="color:var(--danger)">Aktiv</span>' : `<button class="network-btn-small network-btn-danger" data-delete-recording="${escapeHtml(r.filename)}" title="Löschen">&#10005;</button>`}</td>
                         </tr>`;
                     }).join('')}</tbody>
                 </table>
@@ -1452,7 +1453,8 @@ export class NetworkView {
         this.container.querySelectorAll('[data-delete-recording]').forEach(btn => {
             btn.onclick = async () => {
                 const filename = btn.dataset.deleteRecording;
-                if (!confirm(`Aufzeichnung "${filename}" löschen?`)) return;
+                const confirmDel = await window.api.showConfirmDialog({ title: 'Aufzeichnung löschen', message: `Aufzeichnung "${filename}" wirklich löschen?`, okLabel: 'Löschen', cancelLabel: 'Abbrechen' });
+                if (!confirmDel) return;
                 const result = await window.api.deleteNetworkRecording(filename);
                 if (result.success) {
                     showToast('Aufzeichnung gelöscht', 'success');
@@ -1760,7 +1762,8 @@ export class NetworkView {
         const clearHistoryBtn = this.container.querySelector('#network-clear-history');
         if (clearHistoryBtn) {
             clearHistoryBtn.onclick = async () => {
-                if (!confirm('Gesamten Netzwerk-Verlauf löschen?')) return;
+                const confirmClear = await window.api.showConfirmDialog({ title: 'Verlauf löschen', message: 'Gesamten Netzwerk-Verlauf wirklich löschen?', okLabel: 'Löschen', cancelLabel: 'Abbrechen' });
+                if (!confirmClear) return;
                 try {
                     await window.api.clearNetworkHistory();
                     this._historyData = [];
@@ -1794,11 +1797,6 @@ export class NetworkView {
             chart.destroy();
         }
         this._sparklineCharts.clear();
-    }
-
-    _esc(text) {
-        if (!text) return '';
-        return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
     _deviceIcon(name) {

@@ -163,7 +163,7 @@ export class EditorPanel {
 
         const result = await window.api.readFileContent(filePath);
         if (result.error) {
-            this.container.innerHTML = `<div class="preview-error">Fehler: ${this.escapeHtml(result.error)}</div>`;
+            this.container.innerHTML = `<div class="preview-error">Fehler: ${escapeHtml(result.error)}</div>`;
             return;
         }
 
@@ -277,7 +277,7 @@ if(!Uint8Array.fromHex){Uint8Array.fromHex=function(s){const b=new Uint8Array(s.
         try {
             const result = await window.api.readFileBinary(filePath);
             if (result.error) {
-                this.container.innerHTML = `<div class="preview-error">Fehler: ${this.escapeHtml(result.error)}</div>`;
+                this.container.innerHTML = `<div class="preview-error">Fehler: ${escapeHtml(result.error)}</div>`;
                 return;
             }
 
@@ -354,7 +354,7 @@ if(!Uint8Array.fromHex){Uint8Array.fromHex=function(s){const b=new Uint8Array(s.
                 window.api.openFile(filePath);
             };
         } catch (err) {
-            this.container.innerHTML = `<div class="preview-error">PDF-Fehler: ${this.escapeHtml(err.message)}</div>`;
+            this.container.innerHTML = `<div class="preview-error">PDF-Fehler: ${escapeHtml(err.message)}</div>`;
         }
     }
 
@@ -371,7 +371,7 @@ if(!Uint8Array.fromHex){Uint8Array.fromHex=function(s){const b=new Uint8Array(s.
         try {
             const result = await window.api.readFileBinary(filePath);
             if (result.error) {
-                this.container.innerHTML = `<div class="preview-error">Fehler: ${this.escapeHtml(result.error)}</div>`;
+                this.container.innerHTML = `<div class="preview-error">Fehler: ${escapeHtml(result.error)}</div>`;
                 return;
             }
 
@@ -408,7 +408,7 @@ if(!Uint8Array.fromHex){Uint8Array.fromHex=function(s){const b=new Uint8Array(s.
                 }
             }
         } catch (err) {
-            this.container.innerHTML = `<div class="preview-error">DOCX-Fehler: ${this.escapeHtml(err.message)}</div>`;
+            this.container.innerHTML = `<div class="preview-error">DOCX-Fehler: ${escapeHtml(err.message)}</div>`;
         }
     }
 
@@ -425,7 +425,7 @@ if(!Uint8Array.fromHex){Uint8Array.fromHex=function(s){const b=new Uint8Array(s.
         try {
             const result = await window.api.readFileBinary(filePath);
             if (result.error) {
-                this.container.innerHTML = `<div class="preview-error">Fehler: ${this.escapeHtml(result.error)}</div>`;
+                this.container.innerHTML = `<div class="preview-error">Fehler: ${escapeHtml(result.error)}</div>`;
                 return;
             }
 
@@ -484,7 +484,7 @@ if(!Uint8Array.fromHex){Uint8Array.fromHex=function(s){const b=new Uint8Array(s.
                     const tag = ri === 0 ? 'th' : 'td';
                     const maxCols = Math.min(row.length, 50);
                     for (let ci = 0; ci < maxCols; ci++) {
-                        const val = row[ci] != null ? this.escapeHtml(String(row[ci])) : '';
+                        const val = row[ci] != null ? escapeHtml(String(row[ci])) : '';
                         html += `<${tag}>${val}</${tag}>`;
                     }
                     html += '</tr>';
@@ -500,7 +500,7 @@ if(!Uint8Array.fromHex){Uint8Array.fromHex=function(s){const b=new Uint8Array(s.
 
             renderSheet(workbook.SheetNames[0]);
         } catch (err) {
-            this.container.innerHTML = `<div class="preview-error">Excel-Fehler: ${this.escapeHtml(err.message)}</div>`;
+            this.container.innerHTML = `<div class="preview-error">Excel-Fehler: ${escapeHtml(err.message)}</div>`;
         }
     }
 
@@ -527,14 +527,14 @@ if(!Uint8Array.fromHex){Uint8Array.fromHex=function(s){const b=new Uint8Array(s.
         try {
             const result = await window.api.readFilePreview(filePath, 500);
             if (result.error) {
-                this.container.innerHTML = `<div class="preview-error">${this.escapeHtml(result.error)}</div>`;
+                this.container.innerHTML = `<div class="preview-error">${escapeHtml(result.error)}</div>`;
                 return;
             }
 
             const lines = result.content.split('\n');
             const numbered = lines.map((line, i) => {
                 const num = String(i + 1).padStart(4, ' ');
-                return `<span class="line-num">${num}</span>${this.escapeHtml(line)}`;
+                return `<span class="line-num">${num}</span>${escapeHtml(line)}`;
             }).join('\n');
 
             this.container.innerHTML = `
@@ -542,7 +542,7 @@ if(!Uint8Array.fromHex){Uint8Array.fromHex=function(s){const b=new Uint8Array(s.
                 <pre class="preview-text">${numbered}</pre>
             `;
         } catch (e) {
-            this.container.innerHTML = `<div class="preview-error">Fehler: ${this.escapeHtml(e.message)}</div>`;
+            this.container.innerHTML = `<div class="preview-error">Fehler: ${escapeHtml(e.message)}</div>`;
         }
     }
 
@@ -550,7 +550,7 @@ if(!Uint8Array.fromHex){Uint8Array.fromHex=function(s){const b=new Uint8Array(s.
         try {
             const props = await window.api.getProperties(filePath);
             if (props.error) {
-                this.container.innerHTML = `<div class="preview-error">${this.escapeHtml(props.error)}</div>`;
+                this.container.innerHTML = `<div class="preview-error">${escapeHtml(props.error)}</div>`;
                 return;
             }
 
@@ -561,7 +561,7 @@ if(!Uint8Array.fromHex){Uint8Array.fromHex=function(s){const b=new Uint8Array(s.
             this.container.innerHTML = `
                 <div class="preview-props">
                     <div class="preview-props-icon">${props.isDirectory ? '\uD83D\uDCC1' : '\uD83D\uDCC4'}</div>
-                    <div class="preview-props-name">${this.escapeHtml(props.name)}</div>
+                    <div class="preview-props-name">${escapeHtml(props.name)}</div>
                     <div class="prop-row"><span class="prop-label">Typ</span><span class="prop-value">${ext || (props.isDirectory ? 'Ordner' : 'Datei')}</span></div>
                     <div class="prop-row"><span class="prop-label">Gr\u00F6\u00DFe</span><span class="prop-value">${size}</span></div>
                     <div class="prop-row"><span class="prop-label">Ge\u00E4ndert</span><span class="prop-value">${this.fmtDate(props.modified)}</span></div>
@@ -569,7 +569,7 @@ if(!Uint8Array.fromHex){Uint8Array.fromHex=function(s){const b=new Uint8Array(s.
                 </div>
             `;
         } catch (e) {
-            this.container.innerHTML = `<div class="preview-error">Fehler: ${this.escapeHtml(e.message)}</div>`;
+            this.container.innerHTML = `<div class="preview-error">Fehler: ${escapeHtml(e.message)}</div>`;
         }
     }
 
@@ -590,7 +590,7 @@ if(!Uint8Array.fromHex){Uint8Array.fromHex=function(s){const b=new Uint8Array(s.
         // Remove event handler attributes from all elements
         doc.querySelectorAll('*').forEach(el => {
             for (const attr of [...el.attributes]) {
-                if (attr.name.startsWith('on') || attr.name === 'href' && attr.value.startsWith('javascript:')) {
+                if (attr.name.startsWith('on')) {
                     el.removeAttribute(attr.name);
                 }
             }
@@ -605,9 +605,7 @@ if(!Uint8Array.fromHex){Uint8Array.fromHex=function(s){const b=new Uint8Array(s.
         return doc.body.innerHTML;
     }
 
-    escapeHtml(text) {
-        return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-    }
+    // escapeHtml: use the imported central function from utils.js
 
     _showToast(msg, type) {
         const event = new CustomEvent('show-toast', { detail: { message: msg, type } });

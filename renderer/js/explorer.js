@@ -296,7 +296,7 @@ export class ExplorerView {
                     if (data && data.folders) {
                         this._folderSizes = data.folders;
                         this._parentFolderSize = data.parent?.size || 0;
-                        // Prüfe ob tatsächlich Grössen vorhanden sind
+                        // Prüfe ob tatsächlich Größen vorhanden sind
                         const hasAnySize = Object.keys(data.folders).length > 0;
                         this._hasScanData = hasAnySize;
                         for (const entry of this.entries) {

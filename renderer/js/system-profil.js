@@ -1,3 +1,5 @@
+import { escapeHtml } from './utils.js';
+
 /**
  * System-Profil View — Alle Informationen über den PC an einem Ort.
  */
@@ -26,7 +28,7 @@ export class SystemProfilView {
             this.container.innerHTML = `
                 <div class="error-state" style="padding:24px">
                     <p><strong>Fehler beim Laden der System-Informationen:</strong></p>
-                    <p style="color:var(--text-secondary);margin:8px 0">${this._esc(err.message)}</p>
+                    <p style="color:var(--text-secondary);margin:8px 0">${escapeHtml(err.message)}</p>
                     <button class="network-btn" id="sysprofil-retry" style="margin-top:12px">Erneut versuchen</button>
                 </div>`;
             const retryBtn = this.container.querySelector('#sysprofil-retry');
@@ -41,14 +43,9 @@ export class SystemProfilView {
         }
     }
 
-    _esc(text) {
-        if (!text) return '';
-        return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-    }
-
     _val(val, fallback = '—') {
         if (val === null || val === undefined || val === '') return fallback;
-        return this._esc(String(val));
+        return escapeHtml(String(val));
     }
 
     render() {
@@ -233,7 +230,7 @@ export class SystemProfilView {
                 </div>
                 <div class="sysprofil-card-body">
                     <table class="sysprofil-table sysprofil-table-full">
-                        <thead><tr><th>Modell</th><th>Grösse</th><th>Schnittstelle</th><th>Partitionen</th></tr></thead>
+                        <thead><tr><th>Modell</th><th>Größe</th><th>Schnittstelle</th><th>Partitionen</th></tr></thead>
                         <tbody>${rows}</tbody>
                     </table>
                 </div>
@@ -269,9 +266,9 @@ export class SystemProfilView {
     _renderLinksCard(p) {
         if (!p.links || p.links.length === 0) return '';
         const linkItems = p.links.map(l => `
-            <a href="#" class="sysprofil-link" data-url="${this._esc(l.url)}">
+            <a href="#" class="sysprofil-link" data-url="${escapeHtml(l.url)}">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-                ${this._esc(l.label)}
+                ${escapeHtml(l.label)}
             </a>
         `).join('');
 

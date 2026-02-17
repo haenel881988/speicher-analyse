@@ -1,6 +1,7 @@
 /**
  * S.M.A.R.T. View - Disk health monitoring dashboard.
  */
+import { escapeHtml } from './utils.js';
 import { showToast } from './tree.js';
 
 export class SmartView {
@@ -26,7 +27,7 @@ export class SmartView {
             this.container.innerHTML = `
                 <div class="error-state" style="padding:24px">
                     <p><strong>Fehler beim Laden der Festplatten-Daten:</strong></p>
-                    <p style="color:var(--text-secondary);margin:8px 0">${this._esc(err.message)}</p>
+                    <p style="color:var(--text-secondary);margin:8px 0">${escapeHtml(err.message)}</p>
                     <button class="network-btn" id="smart-retry" style="margin-top:12px">Erneut versuchen</button>
                 </div>`;
             const retryBtn = this.container.querySelector('#smart-retry');
@@ -38,11 +39,6 @@ export class SmartView {
                 };
             }
         }
-    }
-
-    _esc(text) {
-        if (!text) return '';
-        return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
     render() {
@@ -67,7 +63,7 @@ export class SmartView {
         const attrs = [];
         if (d.temperature != null) attrs.push({ label: 'Temperatur', value: d.temperature + ' °C', warn: d.temperature > 50 });
         if (d.powerOnHours != null) attrs.push({ label: 'Betriebsstunden', value: this._formatHours(d.powerOnHours), warn: d.powerOnHours > 35000 });
-        if (d.wearLevel != null) attrs.push({ label: 'Verschleiss', value: d.wearLevel + '%', warn: d.wearLevel > 80 });
+        if (d.wearLevel != null) attrs.push({ label: 'Verschleiß', value: d.wearLevel + '%', warn: d.wearLevel > 80 });
         attrs.push({ label: 'Lese-Fehler', value: String(d.readErrors || 0), warn: d.readErrors > 0 });
         attrs.push({ label: 'Schreib-Fehler', value: String(d.writeErrors || 0), warn: d.writeErrors > 0 });
         attrs.push({ label: 'Status', value: d.healthStatus, warn: d.healthStatus !== 'Healthy' });
@@ -78,9 +74,9 @@ export class SmartView {
                     <span class="smart-score-num">${d.healthScore}</span>
                 </div>
                 <div class="smart-disk-info">
-                    <strong>${this._esc(d.name || d.model)}</strong>
+                    <strong>${escapeHtml(d.name || d.model)}</strong>
                     <span class="smart-disk-meta">${d.mediaType} | ${sizeGB} GB | ${d.busType}</span>
-                    <span class="smart-disk-meta">${this._esc(d.serial || '')}</span>
+                    <span class="smart-disk-meta">${escapeHtml(d.serial || '')}</span>
                 </div>
             </div>
             <div class="smart-disk-attrs">
@@ -114,8 +110,4 @@ export class SmartView {
         return this.disks;
     }
 
-    _esc(text) {
-        if (!text) return '';
-        return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-    }
 }

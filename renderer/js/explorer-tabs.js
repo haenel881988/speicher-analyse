@@ -1,3 +1,4 @@
+import { escapeHtml } from './utils.js';
 import { ExplorerView } from './explorer.js';
 
 /**
@@ -155,7 +156,7 @@ export class ExplorerTabBar {
             const tab = this.tabs[i];
             const active = tab.id === this.activeTabId ? ' active' : '';
             html += `<div class="explorer-tab${active}" data-tab-id="${tab.id}" data-tab-idx="${i}" draggable="true">
-                <span class="explorer-tab-label" title="${this._escAttr(tab.explorerView.currentPath || tab.label)}">${this._esc(tab.label)}</span>
+                <span class="explorer-tab-label" title="${this._escAttr(tab.explorerView.currentPath || tab.label)}">${escapeHtml(tab.label)}</span>
                 ${this.tabs.length > 1 ? '<button class="explorer-tab-close" title="Tab schliessen (Ctrl+W)">\u00D7</button>' : ''}
             </div>`;
         }
@@ -247,11 +248,6 @@ export class ExplorerTabBar {
                 else this.nextTab();
             }
         });
-    }
-
-    _esc(text) {
-        if (!text) return '';
-        return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
     _escAttr(text) {
