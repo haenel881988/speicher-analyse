@@ -196,7 +196,7 @@ cargo tauri build # Release-Build (MSI/NSIS)
 
 ### Tauri-Sicherheitskonfiguration
 - **CSP:** `tauri.conf.json` → `security.csp` MUSS konfiguriert sein (NICHT `null`)
-- **withGlobalTauri:** MUSS `false` sein (verhindert direkten Zugriff auf `window.__TAURI__` durch eingeschleusten Code)
+- **withGlobalTauri:** MUSS `true` sein — die IPC-Bridge (`tauri-bridge.js`) benötigt `window.__TAURI__` um `window.api` zu erstellen. Ohne `window.__TAURI__` wird die Bridge-IIFE sofort abgebrochen und das gesamte Frontend ist tot. Zugriffskontrolle erfolgt über Capabilities (`capabilities/default.json`), NICHT über das Verstecken von `__TAURI__`.
 - **Capabilities:** Minimal-Prinzip — nur die APIs freigeben die tatsächlich benötigt werden
 
 ## Memory-Leak-Prävention (PFLICHT)

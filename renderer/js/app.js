@@ -149,7 +149,7 @@ document.addEventListener('show-toast', (e) => {
 });
 
 // Wire embedded terminal events from main process (opens global terminal)
-window.api.onOpenEmbeddedTerminal(({ path }) => {
+window.api?.onOpenEmbeddedTerminal(({ path }) => {
     globalTerminal.show(path);
 });
 

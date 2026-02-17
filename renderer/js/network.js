@@ -51,7 +51,7 @@ export class NetworkView {
 
     async _loadDetailLevel() {
         try {
-            if (window.api.getPreferences) {
+            if (window.api?.getPreferences) {
                 const prefs = await window.api.getPreferences();
                 const level = prefs?.networkDetailLevel;
                 // Migration: alte Werte 'basis'/'erweitert' → 'normal'
@@ -65,7 +65,7 @@ export class NetworkView {
     }
 
     _setupScanProgressListener() {
-        if (window.api.onNetworkScanProgress) {
+        if (window.api?.onNetworkScanProgress) {
             window.api.onNetworkScanProgress((progress) => {
                 this._activeScanProgress = progress;
                 if (this.activeSubTab === 'devices' && this._activeScanRunning) {
@@ -1454,7 +1454,7 @@ export class NetworkView {
             btn.onclick = async () => {
                 const filename = btn.dataset.deleteRecording;
                 const confirmDel = await window.api.showConfirmDialog({ title: 'Aufzeichnung löschen', message: `Aufzeichnung "${filename}" wirklich löschen?`, okLabel: 'Löschen', cancelLabel: 'Abbrechen' });
-                if (!confirmDel) return;
+                if (!confirmDel?.response) return;
                 const result = await window.api.deleteNetworkRecording(filename);
                 if (result.success) {
                     showToast('Aufzeichnung gelöscht', 'success');
@@ -1763,7 +1763,7 @@ export class NetworkView {
         if (clearHistoryBtn) {
             clearHistoryBtn.onclick = async () => {
                 const confirmClear = await window.api.showConfirmDialog({ title: 'Verlauf löschen', message: 'Gesamten Netzwerk-Verlauf wirklich löschen?', okLabel: 'Löschen', cancelLabel: 'Abbrechen' });
-                if (!confirmClear) return;
+                if (!confirmClear?.response) return;
                 try {
                     await window.api.clearNetworkHistory();
                     this._historyData = [];
