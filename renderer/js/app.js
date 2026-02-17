@@ -160,17 +160,17 @@ document.addEventListener('toggle-global-terminal', (e) => {
 });
 
 // Wire menu bar "Terminal" actions from main process
-window.api.onToggleTerminal?.(() => {
+window.api?.onToggleTerminal?.(() => {
     const cwd = dualPanel.getActiveExplorer()?.currentPath || 'C:\\';
     globalTerminal.toggle(cwd);
 });
-window.api.onNewTerminal?.(() => {
+window.api?.onNewTerminal?.(() => {
     const cwd = dualPanel.getActiveExplorer()?.currentPath || 'C:\\';
     globalTerminal.destroy().then(() => globalTerminal.show(cwd));
 });
 
 // Wire menu bar "Über" action
-window.api.onMenuAction?.((data) => {
+window.api?.onMenuAction?.((data) => {
     if (data.action === 'about') {
         window.api.showConfirmDialog({
             title: 'Über Speicher Analyse',

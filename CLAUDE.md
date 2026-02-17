@@ -43,6 +43,16 @@ Daher gilt: Annahmen, Behauptungen und Halluzinationen sind STRENGSTENS VERBOTEN
 - Einmal melden reicht — Simon darf dasselbe Problem nie zweimal melden müssen
 - Issue-Tracking: `docs/issues/issue.md` — nur Simon darf Issues als erledigt markieren
 
+## Prinzip 3b: Manuelle Analyse (KEINE Delegation)
+
+**Bei Bug-Suche, Diagnose und Code-Analyse: IMMER manuell arbeiten. KEINE Agents, KEINE Analyse-Skripte.**
+
+- **Agents sind VERBOTEN für Analyse.** Sub-Agents liefern oft leere, unvollständige oder falsche Ergebnisse. Die KI delegiert Analyse-Arbeit an Agents um sich Arbeit zu sparen — das Ergebnis ist oberflächlich und unzuverlässig.
+- **Analyse-Skripte sind VERBOTEN.** Keine temporären Node/Python/PowerShell-Skripte zur Code-Analyse erstellen. Die KI muss den Code SELBST lesen und verstehen.
+- **Manuell = Datei für Datei lesen, Zeile für Zeile prüfen.** Read-Tool, Grep-Tool, Glob-Tool — das sind die Werkzeuge für Analyse. Kein Outsourcing.
+- **Warum:** Der kritische `withGlobalTauri`-Bug (Lesson #62) wurde erst gefunden, nachdem Simon die KI gezwungen hat, manuell zu arbeiten. Agents hatten das Problem in 3 Runden NICHT gefunden. Manuelle Analyse fand die Wurzelursache in einer Sitzung.
+- **Ausnahme:** Agents dürfen für AUSFÜHRUNG verwendet werden (z.B. Build starten, Tests laufen lassen), aber NICHT für Analyse und Diagnose.
+
 ## Prinzip 4: Skill-Pflicht (KEINE Ausnahme)
 
 **ALLE Arbeiten MÜSSEN über Skills abgewickelt werden.** Kein Code schreiben ohne passenden Skill.
