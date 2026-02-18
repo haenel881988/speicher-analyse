@@ -322,5 +322,5 @@
         logFrontend: (level, message, context) => invoke('log_frontend', { level, message, context }),
     };
 
-    console.log('[Tauri Bridge] window.api mapped — 149 methods + 22 event listeners');
+    console.log('[Tauri Bridge] window.api mapped — 150 methods + 21 event listeners');
 })();

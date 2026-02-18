@@ -1,5 +1,5 @@
 import { showToast } from './tree.js';
-import { isStub } from './utils.js';
+import { escapeHtml, isStub } from './utils.js';
 
 export class AutostartView {
     constructor(container) {
@@ -135,5 +135,5 @@ export class AutostartView {
         });
     }
 
-    esc(text) { return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+    esc(text) { return escapeHtml(text); }
 }

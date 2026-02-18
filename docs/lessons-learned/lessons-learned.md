@@ -800,6 +800,21 @@ Lokale `escapeHtml()` escaped nur `&<>"` aber NICHT `'`. In Attribut-Kontexten X
 
 ---
 
+#### #85 — escapeHtml() escaped keine Anführungszeichen → XSS in Attributen
+`2026-02-18`
+
+**Entstehung:** `escapeHtml()` in utils.js nutzte `textContent → innerHTML` (Browser-DOM-Trick). Diese Methode escaped nur `<`, `>`, `&` — NICHT `"` und `'` (HTML-Spec: Serialisierung von Text-Nodes escaped keine Quotes).
+
+**Symptom:** Kein sichtbares Problem, aber in 15+ Dateien wurde `escapeHtml()` in Attribut-Kontexten verwendet (`title="..."`, `data-path="..."`, `value="..."`). Ein Dateiname mit `"` hätte aus dem Attribut ausbrechen können.
+
+**Diagnose:** Tiefenanalyse aller `innerHTML`-Verwendungen ergab: `escapeHtml()` in Attributen = 15+ Dateien (network.js, privacy.js, software-audit.js, old-files.js, settings.js, etc.). Nur 5 Dateien nutzten die korrekte `escapeAttr()`. Zusätzlich: `escapeAttr()` escaped kein `&`. Lokale `esc()`-Varianten in autostart.js, explorer.js, treemap.js.
+
+**Lösung:** `escapeHtml()` auf Regex-basierte Implementierung umgestellt (escaped `&<>"'`). `escapeAttr()` = Alias für `escapeHtml()`. Alle lokalen Varianten delegieren an die zentrale Funktion.
+
+**Lehre:** `textContent → innerHTML` ist NICHT sicher für Attribute. Nur Regex-basiertes Escaping mit expliziter `"'`-Behandlung ist universell sicher. `escapeHtml()` MUSS sowohl für Content als auch Attribute funktionieren.
+
+---
+
 #### #62 — withGlobalTauri=false killt gesamtes Frontend
 `2026-02-17`
 

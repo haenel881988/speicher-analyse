@@ -1311,8 +1311,7 @@ export class ExplorerView {
     }
 
     escAttr(text) {
-        if (!text) return '';
-        return String(text).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        return escapeHtml(text);
     }
 
     // ===== Multi-Instance Support =====

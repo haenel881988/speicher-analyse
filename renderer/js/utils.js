@@ -63,11 +63,15 @@ export function getCategoryColor(category) {
 /**
  * Zentrale escapeHtml-Funktion. ALLE Views müssen diese verwenden.
  * KEINE eigenen Varianten in einzelnen Dateien erstellen.
+ * Sicher für HTML-Content UND Attribut-Kontexte (escaped auch " und ').
  */
 export function escapeHtml(text) {
-    const d = document.createElement('div');
-    d.textContent = String(text ?? '');
-    return d.innerHTML;
+    return String(text ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 }
 
 /**
@@ -117,11 +121,11 @@ function showStubWarning(message) {
 }
 
 /**
- * Escape-Funktion für HTML-Attribute (Anführungszeichen).
+ * Escape-Funktion für HTML-Attribute (Anführungszeichen + Ampersand).
+ * Identisch mit escapeHtml() — existiert als semantischer Alias für Attribut-Kontexte.
  */
 export function escapeAttr(text) {
-    if (!text) return '';
-    return String(text).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    return escapeHtml(text);
 }
 
 // Parse size string like "10MB", "1.5GB" to bytes

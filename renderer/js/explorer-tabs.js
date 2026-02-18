@@ -251,7 +251,6 @@ export class ExplorerTabBar {
     }
 
     _escAttr(text) {
-        if (!text) return '';
-        return String(text).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+        return escapeHtml(text);
     }
 }

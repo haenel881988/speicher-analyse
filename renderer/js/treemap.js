@@ -1,4 +1,4 @@
-import { formatBytes } from './utils.js';
+import { formatBytes, escapeHtml } from './utils.js';
 
 export class TreemapView {
     constructor(container, breadcrumbEl, tooltipEl) {
@@ -222,5 +222,5 @@ export class TreemapView {
 
     moveTooltip(e) { this.tooltip.style.left = (e.clientX + 12) + 'px'; this.tooltip.style.top = (e.clientY + 12) + 'px'; }
     hideTooltip() { this.tooltip.style.display = 'none'; }
-    escapeHtml(text) { const d = document.createElement('div'); d.textContent = text; return d.innerHTML; }
+    escapeHtml(text) { return escapeHtml(text); }
 }
