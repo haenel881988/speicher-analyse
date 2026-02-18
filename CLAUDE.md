@@ -25,7 +25,9 @@ Schnelle Fixes, schnelle Scans sind strengstens verboten.
 
 Jeder Fehler, jedes Problem, egal wie klein es ist muss zwingend detailliert  in der Lesson Learned Datei dokumentiert werden, die sich am folgenden Ort befindet.: "docs\lessons-learned\lessons-learned.md".
 
+Dabei müssen in der Datei verschiedene Bereiche / scopes erzeugt werden, sollten diese nicht existieren. Ziel und Zweck dieser Scope ist, dass die Fehler und Probleme hiarchisch und chronologisch bereits im vorhinein sortiert und dokumentiert werden.
 
+Auch müssen alle lesson learned aus der Memory Datei in der Lesson-Learned Datei überführt und überführt werden
 
 **Ehrlichkeit steht ÜBER dem Nach-dem-Mund-reden.**
 
@@ -250,7 +252,7 @@ cargo tauri build # Release-Build (MSI/NSIS)
 | `docs/planung/projektplan.md` | Nur Historie (abgeschlossene Versionen) |
 | `docs/planung/visionen.md` | Simons Ideensammlung |
 | `docs/protokoll/aenderungsprotokoll.md` | Änderungsprotokoll (max. 30, dann archivieren) |
-| `docs/lessons-learned/lessons-learned.md` | **PFLICHT** — Jeder Fehler wird dokumentiert (max. 70, archivieren nach Kategorie) |
+| `docs/lessons-learned/lessons-learned.md` | **PFLICHT** — Jeder Fehler wird dokumentiert (KI verwaltet autonom) |
 
 **Regel:** issue.md = Single Source of Truth für Planung. projektplan.md = nur Historie.
 
@@ -258,9 +260,11 @@ cargo tauri build # Release-Build (MSI/NSIS)
 
 **JEDER Fehler wird in `docs/lessons-learned/lessons-learned.md` dokumentiert, egal wie klein.**
 
-- **Maximal 70 Einträge.** Bei Überschreitung die ältesten in `docs/lessons-learned/archiv/<kategorie>/` verschieben
-- **Archivkategorien:** `netzwerk/`, `terminal/`, `ui/`, `performance/`, `security/`, `migration/`, `allgemein/`
+- **Keine Obergrenze.** Die KI verwaltet die Lessons-Learned-Datei, ihre Inhalte und Unterverzeichnisse eigenständig
+- **Hierarchische Struktur:** Einträge sind nach Kategorien gruppiert (## Allgemein, ## Netzwerk, ## UI, ## Terminal, ## Security, ## Performance, ## Migration, ## Privacy) und innerhalb jeder Kategorie chronologisch sortiert
+- **Autonome Verwaltung:** Die KI entscheidet eigenständig über Archivierung, Zusammenführung oder Auslagerung in Unterverzeichnisse (`docs/lessons-learned/archiv/<kategorie>/`) wenn eine Kategorie zu umfangreich wird
 - **Pflicht:** Jeder Fehler wird dokumentiert — auch wenn er trivial erscheint
 - **Ziel:** Kein Fehler darf ein zweites Mal auftreten. Das Lessons-Learned-System ist die erste Anlaufstelle bei neuen Problemen
-- **Format:** `| # | Datum | Kategorie | **Kurztitel** - Beschreibung + Ursache + Fix + Lehre |`
+- **Format:** `| # | Datum | **Kurztitel** - Beschreibung + Ursache + Fix + Lehre |` (Kategorie entfällt, da durch Sektion bestimmt)
 - **Bei jedem Bug-Fix:** Lessons-Learned UND Changelog gleichzeitig aktualisieren
+- **Memory-Migration:** Alle Lessons aus der Memory-Datei müssen in die Lessons-Learned-Datei überführt werden. Memory-Datei enthält nur noch einen Verweis
