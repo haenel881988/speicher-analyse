@@ -905,6 +905,24 @@ Tauri serialisiert Binärdaten als Base64-JSON-Strings. Electron konnte ArrayBuf
 
 ---
 
+#### #86 — Agents/Skripte bei Analyse + Migration = Kontrollverlust
+`2026-02-18` · *aus CLAUDE.md migriert*
+
+Während der Electron→Tauri-Migration nutzte die KI permanent Sub-Agents und Analyse-Skripte. Ergebnis: vollständiges Chaos mit 103+ Problemen. Der kritische withGlobalTauri-Bug (#62) wurde von Agents in 3 Runden NICHT gefunden — erst manuelle Datei-für-Datei-Analyse identifizierte die Wurzelursache.
+
+**Lehre:** Analyse und Diagnose IMMER manuell (Read, Grep, Glob). Agents/Skripte nur für Ausführung (Build, Tests), NIEMALS für Problemsuche.
+
+---
+
+#### #87 — Dokument-Drift bei Framework-Migration
+`2026-02-18` · *aus CLAUDE.md migriert*
+
+Bei der Electron→Tauri-Migration (02/2026) blieben Skills, governance.md und CLAUDE.md auf Electron-Patterns stehen, während der Code auf Tauri migriert war. Folge: KI folgte veralteten Anweisungen → systematisch falscher Code.
+
+**Lehre:** Code-Migration OHNE gleichzeitige Dokumenten-Migration ist verboten. Bei jeder Architekturänderung ALLE Steuerungsdokumente mitmigrieren.
+
+---
+
 <br>
 
 ## Privacy

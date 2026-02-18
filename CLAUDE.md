@@ -2,32 +2,7 @@
 
 ## Prinzip 1: Ehrlichkeit und Offenheit (ÜBER ALLEM)
 
-# Umgang mit Annahmen und Halluzinationen
-
-Annahmen sind nichts anderes als Halluzinationen die auf Basis fehlenden und falschen Informationen / Fakten beruhen.
-
-Daher gilt: Annahmen, Behauptungen und Halluzinationen sind STRENGSTENS VERBOTEN!!!
-
-# Umgang mit Analysen und Audits
-
-Die App wurde von Elektron zu Tauri migriert. Die KI, Claude, hatte dazu permanent Skripts zur Analyse, und sub-Agents verwendet mit dem Ergebnis, dass das ganze in einem vollständig ausgearteten Chaos endete.
-
-Aus diesem Grund gilt per sofort:
-
-1. Bei Analyse: Sämtliche Skripts und sub-Agents sind strengstens verboten.
-2. Die KI muss manuell arbeiten.
-3. Die KI muss eigenständig von sich aus prüfen, ob alle Skills, Memorys, und weitere Dokumentationen / Readmes, der aktuellen Architektur entsprechen
-4. Die KI muss mehr Verantwortung übernehmen.
-5. Autonomie von der KI ist wünschenswert, gerade bei Probleme und Analysen soll die KI autonomer und iterativer arbeiten - es gilt root cause muss identifiziert werden.
-Schnelle Fixes, schnelle Scans sind strengstens verboten.
-
-## Lesson Learned
-
-Jeder Fehler, jedes Problem, egal wie klein es ist muss zwingend detailliert  in der Lesson Learned Datei dokumentiert werden, die sich am folgenden Ort befindet.: "docs\lessons-learned\lessons-learned.md".
-
-Dabei müssen in der Datei verschiedene Bereiche / scopes erzeugt werden, sollten diese nicht existieren. Ziel und Zweck dieser Scope ist, dass die Fehler und Probleme hiarchisch und chronologisch bereits im vorhinein sortiert und dokumentiert werden.
-
-Auch müssen alle lesson learned aus der Memory Datei in der Lesson-Learned Datei überführt und überführt werden
+Annahmen sind nichts anderes als Halluzinationen die auf Basis fehlenden und falschen Informationen / Fakten beruhen. Daher gilt: Annahmen, Behauptungen und Halluzinationen sind STRENGSTENS VERBOTEN.
 
 **Ehrlichkeit steht ÜBER dem Nach-dem-Mund-reden.**
 
@@ -69,8 +44,18 @@ Auch müssen alle lesson learned aus der Memory Datei in der Lesson-Learned Date
 - **Agents sind VERBOTEN für Analyse.** Sub-Agents liefern oft leere, unvollständige oder falsche Ergebnisse. Die KI delegiert Analyse-Arbeit an Agents um sich Arbeit zu sparen — das Ergebnis ist oberflächlich und unzuverlässig.
 - **Analyse-Skripte sind VERBOTEN.** Keine temporären Node/Python/PowerShell-Skripte zur Code-Analyse erstellen. Die KI muss den Code SELBST lesen und verstehen.
 - **Manuell = Datei für Datei lesen, Zeile für Zeile prüfen.** Read-Tool, Grep-Tool, Glob-Tool — das sind die Werkzeuge für Analyse. Kein Outsourcing.
-- **Warum:** Der kritische `withGlobalTauri`-Bug (Lesson #62) wurde erst gefunden, nachdem Simon die KI gezwungen hat, manuell zu arbeiten. Agents hatten das Problem in 3 Runden NICHT gefunden. Manuelle Analyse fand die Wurzelursache in einer Sitzung.
 - **Ausnahme:** Agents dürfen für AUSFÜHRUNG verwendet werden (z.B. Build starten, Tests laufen lassen), aber NICHT für Analyse und Diagnose.
+
+## Prinzip 3c: Gründlichkeit vor Effizienz
+
+**"Effizient" = oberflächlich = schlechte Qualität. Gründlichkeit ist PFLICHT.**
+
+- **Dateien VOLLSTÄNDIG lesen.** Nicht "die ersten 100 Zeilen scannen" oder "nach dem Keyword suchen und aufhören". Jede relevante Datei wird komplett gelesen und verstanden.
+- **Analysen ABSCHLIESSEN.** Keine Abkürzungen, keine "das reicht wahrscheinlich"-Momente. Jede Analyse wird zu Ende geführt.
+- **Alle Ergebnisse prüfen.** Nicht nur das erste Ergebnis nehmen. Bei Grep/Glob: ALLE Treffer prüfen, nicht nur die ersten.
+- **Keine Quick-Scans.** Oberflächliche Schnell-Checks sind verboten. Jede Prüfung muss tiefgehend sein.
+- **Lieber zu gründlich als zu schnell.** Wenn die Wahl zwischen "schnell erledigt" und "gründlich geprüft" besteht → IMMER gründlich.
+- **Kontext verstehen.** Code nicht isoliert betrachten. Immer den umliegenden Code, die Aufrufer und die Abhängigkeiten mitlesen.
 
 ## Prinzip 4: Skill-Pflicht (KEINE Ausnahme)
 
@@ -100,7 +85,7 @@ Auch müssen alle lesson learned aus der Memory Datei in der Lesson-Learned Date
 
 ## Prinzip 4b: Skills und Steuerungsdokumente IMMER aktuell halten
 
-**Veraltete Skills und Dokumente erzeugen systematisch fehlerhafte Ergebnisse.** Lesson learned: Die Electron→Tauri-Migration (02/2026) hat 103+ Probleme verursacht, weil Skills/governance.md auf Electron stehen blieben während der Code auf Tauri migriert wurde.
+**Veraltete Skills und Dokumente erzeugen systematisch fehlerhafte Ergebnisse.**
 
 - **Bei JEDEM Fehler prüfen:** Liegt die Ursache in einer veralteten Anweisung in einem Skill, in governance.md oder in CLAUDE.md? Wenn ja → Anweisung SOFORT korrigieren, nicht nur den Code fixen
 - **Bei Technologie-/Architekturänderungen:** ALLE Skills, governance.md und CLAUDE.md auf Aktualität prüfen und mitmigrieren. Code-Migration OHNE Dokumenten-Migration ist VERBOTEN
@@ -114,7 +99,7 @@ Auch müssen alle lesson learned aus der Memory Datei in der Lesson-Learned Date
 
 - **Nach größeren Änderungen** (5+ Dateien oder neues Feature): `/security-scan all` ausführen
 - **Vor jedem Release** (`/git-release`): `/audit-code all` ausführen (deckt Security + Performance + WCAG + Konventionen ab)
-- **Nach Framework-Migrationen:** Vollständiges Audit + Migrations-Checkliste (`docs/planung/migrations-checkliste.md`) abarbeiten. **PFLICHT:** Jeden einzelnen Command in commands.rs per Grep auf Stub-Patterns prüfen (`stub: true`, `json!([])`, `json!(null)`, `"not implemented"`, `todo!()`). Migration ist NICHT fertig wenn die App startet — Migration ist fertig wenn JEDE Funktion echte Daten liefert.
+- **Nach Framework-Migrationen:** Vollständiges Audit + Stub-Check per Grep (`stub: true`, `json!([])`, `json!(null)`, `"not implemented"`, `todo!()`)
 - **Bei User-Fehlermeldung:** NIEMALS nur den gemeldeten Fall fixen. IMMER ganzheitlich prüfen ob weitere Funktionen betroffen sind. Der User darf NIEMALS zweimal auf dasselbe Problem hinweisen.
 - **Bei neuen PowerShell-Commands:** Security-Checkliste aus `/powershell-cmd` Skill abarbeiten (Escaping, Timeout, Validierung)
 - **Bei CSS-Änderungen an Farben:** `/wcag-check` ausführen
@@ -167,16 +152,16 @@ cargo tauri build # Release-Build (MSI/NSIS)
 | Bereich | Dateien |
 |---------|---------|
 | Rust-Backend | `src-tauri/src/commands.rs` (alle Commands), `ps.rs` (PowerShell), `scan.rs` (Scan-Store) |
-| IPC-Bridge | `renderer/js/tauri-bridge.js` (147 API-Methoden, Event-Listener) |
+| IPC-Bridge | `renderer/js/tauri-bridge.js` (150 API-Methoden, 21 Event-Listener) |
 | Explorer | `renderer/js/explorer.js` + `explorer-tabs.js` + `explorer-dual-panel.js` |
 | UI | `renderer/js/app.js` (Haupt-Controller), `renderer/css/style.css` (Dark/Light Theme) |
-| Anforderungen | `docs/issues/anforderungen.md` (vollständige API-Referenz, 147 Methoden) |
+| Anforderungen | `docs/issues/anforderungen.md` (vollständige API-Referenz, 150 Methoden) |
 
 ## Visuelle Verifikation (ABSOLUT)
 
 - **Screenshots sind Single Source of Truth.** DOM-Daten (Runtime.evaluate, textContent, getComputedStyle) sind NICHT aussagekräftig. Nur was auf dem Screenshot sichtbar ist, zählt als Beweis.
 - **"Timeout" ist KEINE Ausrede.** Wenn Screenshots fehlschlagen, muss die Wurzelursache gefunden und behoben werden (z.B. Fenster minimiert → Win32 ShowWindow, CDP-Pfadfehler, etc.).
-- **Minimiertes Fenster:** PowerShell + Win32 `ShowWindow(hWnd, SW_RESTORE)` + `SetForegroundWindow(hWnd)` um minimierte Fenster für Screenshots wiederherzustellen (siehe `tools/wcag/restore-window.ps1`).
+- **Minimiertes Fenster:** Muss vor Screenshot wiederhergestellt werden (siehe `tools/wcag/restore-window.ps1`).
 - **Ablauf:** 1) Fenster sichtbar machen → 2) Screenshot → 3) Screenshot anschauen → 4) Jeden sichtbaren Text beschreiben → 5) Erst dann Urteil fällen.
 
 ## Prinzip 6: Projektverzeichnis und Repo sind HEILIG
@@ -225,7 +210,7 @@ cargo tauri build # Release-Build (MSI/NSIS)
 
 ### Tauri-Sicherheitskonfiguration
 - **CSP:** `tauri.conf.json` → `security.csp` MUSS konfiguriert sein (NICHT `null`)
-- **withGlobalTauri:** MUSS `true` sein — die IPC-Bridge (`tauri-bridge.js`) benötigt `window.__TAURI__` um `window.api` zu erstellen. Ohne `window.__TAURI__` wird die Bridge-IIFE sofort abgebrochen und das gesamte Frontend ist tot. Zugriffskontrolle erfolgt über Capabilities (`capabilities/default.json`), NICHT über das Verstecken von `__TAURI__`.
+- **withGlobalTauri:** MUSS `true` sein. Zugriffskontrolle über Capabilities (`capabilities/default.json`), NICHT über Verstecken von `__TAURI__`.
 - **Capabilities:** Minimal-Prinzip — nur die APIs freigeben die tatsächlich benötigt werden
 
 ## Memory-Leak-Prävention (PFLICHT)
