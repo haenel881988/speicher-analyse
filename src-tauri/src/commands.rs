@@ -302,18 +302,54 @@ pub async fn export_csv(scan_id: String) -> Result<Value, String> {
 }
 
 #[tauri::command]
-pub async fn show_save_dialog(app: tauri::AppHandle, _options: Option<Value>) -> Result<Value, String> {
+pub async fn show_save_dialog(app: tauri::AppHandle, options: Option<Value>) -> Result<Value, String> {
     use tauri_plugin_dialog::DialogExt;
-    let (tx, rx) = std::sync::mpsc::channel();
-    app.dialog().file().save_file(move |path| {
-        let _ = tx.send(path);
-    });
-    let path = tokio::task::spawn_blocking(move || {
-        rx.recv().unwrap_or(None)
-    }).await.unwrap_or(None);
-    match path {
-        Some(p) => Ok(json!({ "path": p.to_string() })),
-        None => Ok(json!({ "canceled": true })),
+
+    let is_directory = options.as_ref()
+        .and_then(|o| o.get("directory"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    let title = options.as_ref()
+        .and_then(|o| o.get("title"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+
+    if is_directory {
+        // Ordner-Auswahl-Dialog
+        let (tx, rx) = std::sync::mpsc::channel();
+        let mut builder = app.dialog().file();
+        if !title.is_empty() {
+            builder = builder.set_title(&title);
+        }
+        builder.pick_folder(move |path| {
+            let _ = tx.send(path);
+        });
+        let path = tokio::task::spawn_blocking(move || {
+            rx.recv().unwrap_or(None)
+        }).await.unwrap_or(None);
+        match path {
+            Some(p) => Ok(json!({ "path": p.to_string() })),
+            None => Ok(json!({ "canceled": true })),
+        }
+    } else {
+        // Datei-Speichern-Dialog
+        let (tx, rx) = std::sync::mpsc::channel();
+        let mut builder = app.dialog().file();
+        if !title.is_empty() {
+            builder = builder.set_title(&title);
+        }
+        builder.save_file(move |path| {
+            let _ = tx.send(path);
+        });
+        let path = tokio::task::spawn_blocking(move || {
+            rx.recv().unwrap_or(None)
+        }).await.unwrap_or(None);
+        match path {
+            Some(p) => Ok(json!({ "path": p.to_string() })),
+            None => Ok(json!({ "canceled": true })),
+        }
     }
 }
 
@@ -325,7 +361,13 @@ pub async fn delete_to_trash(paths: Vec<String>) -> Result<Value, String> {
     let ps_paths = paths.iter().map(|p| format!("'{}'", p.replace("'", "''"))).collect::<Vec<_>>().join(",");
     let script = format!(
         r#"Add-Type -AssemblyName Microsoft.VisualBasic
-@({}) | ForEach-Object {{ [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile($_, 'OnlyErrorDialogs', 'SendToRecycleBin') }}
+@({}) | ForEach-Object {{
+    if (Test-Path -LiteralPath $_ -PathType Container) {{
+        [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory($_, 'OnlyErrorDialogs', 'SendToRecycleBin')
+    }} else {{
+        [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile($_, 'OnlyErrorDialogs', 'SendToRecycleBin')
+    }}
+}}
 'ok'"#, ps_paths
     );
     crate::ps::run_ps(&script).await.map(|_| json!({ "success": true }))
@@ -380,7 +422,24 @@ pub async fn file_copy(source_paths: Vec<String>, dest_dir: String) -> Result<Va
         validate_path(src)?;
         let name = Path::new(src).file_name().unwrap_or_default();
         let dest = Path::new(&dest_dir).join(name);
-        tokio::fs::copy(src, &dest).await.map_err(|e| e.to_string())?;
+        let src_path = Path::new(src);
+        if src_path.is_dir() {
+            // Rekursive Ordner-Kopie via walkdir
+            for entry in walkdir::WalkDir::new(src_path).into_iter().filter_map(|e| e.ok()) {
+                let rel = entry.path().strip_prefix(src_path).unwrap_or(entry.path());
+                let target = dest.join(rel);
+                if entry.file_type().is_dir() {
+                    tokio::fs::create_dir_all(&target).await.map_err(|e| e.to_string())?;
+                } else {
+                    if let Some(parent) = target.parent() {
+                        tokio::fs::create_dir_all(parent).await.map_err(|e| e.to_string())?;
+                    }
+                    tokio::fs::copy(entry.path(), &target).await.map_err(|e| e.to_string())?;
+                }
+            }
+        } else {
+            tokio::fs::copy(src, &dest).await.map_err(|e| e.to_string())?;
+        }
     }
     Ok(json!({ "success": true }))
 }

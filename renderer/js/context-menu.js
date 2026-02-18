@@ -7,6 +7,8 @@
 const ARCHIVE_EXTENSIONS = ['.zip', '.tar', '.gz', '.7z', '.rar', '.bz2', '.xz', '.zst', '.cab', '.iso'];
 
 let activeMenu = null;
+let activeCloseHandler = null;
+let activeEscHandler = null;
 
 /**
  * Zeigt ein Kontextmenü an der gegebenen Position.
@@ -78,25 +80,31 @@ export function showContextMenu(x, y, type, context, onAction, options = {}) {
     });
 
     // Schliessen bei Klick ausserhalb
-    const closeHandler = (e) => {
+    activeCloseHandler = (e) => {
         if (!menu.contains(e.target)) {
             closeContextMenu();
-            document.removeEventListener('mousedown', closeHandler, true);
         }
     };
-    document.addEventListener('mousedown', closeHandler, true);
+    document.addEventListener('mousedown', activeCloseHandler, true);
 
     // Schliessen bei Escape
-    const escHandler = (e) => {
+    activeEscHandler = (e) => {
         if (e.key === 'Escape') {
             closeContextMenu();
-            document.removeEventListener('keydown', escHandler, true);
         }
     };
-    document.addEventListener('keydown', escHandler, true);
+    document.addEventListener('keydown', activeEscHandler, true);
 }
 
 export function closeContextMenu() {
+    if (activeCloseHandler) {
+        document.removeEventListener('mousedown', activeCloseHandler, true);
+        activeCloseHandler = null;
+    }
+    if (activeEscHandler) {
+        document.removeEventListener('keydown', activeEscHandler, true);
+        activeEscHandler = null;
+    }
     if (activeMenu) {
         activeMenu.remove();
         activeMenu = null;

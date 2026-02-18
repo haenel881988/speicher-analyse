@@ -47,9 +47,9 @@ export async function clipboardPaste(destDir, onRefresh) {
             document.querySelectorAll('.tree-row.cut').forEach(r => r.classList.remove('cut'));
         }
 
-        const failed = results.filter(r => !r.success);
-        if (failed.length > 0) {
-            showToast(`${failed.length} Fehler beim Einfügen`, 'error');
+        // Backend gibt { success: true } als Objekt zurück (kein Array)
+        if (results && !results.success) {
+            showToast(results.error || 'Fehler beim Einfügen', 'error');
         } else {
             showToast('Einfügen erfolgreich', 'success');
         }
@@ -75,12 +75,12 @@ export async function deleteToTrash(paths, onRefresh) {
     if (result.response !== 1) return;
 
     try {
-        const results = await window.api.deleteToTrash(paths);
-        const failed = results.filter(r => !r.success);
-        if (failed.length > 0) {
-            showToast(`${failed.length} Fehler beim Löschen`, 'error');
+        const result = await window.api.deleteToTrash(paths);
+        // Backend gibt { success: true } als Objekt zurück (kein Array)
+        if (result && !result.success) {
+            showToast(result.error || 'Fehler beim Löschen', 'error');
         } else {
-            showToast(`${results.length} Element(e) gelöscht`, 'success');
+            showToast(`${paths.length} Element(e) gelöscht`, 'success');
         }
         if (onRefresh) onRefresh();
     } catch (e) {
@@ -104,12 +104,12 @@ export async function deletePermanent(paths, onRefresh) {
     if (result.response !== 1) return;
 
     try {
-        const results = await window.api.deletePermanent(paths);
-        const failed = results.filter(r => !r.success);
-        if (failed.length > 0) {
-            showToast(`${failed.length} Fehler beim Löschen`, 'error');
+        const result = await window.api.deletePermanent(paths);
+        // Backend gibt { success: true } als Objekt zurück (kein Array)
+        if (result && !result.success) {
+            showToast(result.error || 'Fehler beim Löschen', 'error');
         } else {
-            showToast(`${results.length} Element(e) endgültig gelöscht`, 'success');
+            showToast(`${paths.length} Element(e) endgültig gelöscht`, 'success');
         }
         if (onRefresh) onRefresh();
     } catch (e) {
@@ -149,28 +149,30 @@ export async function showProperties(filePath) {
             return;
         }
 
-        let size = props.isDirectory
+        // Backend gibt isDir (nicht isDirectory), readOnly (nicht readonly)
+        const isDir = props.isDir || props.isDirectory || false;
+        let size = isDir
             ? `${formatBytes(props.totalSize || 0)} (Inhalt berechnet)`
             : formatBytes(props.size);
 
         body.innerHTML = `
             <div class="prop-row"><span class="prop-label">Name</span><span class="prop-value">${escapeHtml(props.name)}</span></div>
             <div class="prop-row"><span class="prop-label">Pfad</span><span class="prop-value">${escapeHtml(props.path)}</span></div>
-            <div class="prop-row"><span class="prop-label">Typ</span><span class="prop-value">${props.isDirectory ? 'Ordner' : 'Datei'}</span></div>
+            <div class="prop-row"><span class="prop-label">Typ</span><span class="prop-value">${isDir ? 'Ordner' : 'Datei'}</span></div>
             <div class="prop-row"><span class="prop-label">Größe</span><span id="prop-size-value" class="prop-value">${size}</span></div>
             <div class="prop-row"><span class="prop-label">Erstellt</span><span class="prop-value">${formatDateTime(props.created)}</span></div>
             <div class="prop-row"><span class="prop-label">Geändert</span><span class="prop-value">${formatDateTime(props.modified)}</span></div>
             <div class="prop-row"><span class="prop-label">Letzter Zugriff</span><span class="prop-value">${formatDateTime(props.accessed)}</span></div>
-            <div class="prop-row"><span class="prop-label">Schreibschutz</span><span class="prop-value">${props.readonly ? 'Ja' : 'Nein'}</span></div>
+            <div class="prop-row"><span class="prop-label">Schreibschutz</span><span class="prop-value">${(props.readOnly || props.readonly) ? 'Ja' : 'Nein'}</span></div>
         `;
 
         // Ordnergrösse asynchron berechnen
-        if (props.isDirectory && window.api?.calculateFolderSize) {
+        if (isDir && window.api?.calculateFolderSize) {
             const sizeEl = document.getElementById('prop-size-value');
             if (sizeEl) sizeEl.textContent = 'Wird berechnet...';
             window.api.calculateFolderSize(filePath).then(result => {
-                if (sizeEl && result && result.size !== undefined) {
-                    sizeEl.textContent = `${formatBytes(result.size)} (${result.files || 0} Dateien, ${result.dirs || 0} Ordner)`;
+                if (sizeEl && result && result.totalSize !== undefined) {
+                    sizeEl.textContent = `${formatBytes(result.totalSize)} (${result.fileCount || 0} Dateien, ${result.dirCount || 0} Ordner)`;
                 }
             }).catch(() => {
                 if (sizeEl) sizeEl.textContent = size;

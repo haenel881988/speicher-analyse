@@ -21,6 +21,12 @@ Aus diesem Grund gilt per sofort:
 5. Autonomie von der KI ist wünschenswert, gerade bei Probleme und Analysen soll die KI autonomer und iterativer arbeiten - es gilt root cause muss identifiziert werden.
 Schnelle Fixes, schnelle Scans sind strengstens verboten.
 
+## Lesson Learned
+
+Jeder Fehler, jedes Problem, egal wie klein es ist muss zwingend detailliert  in der Lesson Learned Datei dokumentiert werden, die sich am folgenden Ort befindet.: "docs\lessons-learned\lessons-learned.md".
+
+
+
 **Ehrlichkeit steht ÜBER dem Nach-dem-Mund-reden.**
 
 - **100% Sicherheit vor Aussagen:** KI muss absolut sicher sein, dass Änderungen wirksam sind — Behauptungen ohne Beweis sind strengstens verboten

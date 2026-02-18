@@ -1,4 +1,4 @@
-import { formatBytes, debounce, parseSize } from './utils.js';
+import { formatBytes, debounce, parseSize, escapeHtml, escapeAttr } from './utils.js';
 
 export class SearchPanel {
     constructor(inputEl, minSizeEl, resultsEl, onNavigate) {
@@ -49,9 +49,9 @@ export class SearchPanel {
         }
 
         this.results.innerHTML = items.map(item => `
-            <div class="search-result-item" data-path="${this.escapeAttr(item.path)}" data-is-dir="${item.is_dir}">
+            <div class="search-result-item" data-path="${escapeAttr(item.path)}" data-is-dir="${item.is_dir}">
                 <span class="search-result-icon">${item.is_dir ? '\uD83D\uDCC1' : '\uD83D\uDCC4'}</span>
-                <span class="search-result-name" title="${this.escapeAttr(item.path)}">${this.escapeHtml(item.name)}</span>
+                <span class="search-result-name" title="${escapeAttr(item.path)}">${escapeHtml(item.name)}</span>
                 <span class="search-result-size">${formatBytes(item.size)}</span>
             </div>
         `).join('');
@@ -74,6 +74,5 @@ export class SearchPanel {
         });
     }
 
-    escapeHtml(text) { const d = document.createElement('div'); d.textContent = text; return d.innerHTML; }
-    escapeAttr(text) { return text.replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
+    // escapeHtml + escapeAttr importiert aus utils.js (keine lokalen Kopien)
 }

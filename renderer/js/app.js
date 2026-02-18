@@ -1044,9 +1044,9 @@ function executeContextAction(action) {
             case 'extract-to':
                 if (path) {
                     window.api.showSaveDialog({ directory: true, title: 'Zielordner wählen' }).then(dest => {
-                        if (dest) {
+                        if (dest && !dest.canceled && dest.path) {
                             showToast('Entpacke...', 'info');
-                            window.api.extractArchive(path, dest).then(result => {
+                            window.api.extractArchive(path, dest.path).then(result => {
                                 if (result.success) {
                                     showToast(`Entpackt nach ${result.destination}`, 'success');
                                     refresh();
@@ -1055,14 +1055,14 @@ function executeContextAction(action) {
                                 }
                             }).catch(e => showToast(e.message || String(e), 'error'));
                         }
-                    });
+                    }).catch(e => showToast(e.message || String(e), 'error'));
                 }
                 break;
             case 'calculate-folder-size':
                 if (path) {
                     window.api.calculateFolderSize(path).then(result => {
                         showToast(`${formatBytes(result.totalSize)} (${formatNumber(result.fileCount)} Dateien, ${formatNumber(result.dirCount)} Ordner)`, 'info');
-                    });
+                    }).catch(e => showToast(e.message || String(e), 'error'));
                 }
                 break;
             case 'sort-by':

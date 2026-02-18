@@ -1,4 +1,4 @@
-import { formatBytes, formatNumber } from './utils.js';
+import { formatBytes, formatNumber, escapeHtml, escapeAttr } from './utils.js';
 
 const CACHE_MAX_SIZE = 500;
 
@@ -132,7 +132,7 @@ export class TreeView {
         row.innerHTML = `
             <span class="tree-arrow ${isExpanded ? 'expanded' : ''} ${!hasChildren ? 'empty' : ''}">\u25B6</span>
             <span class="tree-icon">\uD83D\uDCC1</span>
-            <span class="tree-name" title="${this.escapeAttr(node.path)}">${this.escapeHtml(node.name)}</span>
+            <span class="tree-name" title="${escapeAttr(node.path)}">${escapeHtml(node.name)}</span>
             <span class="tree-bar">
                 <div class="size-bar"><div class="size-bar-fill" style="width:${Math.max(pct, 0.5)}%"></div></div>
             </span>
@@ -388,15 +388,7 @@ export class TreeView {
         input.addEventListener('blur', commit);
     }
 
-    escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    }
-
-    escapeAttr(text) {
-        return text.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-    }
+    // escapeHtml + escapeAttr importiert aus utils.js (keine lokalen Kopien)
 }
 
 // Toast notification helper
