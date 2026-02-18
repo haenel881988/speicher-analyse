@@ -111,7 +111,7 @@ export class TreemapView {
             cell.oncontextmenu = (e) => {
                 e.preventDefault();
                 if (this.onContextMenu && !r.item.is_own_files) {
-                    this.onContextMenu('treemap-cell', { path: r.item.path, name: r.item.name });
+                    this.onContextMenu('directory', { path: r.item.path, name: r.item.name }, e);
                 }
             };
 

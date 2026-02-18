@@ -149,7 +149,7 @@ export async function showProperties(filePath) {
             return;
         }
 
-        const size = props.isDirectory
+        let size = props.isDirectory
             ? `${formatBytes(props.totalSize || 0)} (Inhalt berechnet)`
             : formatBytes(props.size);
 
@@ -157,12 +157,25 @@ export async function showProperties(filePath) {
             <div class="prop-row"><span class="prop-label">Name</span><span class="prop-value">${escapeHtml(props.name)}</span></div>
             <div class="prop-row"><span class="prop-label">Pfad</span><span class="prop-value">${escapeHtml(props.path)}</span></div>
             <div class="prop-row"><span class="prop-label">Typ</span><span class="prop-value">${props.isDirectory ? 'Ordner' : 'Datei'}</span></div>
-            <div class="prop-row"><span class="prop-label">Größe</span><span class="prop-value">${size}</span></div>
+            <div class="prop-row"><span class="prop-label">Größe</span><span id="prop-size-value" class="prop-value">${size}</span></div>
             <div class="prop-row"><span class="prop-label">Erstellt</span><span class="prop-value">${formatDateTime(props.created)}</span></div>
             <div class="prop-row"><span class="prop-label">Geändert</span><span class="prop-value">${formatDateTime(props.modified)}</span></div>
             <div class="prop-row"><span class="prop-label">Letzter Zugriff</span><span class="prop-value">${formatDateTime(props.accessed)}</span></div>
             <div class="prop-row"><span class="prop-label">Schreibschutz</span><span class="prop-value">${props.readonly ? 'Ja' : 'Nein'}</span></div>
         `;
+
+        // Ordnergrösse asynchron berechnen
+        if (props.isDirectory && window.api?.calculateFolderSize) {
+            const sizeEl = document.getElementById('prop-size-value');
+            if (sizeEl) sizeEl.textContent = 'Wird berechnet...';
+            window.api.calculateFolderSize(filePath).then(result => {
+                if (sizeEl && result && result.size !== undefined) {
+                    sizeEl.textContent = `${formatBytes(result.size)} (${result.files || 0} Dateien, ${result.dirs || 0} Ordner)`;
+                }
+            }).catch(() => {
+                if (sizeEl) sizeEl.textContent = size;
+            });
+        }
     } catch (e) {
         body.innerHTML = `<div style="color:var(--danger)">Fehler: ${escapeHtml(e.message)}</div>`;
     }

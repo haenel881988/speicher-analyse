@@ -7,6 +7,7 @@ import { exportCSV, exportPDF } from './export.js';
 import {
     clipboardCut, clipboardCopy, clipboardPaste,
     deleteToTrash, deletePermanent, createNewFolder, showProperties,
+    getClipboard,
 } from './file-manager.js';
 import { OldFilesView } from './old-files.js';
 import { DuplicatesView } from './duplicates.js';
@@ -29,6 +30,7 @@ import { NetworkView } from './network.js';
 import { SecurityAuditView } from './security-audit.js';
 import { SystemProfilView } from './system-profil.js';
 import { TerminalPanel } from './terminal-panel.js';
+import { showContextMenu, closeContextMenu } from './context-menu.js';
 
 // ===== Global Error Handlers (Dev-Logging) =====
 window.addEventListener('error', (event) => {
@@ -899,7 +901,7 @@ function renderTopFiles(files) {
         row.style.cursor = 'context-menu';
         row.oncontextmenu = (e) => {
             e.preventDefault();
-            handleContextMenu('file', { path: row.dataset.path, name: row.dataset.name });
+            handleContextMenu('file', { path: row.dataset.path, name: row.dataset.name }, e);
         };
         row.ondblclick = () => {
             window.api.openFile(row.dataset.path);
@@ -930,12 +932,15 @@ function getCategoryForExt(ext) {
 }
 
 // ===== Context Menu =====
-function handleContextMenu(type, context) {
-    window.api.showContextMenu(type, context);
+function handleContextMenu(type, context, event) {
+    if (!event) return;
+    const clipboardHasItems = getClipboard().paths.length > 0;
+    showContextMenu(event.clientX, event.clientY, type, context, (actionObj) => {
+        executeContextAction(actionObj);
+    }, { clipboardHasItems });
 }
 
-function setupContextMenuActions() {
-    window.api.onContextMenuAction((action) => {
+function executeContextAction(action) {
         const path = action.path;
         const paths = action.selectedPaths || (path ? [path] : []);
         const refresh = () => {
@@ -1014,6 +1019,45 @@ function setupContextMenuActions() {
             case 'open-with':
                 if (path) window.api.openWithDialog(path);
                 break;
+            case 'run-as-admin':
+                if (path) {
+                    window.api.runAsAdmin(path).then(result => {
+                        if (!result.success) {
+                            showToast(result.error || 'Fehler beim Starten als Administrator', 'error');
+                        }
+                    }).catch(e => showToast(e.message || String(e), 'error'));
+                }
+                break;
+            case 'extract-here':
+                if (path) {
+                    showToast('Entpacke...', 'info');
+                    window.api.extractArchive(path).then(result => {
+                        if (result.success) {
+                            showToast(`Entpackt nach ${result.destination}`, 'success');
+                            refresh();
+                        } else {
+                            showToast(result.error || 'Fehler beim Entpacken', 'error');
+                        }
+                    }).catch(e => showToast(e.message || String(e), 'error'));
+                }
+                break;
+            case 'extract-to':
+                if (path) {
+                    window.api.showSaveDialog({ directory: true, title: 'Zielordner wählen' }).then(dest => {
+                        if (dest) {
+                            showToast('Entpacke...', 'info');
+                            window.api.extractArchive(path, dest).then(result => {
+                                if (result.success) {
+                                    showToast(`Entpackt nach ${result.destination}`, 'success');
+                                    refresh();
+                                } else {
+                                    showToast(result.error || 'Fehler beim Entpacken', 'error');
+                                }
+                            }).catch(e => showToast(e.message || String(e), 'error'));
+                        }
+                    });
+                }
+                break;
             case 'calculate-folder-size':
                 if (path) {
                     window.api.calculateFolderSize(path).then(result => {
@@ -1070,6 +1114,12 @@ function setupContextMenuActions() {
                 break;
             }
         }
+}
+
+function setupContextMenuActions() {
+    // Legacy event listener for backward compatibility (Rust-emitted events)
+    window.api?.onContextMenuAction?.((action) => {
+        executeContextAction(action);
     });
 }
 

@@ -41,7 +41,7 @@ export class ExplorerDualPanel {
 
         if (!this.rightPanel) {
             this.rightPanel = new ExplorerTabBar(this.rightPanelEl, {
-                onContextMenu: (type, data) => this._handleContextMenu(type, data, 'right'),
+                onContextMenu: (type, data, event) => this._handleContextMenu(type, data, 'right', event),
                 showQuickAccess: false,
                 panelId: 'right',
                 getScanId: this.getScanId,
@@ -125,7 +125,7 @@ export class ExplorerDualPanel {
 
         // Create left ExplorerTabBar
         this.leftPanel = new ExplorerTabBar(this.leftPanelEl, {
-            onContextMenu: (type, data) => this._handleContextMenu(type, data, 'left'),
+            onContextMenu: (type, data, event) => this._handleContextMenu(type, data, 'left', event),
             showQuickAccess: true,
             panelId: 'left',
             getScanId: this.getScanId,
@@ -150,7 +150,7 @@ export class ExplorerDualPanel {
         });
     }
 
-    _handleContextMenu(type, data, panelSide) {
+    _handleContextMenu(type, data, panelSide, event) {
         // Set active panel to the one that was right-clicked
         if (this.activePanel !== panelSide) {
             this.activePanel = panelSide;
@@ -165,7 +165,7 @@ export class ExplorerDualPanel {
         };
 
         if (this.onContextMenu) {
-            this.onContextMenu(type, extendedData);
+            this.onContextMenu(type, extendedData, event);
         }
     }
 

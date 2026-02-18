@@ -1,5 +1,5 @@
 use serde_json::{json, Value};
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 use std::path::Path;
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
@@ -411,6 +411,85 @@ pub async fn open_file(file_path: String) -> Result<Value, String> {
 pub async fn show_in_explorer(file_path: String) -> Result<Value, String> {
     crate::ps::run_ps(&format!("explorer.exe /select,'{}'", file_path.replace("'", "''"))).await?;
     Ok(json!({ "success": true }))
+}
+
+// === Run as Admin ===
+
+#[tauri::command]
+pub async fn run_as_admin(file_path: String) -> Result<Value, String> {
+    let safe_path = file_path.replace("'", "''");
+    // Validate: only allow executable files
+    let ext = std::path::Path::new(&file_path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+    if ext != "exe" && ext != "msi" && ext != "bat" && ext != "cmd" && ext != "ps1" {
+        return Err(format!("Nur ausführbare Dateien können als Administrator gestartet werden (erhalten: .{})", ext));
+    }
+    if !std::path::Path::new(&file_path).exists() {
+        return Err("Datei existiert nicht".to_string());
+    }
+    let script = format!("Start-Process -FilePath '{}' -Verb RunAs", safe_path);
+    match crate::ps::run_ps(&script).await {
+        Ok(_) => Ok(json!({ "success": true })),
+        Err(e) => Ok(json!({ "success": false, "error": format!("Elevation fehlgeschlagen: {}", e) })),
+    }
+}
+
+// === Archive Extraction ===
+
+#[tauri::command]
+pub async fn extract_archive(archive_path: String, dest_dir: Option<String>) -> Result<Value, String> {
+    let safe_archive = archive_path.replace("'", "''");
+
+    // Validate archive exists
+    if !std::path::Path::new(&archive_path).exists() {
+        return Err("Archiv-Datei existiert nicht".to_string());
+    }
+
+    let ext = std::path::Path::new(&archive_path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+
+    // Determine destination: subfolder next to archive if not specified
+    let destination = if let Some(d) = dest_dir {
+        d.replace("'", "''")
+    } else {
+        let stem = std::path::Path::new(&archive_path)
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("extracted");
+        let parent = std::path::Path::new(&archive_path)
+            .parent()
+            .and_then(|p| p.to_str())
+            .unwrap_or(".");
+        format!("{}\\{}", parent, stem).replace("'", "''")
+    };
+
+    let script = match ext.as_str() {
+        "zip" => format!(
+            "Expand-Archive -LiteralPath '{}' -DestinationPath '{}' -Force; Write-Output 'OK'",
+            safe_archive, destination
+        ),
+        _ => return Err(format!(
+            "Archivformat '.{}' wird derzeit nicht unterstützt. Nur .zip wird nativ unterstützt.",
+            ext
+        )),
+    };
+
+    match crate::ps::run_ps(&script).await {
+        Ok(output) => {
+            if output.trim().contains("OK") || output.trim().is_empty() {
+                Ok(json!({ "success": true, "destination": destination.replace("''", "'") }))
+            } else {
+                Ok(json!({ "success": false, "error": output.trim() }))
+            }
+        }
+        Err(e) => Err(format!("Entpacken fehlgeschlagen: {}", e)),
+    }
 }
 
 // === Context Menu ===
@@ -1646,9 +1725,41 @@ pub async fn is_shell_context_menu_registered() -> Result<Value, String> {
 // === Global Hotkey ===
 
 #[tauri::command]
-pub async fn set_global_hotkey(_accelerator: String) -> Result<Value, String> {
-    // Requires tauri-plugin-global-shortcut — keep as stub until plugin is added
-    Ok(json!({ "stub": true, "message": "Globaler Hotkey benötigt das tauri-plugin-global-shortcut Plugin" }))
+pub async fn set_global_hotkey(app: tauri::AppHandle, accelerator: String) -> Result<Value, String> {
+    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+
+    // Alle bisherigen Shortcuts entfernen
+    let _ = app.global_shortcut().unregister_all();
+
+    if accelerator.is_empty() {
+        // Leerer String = Hotkey deaktivieren
+        let mut prefs = read_json_file("preferences.json");
+        if let Some(obj) = prefs.as_object_mut() { obj.insert("globalHotkey".to_string(), json!("")); }
+        let _ = write_json_file("preferences.json", &prefs);
+        return Ok(json!({ "success": true, "hotkey": "" }));
+    }
+
+    // Shortcut registrieren
+    let accel_clone = accelerator.clone();
+    let app_clone = app.clone();
+    app.global_shortcut()
+        .on_shortcut(accelerator.parse::<tauri_plugin_global_shortcut::Shortcut>().map_err(|e| format!("Ungültiger Hotkey: {}", e))?, move |_app, _shortcut, event| {
+            if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                // Fenster anzeigen/fokussieren
+                if let Some(w) = app_clone.get_webview_window("main") {
+                    let _ = w.unminimize();
+                    let _ = w.show();
+                    let _ = w.set_focus();
+                }
+            }
+        })
+        .map_err(|e| format!("Hotkey konnte nicht registriert werden: {}", e))?;
+
+    // In Preferences speichern
+    let mut prefs = read_json_file("preferences.json");
+    if let Some(obj) = prefs.as_object_mut() { obj.insert("globalHotkey".to_string(), json!(&accel_clone)); }
+    let _ = write_json_file("preferences.json", &prefs);
+    Ok(json!({ "success": true, "hotkey": accel_clone }))
 }
 
 #[tauri::command]
@@ -3831,7 +3942,10 @@ $result | ConvertTo-Json -Compress"#, ips = http_ips_str);
         let is_local = ip == local_ip;
         let is_gateway = ip == gateway_ip;
         let (device_type, base_label, device_icon) =
-            crate::oui::classify_device(&effective_vendor, &hostname, &open_port_numbers, is_local, is_gateway);
+            crate::oui::classify_device(
+                &effective_vendor, &hostname, &open_port_numbers, is_local, is_gateway,
+                &friendly_name, &model_name, &ssdp_description,
+            );
 
         // Build enriched device label: prefer friendlyName/modelName over generic label
         let device_label = if !friendly_name.is_empty() && !is_local && !is_gateway {

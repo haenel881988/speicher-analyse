@@ -209,7 +209,7 @@ export class FileTypeChart {
             row.oncontextmenu = (e) => {
                 e.preventDefault();
                 if (this.onContextMenu) {
-                    this.onContextMenu('file', { path: row.dataset.path, name: row.dataset.name });
+                    this.onContextMenu('file', { path: row.dataset.path, name: row.dataset.name }, e);
                 }
             };
         });

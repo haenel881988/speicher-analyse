@@ -45,6 +45,64 @@ Weitere Funktionen fehlen bei entsprechenden Dateitypen, bei Bildern z.B.: die A
 
 
 
+# Strategische Entscheidungen
+
+## Entfernung: Netzwerk-Scanner (IP Scanner) — Geplant
+
+**Entscheidung (18.02.2026):** Der gesamte Netzwerk-Scanner soll aus der App entfernt werden.
+
+**Begründung:**
+- ARP-Scan, Ping-Sweep und Port-Scanning werden von Enterprise-Virenscannern (CrowdStrike, Sentinel One, Carbon Black) als "Network Discovery" oder "Lateral Movement Reconnaissance" erkannt
+- Die App könnte in Firmenumgebungen blockiert oder als Sicherheitsrisiko eingestuft werden
+- Firewall-Manipulation (blockProcess) löst höchste Alarmstufe bei Endpoint-Protection aus
+- Ein Festplattenanalyse-Tool hat keinen Business-Grund für Netzwerk-Scanning
+
+**Was entfernt wird:**
+- Aktiver Netzwerk-Scanner (scan_local_network, scan_network_active, scan_device_ports, get_smb_shares)
+- Firewall-Verwaltung (get_firewall_rules, block_process, unblock_process)
+- OUI-Datenbank (oui.rs)
+- Netzwerk-Scan-UI (Geräte-Scanner Tab im Netzwerk-Monitor)
+
+**Was BLEIBT (unbedenklich):**
+- TCP-Verbindungen pro Prozess anzeigen (get_connections, get_grouped_connections) — liest nur lokale Daten
+- Bandbreite/Traffic-Übersicht (get_bandwidth, get_bandwidth_history)
+- DNS-Cache anzeigen/leeren (get_dns_cache, clear_dns_cache)
+- WiFi-Info (get_wifi_info)
+- Verbindungs-Verlauf und -Aufzeichnung
+
+**Auswirkung auf Produktstrategie:**
+- Stufe 2 "Netzwerk & Sicherheit" wird überarbeitet: Netzwerk-Scanner und Firewall-Verwaltung entfallen
+- Issue #11 (Paketaufzeichnung) wird gestrichen — selbes AV-Risiko
+- Issue #20 (Geräte falsch erkannt) wird obsolet
+- GPO-Scanner und Sicherheits-Check bleiben (betreffen nur den lokalen PC)
+
+**Status:** Geplant — Umsetzung in nächster Version
+
+---
+
+## Entfernung: Registry Cleaner — Geplant
+
+**Entscheidung (18.02.2026):** Der Registry Cleaner soll aus der App entfernt werden.
+
+**Begründung:**
+- Microsoft rät seit Jahren offiziell davon ab — bringt keinen messbaren Leistungsvorteil
+- Registry-Manipulation wird von AV-Software als "Registry Tampering" oder "PUP" (Potentially Unwanted Program) gemeldet
+- Haftungsrisiko: Wenn ein System nach Registry-Cleaning Probleme hat, wird der App die Schuld gegeben
+- Vertrauensverlust: Seriöse IT-Profis meiden Tools die Registry-Cleaning anbieten
+
+**Was entfernt wird:**
+- scan_registry, clean_registry, export_registry_backup, restore_registry_backup
+- Registry-Tab in der Sidebar (Bereinigung → Registry)
+- Registry-bezogener Code in commands.rs
+
+**Was BLEIBT:**
+- Registry-LESEN (z.B. für Software-Audit, Autostart-Einträge, Privacy-Settings) — das ist normal und unbedenklich
+- Autostart-Manager (liest/ändert Autostart-Einträge) — kein "Cleaner"
+
+**Status:** Geplant — Umsetzung in nächster Version
+
+---
+
 # Netzwerk
 
 
@@ -74,8 +132,8 @@ Weitere Funktionen fehlen bei entsprechenden Dateitypen, bei Bildern z.B.: die A
 | 5 | #10 | System-Profil (Hardware, Seriennummer, Hersteller-Links) | Planung |
 | 6 | #4 | Privacy Dashboard anwenderfreundlicher | Überarbeitung — wartet auf Test |
 | 7 | #5 | PDF Vollansicht + Bearbeitung | Offen |
-| 8 | #11 | Netzwerk-Paketaufzeichnung (Deep Packet Inspection) | Idee |
-| 9 | #20 | Netzwerk-Geräte werden falsch erkannt (z.B. Router als Drucker) | Root Cause gefunden |
+| ~~8~~ | ~~#11~~ | ~~Netzwerk-Paketaufzeichnung~~ | ENTFALLEN (AV-Risiko) |
+| ~~9~~ | ~~#20~~ | ~~Netzwerk-Geräte falsch erkannt~~ | OBSOLET (Scanner wird entfernt) |
 | 10 | #12 | WCAG-Kontrast vollständig WCAG 2.2 konform | Teilweise umgesetzt |
 | 11 | #13 | Fenster-Bereiche frei verschiebbar/skalierbar | Offen |
 | 12 | #14 | Echte Terminal-Emulation (Farben, Cursor, interaktive Tools) | Teilweise |
@@ -664,30 +722,22 @@ Die App hat bereits einen beeindruckenden Funktionsumfang. Jetzt geht es darum, 
 
 ---
 
-## Stufe 2 — Netzwerk & Sicherheit
+## Stufe 2 — Sicherheit & Systemanalyse
 
-> **Ziel:** Die App wird zum Sicherheits- und Netzwerk-Werkzeug. Nicht nur sehen was auf dem eigenen PC passiert, sondern auch was im Netzwerk los ist.
-> **Zielgruppe:** Admins, sicherheitsbewusste Power-User, Heimnetzwerk-Enthusiasten
+> **Ziel:** Die App wird zum Sicherheits-Werkzeug. Den eigenen PC gründlich verstehen und schützen.
+> **Zielgruppe:** Admins, sicherheitsbewusste Power-User
+>
+> **Hinweis (18.02.2026):** Netzwerk-Scanner und Firewall-Verwaltung wurden gestrichen (AV-Risiko). Paketaufzeichnung (Issue #11) ebenfalls entfallen. Fokus liegt auf lokaler Systemanalyse.
 
 ### Was in dieser Stufe passiert
 
-Die Grundlagen sind da: Netzwerk-Monitor, Geräte-Scanner, Verbindungs-Verlauf. Stufe 2 vertieft diese Funktionen und macht sie professioneller.
+~~Die Grundlagen sind da: Netzwerk-Monitor, Geräte-Scanner, Verbindungs-Verlauf. Stufe 2 vertieft diese Funktionen und macht sie professioneller.~~ Stufe 2 fokussiert sich auf lokale Sicherheitsanalyse: GPO-Scanner, erweiterter Sicherheits-Check, Systemhärtung — alles ohne Netzwerk-Scanning.
 
 ### Geplante Verbesserungen (Stufe 2)
 
-#### 2.1 Netzwerk-Paketaufzeichnung — Issue #11
+#### ~~2.1 Netzwerk-Paketaufzeichnung — Issue #11~~ ENTFALLEN
 
-**Was es ist:** Nicht nur sehen WELCHE Programme ins Internet verbinden, sondern auch WAS sie senden.
-
-**Was der Nutzer sieht:**
-- "Chrome hat in den letzten 10 Minuten 47 MB an Google gesendet — davon 12 MB an Werbe-Netzwerke"
-- Verdächtige Verbindungen im Detail aufschlüsseln
-- Beweise sammeln wenn eine App sich verdächtig verhält
-- Einfacher als Wireshark, aber deutlich mehr als nur eine Verbindungsliste
-
-**Warum das wichtig ist:** GlassWire macht etwas Ähnliches, kostet aber 35 Euro pro Jahr und kann nur Netzwerk. In der App wäre es ein Modul von vielen — mehr Wert für das Geld.
-
-→ *Details: siehe Issue #11 weiter oben*
+> Gestrichen am 18.02.2026 — AV-Software erkennt Paketaufzeichnung als verdächtige Aktivität. Siehe "Strategische Entscheidungen" oben.
 
 ---
 
@@ -722,28 +772,22 @@ Die Grundlagen sind da: Netzwerk-Monitor, Geräte-Scanner, Verbindungs-Verlauf. 
 
 ---
 
-#### 2.4 Firewall-Verwaltung
+#### ~~2.4 Firewall-Verwaltung~~ ENTFALLEN
 
-**Was sich ändert:** Statt nur Firewall-Regeln anzuzeigen, kann der Nutzer sie auch verwalten.
-
-**Was der Nutzer sieht:**
-- "Diese App hat 14 Verbindungen ins Internet — möchtest du sie blockieren?"
-- Ein-Klick Firewall-Regel erstellen, direkt aus dem Netzwerk-Monitor
-- Übersicht: welche Programme dürfen ins Internet, welche nicht
-- Vorlagen für häufige Szenarien: "Alle Telemetrie blockieren", "Nur Browser erlauben"
+> Gestrichen am 18.02.2026 — Firewall-Manipulation löst höchste AV-Alarmstufe aus. Siehe "Strategische Entscheidungen" oben.
 
 ---
 
-### Stufe 2 — Zusammenfassung
+### Stufe 2 — Zusammenfassung (aktualisiert 18.02.2026)
 
 | Was | Nutzen | Aufwand |
 |-----|--------|---------|
-| Paketaufzeichnung (#11) | Sehen was Apps wirklich senden | Gross |
+| ~~Paketaufzeichnung (#11)~~ | ~~Sehen was Apps wirklich senden~~ | ~~Gross~~ ENTFALLEN |
 | GPO-Scanner | Versteckte Probleme finden die sonst niemand findet | Mittel |
 | Erweiterter Sicherheits-Check | Umfassender Schutz-Bericht | Mittel |
-| Firewall-Verwaltung | Programme blockieren ohne Fachwissen | Klein |
+| ~~Firewall-Verwaltung~~ | ~~Programme blockieren ohne Fachwissen~~ | ~~Klein~~ ENTFALLEN |
 
-**Ergebnis Stufe 2:** Die App wird zum "Sicherheits-Berater" — nicht nur Speicher aufräumen, sondern den PC wirklich verstehen und schützen. Das spricht besonders Admins und sicherheitsbewusste Nutzer an.
+**Ergebnis Stufe 2:** Die App wird zum "Sicherheits-Berater" — GPO-Scanner und Sicherheits-Check analysieren den lokalen PC gründlich, ohne Netzwerk-Aktivität die AV-Software alarmieren könnte.
 
 ---
 

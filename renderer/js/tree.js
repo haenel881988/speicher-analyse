@@ -163,7 +163,7 @@ export class TreeView {
                     path: node.path,
                     name: node.name,
                     selectedPaths: [...this.selectedPaths],
-                });
+                }, e);
             }
         };
 

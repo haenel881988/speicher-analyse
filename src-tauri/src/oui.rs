@@ -248,15 +248,25 @@ pub fn lookup(mac: &str) -> Option<String> {
     oui_table().get(hex.as_str()).map(|s| s.to_string())
 }
 
-/// Classify device based on open ports, hostname, vendor, and role flags.
+/// Classify device based on open ports, hostname, vendor, SSDP data, and role flags.
 /// Returns (deviceType, deviceLabel, deviceIcon).
 /// Labels include vendor name when known (e.g. "Brother Drucker" instead of "Drucker").
+///
+/// Classification priority:
+/// 1. Known roles (local PC, gateway)
+/// 2. SSDP/UPnP data (most reliable — device tells us what it IS)
+/// 3. Port-based heuristics (strong signals like IPP/JetDirect)
+/// 4. Hostname patterns
+/// 5. Vendor name (weakest signal — NEVER alone for multi-product vendors)
 pub fn classify_device(
     vendor: &str,
     hostname: &str,
     open_ports: &[u16],
     is_local: bool,
     is_gateway: bool,
+    ssdp_friendly_name: &str,
+    ssdp_model_name: &str,
+    ssdp_model_description: &str,
 ) -> (String, String, String) {
     // Known roles
     if is_local {
@@ -271,6 +281,56 @@ pub fn classify_device(
         return (s("router"), label, s("wifi"));
     }
 
+    // === Priority 1: SSDP/UPnP data (device self-identification) ===
+    let ssdp_combined = format!("{} {} {}",
+        ssdp_friendly_name.to_lowercase(),
+        ssdp_model_name.to_lowercase(),
+        ssdp_model_description.to_lowercase());
+    let ssdp_trimmed = ssdp_combined.trim();
+
+    if !ssdp_trimmed.is_empty() {
+        // Printer keywords in SSDP
+        if ssdp_trimmed.contains("printer") || ssdp_trimmed.contains("drucker")
+            || ssdp_trimmed.contains("mfp") || ssdp_trimmed.contains("laserjet")
+            || ssdp_trimmed.contains("inkjet") || ssdp_trimmed.contains("deskjet")
+            || ssdp_trimmed.contains("officejet") || ssdp_trimmed.contains("pixma")
+        {
+            return (s("printer"), vl(vendor, "Drucker"), s("printer"));
+        }
+        // Router/Gateway in SSDP
+        if ssdp_trimmed.contains("router") || ssdp_trimmed.contains("internet gateway")
+            || ssdp_trimmed.contains("wlan") || ssdp_trimmed.contains("dsl")
+        {
+            return (s("router"), vl(vendor, "Router"), s("wifi"));
+        }
+        // NAS keywords
+        if ssdp_trimmed.contains("nas") || ssdp_trimmed.contains("network storage")
+            || ssdp_trimmed.contains("diskstation") || ssdp_trimmed.contains("readynas")
+        {
+            return (s("nas"), vl(vendor, "NAS-Speicher"), s("hard-drive"));
+        }
+        // Media renderer / TV
+        if ssdp_trimmed.contains("mediarenderer") || ssdp_trimmed.contains("media renderer")
+            || ssdp_trimmed.contains("television") || ssdp_trimmed.contains("smart tv")
+            || ssdp_trimmed.contains("smarttv")
+        {
+            return (s("tv"), vl(vendor, "Smart-TV/Streaming"), s("tv"));
+        }
+        // Camera
+        if ssdp_trimmed.contains("camera") || ssdp_trimmed.contains("kamera")
+            || ssdp_trimmed.contains("ipcam") || ssdp_trimmed.contains("webcam")
+        {
+            return (s("camera"), vl(vendor, "IP-Kamera"), s("camera"));
+        }
+        // Speaker
+        if ssdp_trimmed.contains("speaker") || ssdp_trimmed.contains("lautsprecher")
+            || ssdp_trimmed.contains("sonos") || ssdp_trimmed.contains("soundbar")
+        {
+            return (s("speaker"), vl(vendor, "Lautsprecher"), s("speaker"));
+        }
+    }
+
+    // === Priority 2: Port-based heuristics ===
     let has_http = open_ports.contains(&80) || open_ports.contains(&443);
     let has_smb = open_ports.contains(&445) || open_ports.contains(&139);
     let has_rdp = open_ports.contains(&3389);
@@ -287,14 +347,11 @@ pub fn classify_device(
         return (s("printer"), vl(vendor, "Drucker"), s("printer"));
     }
 
+    // === Priority 3: Hostname patterns ===
     // Printer by hostname pattern
     if h.contains("printer") || h.contains("brn") || h.contains("brw")
-        || h.contains("canon") || h.contains("epson") || h.contains("lexmark")
+        || h.contains("epson") || h.contains("lexmark")
     {
-        return (s("printer"), vl(vendor, "Drucker"), s("printer"));
-    }
-    // Printer by vendor
-    if v.contains("brother") || v.contains("canon") || v.contains("epson") || v.contains("lexmark") {
         return (s("printer"), vl(vendor, "Drucker"), s("printer"));
     }
 

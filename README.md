@@ -46,11 +46,14 @@ Kein Abo. Keine Cloud. Alles bleibt auf deinem Rechner.
 ```bash
 git clone https://github.com/haenel881988/speicher-analyse.git
 cd speicher-analyse
-npm install
-npm start
+cargo tauri dev    # Entwicklung (Hot-Reload)
+cargo tauri build  # Release-Build (MSI/NSIS-Installer)
 ```
 
-Voraussetzungen: [Node.js](https://nodejs.org/) 18+ und Windows 10/11.
+Voraussetzungen:
+- [Rust](https://rustup.rs/) (inkl. Cargo)
+- [WebView2](https://developer.microsoft.com/de-de/microsoft-edge/webview2/) (auf Windows 10/11 vorinstalliert)
+- Windows 10/11
 
 ---
 
@@ -79,11 +82,12 @@ Alle technischen Details: [Änderungsprotokoll](docs/protokoll/aenderungsprotoko
 
 ## Tech Stack
 
-- **Runtime:** Electron (Node.js + Chromium)
-- **Frontend:** Vanilla HTML/CSS/JS — kein React, kein Build-Step
-- **Charts:** Chart.js
-- **Terminal:** node-pty + xterm.js
-- **System-Zugriff:** PowerShell via Node.js
+- **Runtime:** Tauri v2 (Rust-Backend + System-WebView)
+- **Backend:** Rust (Commands, PowerShell-Aufrufe, Scan-Engine)
+- **Frontend:** Vanilla HTML/CSS/JS (ES Modules) — kein React, kein Build-Step
+- **Charts:** Chart.js v4
+- **PDF:** html2pdf.js
+- **System-Zugriff:** PowerShell via Rust (tokio::process)
 
 ---
 

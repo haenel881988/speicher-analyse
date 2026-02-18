@@ -83,6 +83,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
             use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 
@@ -139,6 +140,36 @@ pub fn run() {
                 tracing::info!("OUI-Datenbank geladen: {} Einträge", oui_count);
             }
 
+            // Gespeicherten Global Hotkey beim Start registrieren
+            {
+                use tauri_plugin_global_shortcut::GlobalShortcutExt;
+                let prefs_path = data_dir.join("preferences.json");
+                if let Ok(content) = std::fs::read_to_string(&prefs_path) {
+                    if let Ok(prefs) = serde_json::from_str::<serde_json::Value>(&content) {
+                        if let Some(hotkey) = prefs.get("globalHotkey").and_then(|v| v.as_str()) {
+                            if !hotkey.is_empty() {
+                                if let Ok(shortcut) = hotkey.parse::<tauri_plugin_global_shortcut::Shortcut>() {
+                                    let app_handle = app.handle().clone();
+                                    let result = app.global_shortcut().on_shortcut(shortcut, move |_app, _shortcut, event| {
+                                        if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                                            if let Some(w) = app_handle.get_webview_window("main") {
+                                                let _ = w.unminimize();
+                                                let _ = w.show();
+                                                let _ = w.set_focus();
+                                            }
+                                        }
+                                    });
+                                    match result {
+                                        Ok(_) => tracing::info!("Global Hotkey registriert: {}", hotkey),
+                                        Err(e) => tracing::warn!("Global Hotkey fehlgeschlagen: {}", e),
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             Ok(())
         })
         .on_menu_event(|app, event| {
@@ -192,6 +223,8 @@ pub fn run() {
             commands::file_properties,
             commands::open_file,
             commands::show_in_explorer,
+            commands::run_as_admin,
+            commands::extract_archive,
             // Context Menu
             commands::show_context_menu,
             // Dialog

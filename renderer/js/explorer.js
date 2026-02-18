@@ -760,7 +760,7 @@ export class ExplorerView {
                     this.onContextMenu('directory', {
                         path: el.dataset.path,
                         name: el.querySelector('span')?.textContent || '',
-                    });
+                    }, e);
                 }
             };
         });
@@ -902,7 +902,7 @@ export class ExplorerView {
                         path: row.dataset.path,
                         name: row.dataset.name,
                         selectedPaths: [...this.selectedPaths],
-                    });
+                    }, e);
                 }
             };
 
@@ -946,7 +946,7 @@ export class ExplorerView {
             if (!e.target.closest('tr[data-path]')) {
                 e.preventDefault();
                 if (this.onContextMenu) {
-                    this.onContextMenu('tree-background', { path: this.currentPath });
+                    this.onContextMenu('tree-background', { path: this.currentPath }, e);
                 }
             }
         };

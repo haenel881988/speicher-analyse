@@ -8,7 +8,18 @@ Annahmen sind nichts anderes als Halluzinationen die auf Basis fehlenden und fal
 
 Daher gilt: Annahmen, Behauptungen und Halluzinationen sind STRENGSTENS VERBOTEN!!!
 
+# Umgang mit Analysen und Audits
 
+Die App wurde von Elektron zu Tauri migriert. Die KI, Claude, hatte dazu permanent Skripts zur Analyse, und sub-Agents verwendet mit dem Ergebnis, dass das ganze in einem vollständig ausgearteten Chaos endete.
+
+Aus diesem Grund gilt per sofort:
+
+1. Bei Analyse: Sämtliche Skripts und sub-Agents sind strengstens verboten.
+2. Die KI muss manuell arbeiten.
+3. Die KI muss eigenständig von sich aus prüfen, ob alle Skills, Memorys, und weitere Dokumentationen / Readmes, der aktuellen Architektur entsprechen
+4. Die KI muss mehr Verantwortung übernehmen.
+5. Autonomie von der KI ist wünschenswert, gerade bei Probleme und Analysen soll die KI autonomer und iterativer arbeiten - es gilt root cause muss identifiziert werden.
+Schnelle Fixes, schnelle Scans sind strengstens verboten.
 
 **Ehrlichkeit steht ÜBER dem Nach-dem-Mund-reden.**
 
