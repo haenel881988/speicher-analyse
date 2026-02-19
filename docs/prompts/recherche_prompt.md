@@ -2,7 +2,7 @@
 
 > **Zweck:** Dieser Prompt wird verwendet um das gesamte Projekt systematisch auf Probleme, Schwachstellen und Optimierungsmöglichkeiten zu durchleuchten.
 > **Anwendung:** Kopiere diesen Prompt in eine neue Claude-Sitzung (oder verwende ihn als Kontext) zusammen mit dem Quellcode.
-> **Version:** 2.1 — erweitert um Verifikationsschritte, Konsistenzprüfungen und Querverweise
+> **Version:** 2.2 — ergänzt um Tauri Events, Build/Packaging, Daten-Upgrade-Pfad
 
 ---
 
@@ -479,28 +479,108 @@ Das Dokument `docs/issues/anforderungen.md` definiert ~150 Backend-Funktionen mi
 
 ---
 
-### 11. Toter Code (Dead Code)
+### 11. Tauri Events (emit/listen)
+
+> Die App nutzt ZWEI IPC-Mechanismen: `invoke()` für Request/Response UND `emit()`/`listen()` für asynchrone Events (Fortschritt, Abschluss, Fehler). Der Dreifach-Abgleich (§9.1) deckt nur `invoke()` ab — Events sind ein separater Kanal.
+
+#### 11.1 Event-Konsistenz
+- [ ] Welche Events werden im Rust-Backend emittiert? (`app_handle.emit(...)` oder `window.emit(...)`)
+- [ ] Welche Events werden im Frontend gehört? (`listen()` Aufrufe in `tauri-bridge.js` oder direkt in Views)
+- [ ] Gibt es Events die emittiert aber nie gehört werden? (toter Event-Code)
+- [ ] Gibt es Listener für Events die nie emittiert werden? (warten auf nichts)
+- [ ] Werden Event-Listener beim View-Wechsel korrekt entfernt? (`unlisten()`)
+
+#### 11.2 Scan-Events (kritischer Pfad)
+
+Der Scan-Fortschritt ist der wichtigste Event-basierte Datenfluss:
+
+```
+Rust (scan.rs/commands.rs)
+  → emit("scan-progress", {folders, files, size, currentPath})
+  → emit("scan-complete", {scanId, stats})
+  → emit("scan-error", {message})
+
+Frontend (scanner.js)
+  → listen("scan-progress", callback)
+  → listen("scan-complete", callback)
+  → listen("scan-error", callback)
+```
+
+- [ ] Werden alle drei Events (progress/complete/error) sowohl emittiert als auch gehört?
+- [ ] Was passiert wenn ein Event verloren geht? (kein Retry, kein Timeout?)
+- [ ] Werden Event-Daten korrekt serialisiert? (Serde ↔ JSON)
+- [ ] Gibt es Duplikat-Events? (`duplicate-progress`, `duplicate-complete`)
+- [ ] Werden alle Event-Listener in `destroy()` aufgeräumt?
+
+---
+
+### 12. Build, Packaging & Deployment
+
+> Praktische Prüfung ob die App überhaupt korrekt gebaut und verteilt werden kann.
+
+#### 12.1 Build-Prozess
+- [ ] Kompiliert `cargo tauri build` ohne Fehler?
+- [ ] Gibt es Compiler-Warnungen? (`warnings` in `cargo build`)
+- [ ] Wie lange dauert ein Full Build? (Dev vs. Release)
+- [ ] Wie gross ist die finale Binary? (MSI/NSIS-Installer)
+- [ ] Ist die Binary-Grösse angemessen oder aufgebläht? (`opt-level = "s"` + `lto = true` + `strip = true`)
+
+#### 12.2 Installer (MSI/NSIS)
+- [ ] Funktioniert der NSIS-Installer auf einem frischen Windows? (WebView2 Bootstrapper?)
+- [ ] Wird bei der Installation nach Admin-Rechten gefragt? Ist das nötig?
+- [ ] Funktioniert ein Upgrade-Install korrekt? (neue Version über alte installieren)
+- [ ] Werden bei der Deinstallation alle Dateien entfernt? (%APPDATA%-Daten, Registry-Einträge)
+- [ ] Sind die Installer-Sprachen korrekt konfiguriert? (`"languages": ["German"]`)
+
+#### 12.3 WebView2 Runtime
+- [ ] Wird WebView2 im Installer mitgeliefert oder zur Laufzeit heruntergeladen?
+- [ ] Was passiert wenn WebView2 nicht installiert ist und kein Internet vorhanden ist?
+- [ ] Welche WebView2-Version wird minimal benötigt? (Polyfill für `Uint8Array.toHex` in `index.html` deutet auf ältere Versionen hin)
+
+---
+
+### 13. Daten-Upgrade-Pfad (Electron → Tauri)
+
+> Wenn ein bestehender User von der alten Electron-Version auf die neue Tauri-Version wechselt: Funktioniert das reibungslos?
+
+#### 13.1 Gespeicherte Daten
+- [ ] Wo speichert die Electron-Version Daten? (`%APPDATA%/speicher-analyse/`)
+- [ ] Wo speichert die Tauri-Version Daten? (Tauri `app_data_dir()`)
+- [ ] Sind die Pfade identisch oder verschieden?
+- [ ] Kann die Tauri-Version die alten Scan-Daten lesen? (Format-Kompatibilität: JSON vs. bincode)
+- [ ] Werden alte Preferences/Einstellungen übernommen?
+- [ ] Werden alte File-Tags (Farb-Labels) übernommen?
+
+#### 13.2 Konfliktfreier Übergang
+- [ ] Können alte und neue Version gleichzeitig installiert sein? (Konflikt bei %APPDATA%?)
+- [ ] Gibt es eine Daten-Migration beim ersten Start der neuen Version?
+- [ ] Werden veraltete Datendateien der alten Version aufgeräumt?
+- [ ] Wird der User informiert wenn alte Daten gefunden werden? ("Wir haben deine vorherigen Scan-Ergebnisse importiert")
+
+---
+
+### 14. Toter Code (Dead Code)
 
 > Nach einer Migration + strategischen Entfernungen bleibt oft Code zurück der nie ausgeführt wird. Toter Code ist ein Wartungs- und Sicherheitsrisiko.
 
-#### 11.1 CSS Dead Code
+#### 14.1 CSS Dead Code
 - [ ] Gibt es CSS-Klassen in `style.css` die in keiner HTML- oder JS-Datei referenziert werden?
 - [ ] Gibt es CSS-Regeln für entfernte Features? (Netzwerk-Scanner, Registry-Cleaner)
 - [ ] Gibt es Media Queries oder Theme-Varianten die nie aktiv werden?
 
-#### 11.2 JavaScript Dead Code
+#### 14.2 JavaScript Dead Code
 - [ ] Gibt es Funktionen in Views die nie aufgerufen werden?
 - [ ] Gibt es importierte Module/Dateien die nicht verwendet werden?
 - [ ] Gibt es Event Listener für Events die nie ausgelöst werden?
 - [ ] Gibt es Branches in if/else die nie erreicht werden können?
 
-#### 11.3 Rust Dead Code
+#### 14.3 Rust Dead Code
 - [ ] Gibt es `#[allow(dead_code)]` Attribute die toten Code verstecken?
 - [ ] Gibt es Hilfsfunktionen in `commands.rs`/`ps.rs`/`scan.rs` die nie aufgerufen werden?
 - [ ] Gibt es `use`-Imports die nicht verwendet werden?
 - [ ] Meldet `cargo build` Warnungen über ungenutzten Code?
 
-#### 11.4 Dokumentation Dead Code
+#### 14.4 Dokumentation Dead Code
 - [ ] Gibt es Dokumentationsdateien die auf nichts mehr verweisen? (z.B. `netzwerk-erkennung.md` nach Entfernung des Scanners)
 - [ ] Gibt es interne Links in Docs die auf gelöschte Dateien/Abschnitte zeigen?
 
@@ -567,7 +647,28 @@ grep -n "format!(" src-tauri/src/commands.rs | head -50
 grep -A1 "catch" renderer/js/*.js | grep "{}"
 ```
 
-### Schritt 6: Memory-Leak-Risiko
+### Schritt 6: Event-Konsistenz
+```bash
+# Events die im Rust-Backend emittiert werden
+grep -rn "\.emit(" src-tauri/src/ --include="*.rs"
+
+# Events die im Frontend gehört werden
+grep -rn "listen(" renderer/js/ --include="*.js" | grep -v "addEventListener"
+
+# Events die im Frontend entfernt werden (unlisten)
+grep -rn "unlisten\|removeEventListener" renderer/js/ --include="*.js"
+```
+
+### Schritt 7: Build-Check
+```bash
+# Kompiliert die App ohne Fehler?
+cargo build --manifest-path src-tauri/Cargo.toml 2>&1 | grep -E "warning|error"
+
+# Binary-Grösse (Release)
+ls -lh src-tauri/target/release/*.exe 2>/dev/null
+```
+
+### Schritt 8: Memory-Leak-Risiko
 ```bash
 # Views ohne destroy()
 for f in renderer/js/*.js; do
@@ -613,8 +714,8 @@ Erstelle eine neue Datei `docs/issues/issue_tiefenanalyse.md` mit ALLEN gefunden
 # Tiefenanalyse-Ergebnisse — Speicher Analyse v7.2.1
 
 **Datum:** [DATUM]
-**Analysiert von:** Claude (Tiefenanalyse-Prompt v2.0)
-**Analysierte Bereiche:** 8 (Migration, Security, Performance, Stabilität, Architektur, UX, Windows, Dependencies)
+**Analysiert von:** Claude (Tiefenanalyse-Prompt v2.2)
+**Analysierte Bereiche:** 14 (Migration, Security, Performance, Stabilität, Architektur, UX, Windows, Dependencies, Konsistenz, Anti-Patterns, Events, Build, Upgrade-Pfad, Dead Code)
 
 ---
 
@@ -712,4 +813,4 @@ Füge in `docs/issues/issue.md` unter "Offene Issues" einen Verweis auf die Tief
 
 ---
 
-*Letzte Aktualisierung: 19.02.2026 — v2.1 (erweitert um Verifikation, Konsistenz, Querverweise)*
+*Letzte Aktualisierung: 19.02.2026 — v2.2 (ergänzt um Events, Build/Packaging, Daten-Upgrade-Pfad)*
