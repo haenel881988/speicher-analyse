@@ -609,7 +609,7 @@ export default function ExplorerView() {
                       <td className={entry.isDirectory ? 'explorer-col-name dir-name' : 'explorer-col-name'} title={entry.path}>
                         {tag && <span className="explorer-tag-dot" style={{ background: TAG_COLORS[tag.color]?.hex || '#888' }} title={tag.note || tag.color} />}
                         {isRenaming ? (
-                          <input type="text" className="explorer-inline-rename" value={renameValue} autoFocus
+                          <input type="text" className="explorer-inline-rename" value={renameValue} autoFocus aria-label="Dateiname bearbeiten"
                             onChange={e => setRenameValue(e.target.value)}
                             onKeyDown={e => {
                               if (e.key === 'Enter') { e.preventDefault(); handleRename(); }

@@ -118,7 +118,7 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
           <line x1="3" y1="18" x2="21" y2="18" />
         </svg>
       </button>
-      <nav className="sidebar-nav" role="tablist" aria-label="Hauptnavigation">
+      <nav className="sidebar-nav" aria-label="Hauptnavigation">
         {NAV_GROUPS.map(group => (
           <div
             key={group.id}
