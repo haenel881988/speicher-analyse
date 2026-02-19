@@ -4,17 +4,30 @@
   "description": "Speicher Analyse - Disk Space Analyzer & System Optimizer (Tauri v2)",
   "scripts": {
     "start": "cargo tauri dev",
-    "dev": "cargo tauri dev",
-    "build": "cargo tauri build",
-    "tauri": "tauri"
+    "dev": "vite --config vite.config.ts",
+    "build": "tsc && vite build --config vite.config.ts",
+    "preview": "vite preview --config vite.config.ts",
+    "tauri": "tauri",
+    "tauri:dev": "cargo tauri dev",
+    "tauri:build": "cargo tauri build"
   },
   "author": "Speicher Analyse",
   "license": "MIT",
   "devDependencies": {
     "@tauri-apps/cli": "^2.10.0",
-    "puppeteer-core": "^24.37.3"
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.4",
+    "puppeteer-core": "^24.37.3",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.1"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2.10.1"
+    "@tauri-apps/api": "^2.10.1",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
+    "pdfjs-dist": "^5.4.624",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
   }
 }

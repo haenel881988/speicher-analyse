@@ -4,9 +4,10 @@
   "version": "7.2.1",
   "identifier": "com.speicher-analyse.app",
   "build": {
-    "frontendDist": "../renderer",
-    "beforeDevCommand": "",
-    "beforeBuildCommand": ""
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
   },
   "app": {
     "windows": [
