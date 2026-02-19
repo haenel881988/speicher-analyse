@@ -114,7 +114,7 @@ Weitere Funktionen fehlen bei entsprechenden Dateitypen, bei Bildern z.B.: die A
 - Registry-LESEN (z.B. für Software-Audit, Autostart-Einträge, Privacy-Settings) — das ist normal und unbedenklich
 - Autostart-Manager (liest/ändert Autostart-Einträge) — kein "Cleaner"
 
-**Status:** Geplant — Umsetzung in nächster Version
+**Status:** Umgesetzt (19.02.2026) — Registry-Cleaner-Commands wurden nie ins Tauri portiert (K-1 Tiefenanalyse bestätigt). Verwaiste Registry-View-CSS entfernt (90 Zeilen). README aktualisiert.
 
 ---
 

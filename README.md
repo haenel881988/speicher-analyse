@@ -18,14 +18,12 @@ Kein Abo. Keine Cloud. Alles bleibt auf deinem Rechner.
 
 ### System-Optimierung
 - **Bereinigung** von Temp-Dateien, Caches, Logs und anderem Ballast
-- **Registry-Cleaner** findet verwaiste Einträge (mit automatischem Backup)
 - **Autostart-Manager** zeigt was heimlich mit Windows startet
 - **Bloatware-Erkennung** findet vorinstallierte Software die nur Platz frisst
 
 ### Sicherheit & Datenschutz
 - **Privacy Dashboard** zeigt welche Windows-Einstellungen deine Daten teilen
 - **Netzwerk-Monitor** deckt auf, welche Programme ins Internet verbinden — und zu wem
-- **Lokaler Geräte-Scanner** findet alle Geräte in deinem Netzwerk
 - **Sicherheits-Check** prüft Firewall, Updates, Benutzerkonten und mehr
 
 ### System-Info
