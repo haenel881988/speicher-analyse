@@ -66,7 +66,6 @@ const ALL_VIEWS = [
     ['registry', '#view-registry'],
     ['autostart', '#view-autostart'],
     ['services', '#view-services'],
-    ['bloatware', '#view-bloatware'],
     ['updates', '#view-updates'],
     ['cleanup', '#view-cleanup'],
 ];

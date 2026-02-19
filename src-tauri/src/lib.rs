@@ -255,9 +255,6 @@ pub fn run() {
             // Optimizer
             commands::get_optimizations,
             commands::apply_optimization,
-            // Bloatware
-            commands::scan_bloatware,
-            commands::uninstall_bloatware,
             // Updates
             commands::check_windows_updates,
             commands::get_update_history,

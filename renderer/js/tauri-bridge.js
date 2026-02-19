@@ -148,10 +148,6 @@
         getOptimizations: makeInvoke('get_optimizations'),
         applyOptimization: makeInvoke('apply_optimization', 'id'),
 
-        // === Bloatware ===
-        scanBloatware: makeInvoke('scan_bloatware'),
-        uninstallBloatware: makeInvoke('uninstall_bloatware', 'entry'),
-
         // === Updates ===
         checkWindowsUpdates: makeInvoke('check_windows_updates'),
         getUpdateHistory: makeInvoke('get_update_history'),

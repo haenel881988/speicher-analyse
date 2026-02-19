@@ -151,7 +151,7 @@ Weitere Funktionen fehlen bei entsprechenden Dateitypen, bei Bildern z.B.: die A
 |------|-------|-------|--------|
 | ~~1~~ | ~~#2 + #3~~ | ~~Scandaten überall speichern + wiederherstellen~~ | Bestätigt 19.02.2026 |
 | 2 | #7 | Intelligente Scandaten (Delta-Scan, Verlauf, Hintergrund) | Planung |
-| 3 | #8 | Intelligenter Bloatware-Scanner (5-Stufen-Bewertung) | Planung |
+| ~~3~~ | ~~#8~~ | ~~Intelligenter Bloatware-Scanner (5-Stufen-Bewertung)~~ | ENTFALLEN (Windows Defender) |
 | 4 | #9 | Apps-Kontrollzentrum (ersetzt "Updates"-Tab) | Planung |
 | 5 | #10 | System-Profil (Hardware, Seriennummer, Hersteller-Links) | Größtenteils umgesetzt |
 | 6 | #4 | Privacy Dashboard anwenderfreundlicher | Überarbeitung — wartet auf Test |
@@ -347,41 +347,11 @@ Eine Art "Waage für die Festplatte":
 
 ---
 
-## 8. Intelligenter Bloatware-Scanner
+## ~~8. Intelligenter Bloatware-Scanner~~ — ENTFALLEN
 
-**Simons Idee:** Der Scanner braucht Intelligenz. Nicht-zertifizierte Software ist NICHT automatisch Bloatware. Aber zertifizierte Software KANN trotzdem Scam sein. "System ist sauber" ist unrealistisch. Ähnlich wie Malwarebytes, nur seriös.
-
-### 8a. 5-Stufen-Bewertung (statt Ja/Nein)
-
-| Stufe | Farbe | Bedeutung | Beispiel |
-|-------|-------|-----------|----------|
-| **Vertrauenswürdig** | Grün | Bekannter Hersteller, sauber | Firefox, 7-Zip, VLC |
-| **Nicht zertifiziert** | Blau | Unbekannt, aber nicht gefährlich | Advanced IP Scanner |
-| **Fragwürdig** | Gelb | Zertifiziert aber aggressive Werbung/Datensammlung | Avast, McAfee |
-| **Bloatware** | Orange | Vorinstallierter Müll, frisst nur Platz | Hersteller-Trialware |
-| **Risiko** | Rot | Bekannte Sicherheitsprobleme oder Scam | Reimage Repair, Driver Updater |
-
-### 8b. "Was macht dieses Programm eigentlich?"
-- Bei jeder App eine kurze, verständliche Beschreibung
-- Oder: "Dieses Programm wurde von deinem PC-Hersteller vorinstalliert. Du hast es noch nie benutzt."
-
-### 8c. Ressourcen-Verbrauch pro App
-- Welche Apps fressen am meisten Festplattenplatz (inkl. Cache und Daten)?
-- Welche Apps starten heimlich mit Windows?
-- Eine Art "Stromrechnung" für jede App
-
-### 8d. Hintergrund-Aktivität aufdecken
-- "Diese App hat heute 47 Mal ins Internet gesendet, obwohl du sie gar nicht geöffnet hast"
-- Ergänzung zum Netzwerk-Monitor
-
-### 8e. Microsoft-Store Apps einbeziehen
-- Nicht nur klassisch installierte Programme, sondern auch Store-Apps scannen
-
-### 8f. Ehrliche Ergebnisse
-- Nie "System ist sauber" anzeigen wenn es das nicht ist
-- Ehrliche Zusammenfassung: "23 Programme geprüft — 18 vertrauenswürdig, 3 nicht zertifiziert, 2 fragwürdig"
-
-**Status:** Planung
+> **Entfallen (19.02.2026):** Simons Entscheidung — Bloatware-Erkennung ist nicht die Kernkompetenz dieser App. Dafür gibt es professionelle Virenscanner (Windows Defender) und Microsofts eigenes Tool zum Entfernen bösartiger Software (MSRT). Subjektive Klassifizierung ("ist das Bloatware?") birgt Haftungsrisiko und liefert keinen echten Mehrwert gegenüber bestehenden Lösungen.
+>
+> **Feature komplett entfernt:** Backend (scan_bloatware, uninstall_bloatware), Bridge, Frontend (bloatware.js, Sidebar-Button, CSS).
 
 ---
 
@@ -466,7 +436,7 @@ Eine Art "Waage für die Festplatte":
 
 > **Entfallen (19.02.2026):** Der gesamte IP-Scanner wurde aus der App entfernt (AV-Risiko). Damit ist die Geräte-Erkennung nicht mehr relevant.
 >
-> **Hinweis:** Das Grundproblem "statische Listen statt dynamische Erkennung" bleibt als Lehre für andere Bereiche (Bloatware, Software-Kategorisierung) relevant — siehe CLAUDE.md Regel "VERBOTEN: Statische Listen für Erkennung/Discovery".
+> **Hinweis:** Das Grundproblem "statische Listen statt dynamische Erkennung" bleibt als Lehre für andere Bereiche (Software-Kategorisierung) relevant — siehe CLAUDE.md Regel "VERBOTEN: Statische Listen für Erkennung/Discovery".
 
 ---
 
@@ -533,7 +503,7 @@ Eine Art "Waage für die Festplatte":
 
 ## 15. Vertrauens-System: Undo-Log mit Wiederherstellung
 
-**Problem:** Wenn die App etwas löscht (Registry-Einträge, Dateien, Bloatware), gibt es keine Möglichkeit das rückgängig zu machen.
+**Problem:** Wenn die App etwas löscht (Registry-Einträge, Dateien), gibt es keine Möglichkeit das rückgängig zu machen.
 
 **Was bisher gemacht wurde:**
 - Phase 1: Begründung + Risiko-Ampel für Registry-Cleaner und Software-Audit
@@ -687,19 +657,9 @@ Die App hat bereits einen beeindruckenden Funktionsumfang. Jetzt geht es darum, 
 
 ---
 
-#### 1.2 Intelligenter Bloatware-Scanner — Issue #8
+#### ~~1.2 Intelligenter Bloatware-Scanner — Issue #8~~ — ENTFALLEN
 
-**Was sich ändert:** Der Bloatware-Scanner bekommt ein 5-Stufen-Bewertungssystem statt einem simplen Ja/Nein.
-
-**Was der Nutzer sieht:**
-- Jedes Programm bekommt eine Bewertung: Vertrauenswürdig (grün), Nicht zertifiziert (blau), Fragwürdig (gelb), Bloatware (orange), Risiko (rot)
-- Kurze Erklärung: "Dieses Programm wurde von deinem PC-Hersteller vorinstalliert. Du hast es noch nie benutzt."
-- Ressourcenverbrauch pro App: Speicherplatz, Autostart-Einträge, Hintergrundaktivität
-- Ehrliche Zusammenfassung: Nie "System ist sauber" wenn es das nicht ist
-
-**Warum das wichtig ist:** Bestehende Bloatware-Scanner machen entweder Panik (alles ist rot!) oder sind zu harmlos. Die 5 Stufen geben eine ehrliche, differenzierte Einschätzung — genau das, was im Markt fehlt.
-
-→ *Details: siehe Issue #8 weiter oben*
+> Entfallen (19.02.2026) — siehe Issue #8 oben. Windows Defender und MSRT decken diesen Bereich professionell ab.
 
 ---
 
@@ -753,7 +713,7 @@ Die App hat bereits einen beeindruckenden Funktionsumfang. Jetzt geht es darum, 
 
 #### 1.6 Vertrauens-System vervollständigen — Issue #15
 
-**Was noch fehlt:** Ein vollständiges Undo-Log — jede Aktion (Registry löschen, Dateien bereinigen, Bloatware entfernen) kann rückgängig gemacht werden.
+**Was noch fehlt:** Ein vollständiges Undo-Log — jede Aktion (Registry löschen, Dateien bereinigen) kann rückgängig gemacht werden.
 
 **Warum das wichtig ist:** Die Recherche zeigt klar: Das grösste Hindernis für "Tuning-Tools" ist **Vertrauen**. Nutzer haben Angst, etwas kaputt zu machen. Ein Undo-Button nimmt diese Angst.
 
@@ -779,7 +739,7 @@ Die App hat bereits einen beeindruckenden Funktionsumfang. Jetzt geht es darum, 
 | Was | Nutzen | Aufwand | Status |
 |-----|--------|---------|--------|
 | ~~Diagnose-Knopf~~ | ~~Sofortiger Überblick für alle Nutzer~~ | ~~Mittel~~ | Umgesetzt |
-| Bloatware 5-Stufen (#8) | Ehrliche Bewertung, hebt sich von Konkurrenz ab | Mittel | Offen |
+| ~~Bloatware 5-Stufen (#8)~~ | ~~Ehrliche Bewertung, hebt sich von Konkurrenz ab~~ | ~~Mittel~~ | ENTFALLEN |
 | ~~System-Profil (#10)~~ | ~~Admins sparen Zeit, Support wird einfacher~~ | ~~Klein~~ | Größtenteils |
 | Apps-Kontrollzentrum (#9) | Alle Programme im Griff, vergessene Apps finden | Gross |
 | Intelligente Scandaten (#7) | Veränderungen sichtbar machen, Delta-Scan | Gross |
@@ -1069,7 +1029,7 @@ Die Recherche identifiziert 6 Nutzergruppen. So passen sie zu den Stufen:
 
 | Nutzergruppe | Stufe 1 | Stufe 2 | Stufe 3 | Stufe 4 |
 |--------------|---------|---------|---------|---------|
-| **Privatanwender** (PC aufräumen, Bloatware) | Kern | — | — | — |
+| **Privatanwender** (PC aufräumen) | Kern | — | — | — |
 | **Power-User** (alles in einem Tool) | Kern | Kern | — | — |
 | **Freelancer** (kein IT-Support, wenig Zeit) | Kern | Nutzt mit | Nutzt mit | — |
 | **IT-Admins** (schnelle Diagnose, portabel) | Kern | Kern | Kern | Nutzt mit |
@@ -1087,7 +1047,7 @@ Basierend auf Aufwand, Nutzen und Abhängigkeiten:
 | ~~1~~ | ~~Issue #2/#3 fertig testen (Scandaten)~~ | ~~Grundlage für alles Weitere~~ Bestätigt |
 | 2 | Issue #4 fertig testen (Privacy Dashboard) | Bereits implementiert, wartet auf Test |
 | ~~3~~ | ~~System-Profil (#10)~~ | ~~Klein, sofort sichtbarer Mehrwert~~ Größtenteils umgesetzt |
-| 4 | Bloatware 5-Stufen (#8) | Differenzierung vom Wettbewerb |
+| ~~4~~ | ~~Bloatware 5-Stufen (#8)~~ | ~~ENTFALLEN (Windows Defender)~~ |
 | ~~5~~ | ~~Diagnose-Knopf (neu)~~ | ~~Bringt alles zusammen, "Wow-Effekt"~~ Umgesetzt |
 | 6 | Apps-Kontrollzentrum (#9) | Grösseres Projekt, ersetzt bestehenden Tab |
 | 7 | Intelligente Scandaten (#7) | Technisch aufwändig, baut auf #2/#3 auf |

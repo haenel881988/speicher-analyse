@@ -266,43 +266,6 @@ Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name 'UserPreferencesMask'
     }
 }
 
-// === Bloatware ===
-
-#[tauri::command]
-pub async fn scan_bloatware() -> Result<Value, String> {
-    crate::ps::run_ps_json_array(
-        r#"$known = @{
-'Microsoft.BingWeather'='unnötig';'Microsoft.GetHelp'='unnötig';'Microsoft.Getstarted'='unnötig';
-'Microsoft.MicrosoftOfficeHub'='unnötig';'Microsoft.MicrosoftSolitaireCollection'='unnötig';
-'Microsoft.People'='unnötig';'Microsoft.SkypeApp'='unnötig';'Microsoft.WindowsFeedbackHub'='unnötig';
-'Microsoft.Xbox.TCUI'='unnötig';'Microsoft.XboxApp'='unnötig';'Microsoft.XboxGameOverlay'='unnötig';
-'Microsoft.ZuneMusic'='unnötig';'Microsoft.ZuneVideo'='unnötig';'Microsoft.MixedReality.Portal'='unnötig';
-'king.com.CandyCrushSaga'='fragwürdig';'king.com.CandyCrushSodaSaga'='fragwürdig';
-'SpotifyAB.SpotifyMusic'='fragwürdig';'Facebook.Facebook'='fragwürdig'
-}
-Get-AppxPackage | Where-Object { $_.IsFramework -eq $false -and $_.SignatureKind -ne 'System' } | ForEach-Object {
-    $cat = if($known[$_.Name]){$known[$_.Name]}else{'sonstiges'}
-    $size = 0; if($_.InstallLocation -and (Test-Path $_.InstallLocation)) { try { $size = [long](Get-ChildItem $_.InstallLocation -Recurse -Force -File -EA Stop | Measure-Object Length -Sum).Sum } catch {} }
-    [PSCustomObject]@{ programName=$_.Name; packageFullName=$_.PackageFullName; publisher=$_.Publisher; description=''; category=$cat; estimatedSize=$size; installDate='' }
-} | ConvertTo-Json -Compress"#
-    ).await
-}
-
-#[tauri::command]
-pub async fn uninstall_bloatware(entry: Value) -> Result<Value, String> {
-    tracing::warn!(package = ?entry.get("packageFullName"), "Bloatware deinstallieren");
-    if let Some(pkg) = entry.get("packageFullName").and_then(|v| v.as_str()) {
-        if pkg.is_empty() {
-            return Err("packageFullName ist leer".to_string());
-        }
-        let safe_pkg = pkg.replace("'", "''");
-        crate::ps::run_ps(&format!("Remove-AppxPackage '{}'", safe_pkg)).await?;
-        Ok(json!({ "success": true }))
-    } else {
-        Err("packageFullName fehlt im Eintrag".to_string())
-    }
-}
-
 // === Updates ===
 
 #[tauri::command]
@@ -864,7 +827,7 @@ pub async fn get_system_score(results: Option<Value>) -> Result<Value, String> {
         json!({"name": "Registry", "weight": 15, "score": registry_score, "description": "Registry-Sauberkeit"}),
         json!({"name": "Optimierung", "weight": 15, "score": optimizer_score, "description": "Systemoptimierungen"}),
         json!({"name": "Updates", "weight": 15, "score": updates_score, "description": "Windows- und Software-Updates"}),
-        json!({"name": "Software", "weight": 10, "score": software_score, "description": "Software-Inventar und Bloatware"}),
+        json!({"name": "Software", "weight": 10, "score": software_score, "description": "Software-Inventar"}),
     ];
 
     let total_score: f64 = categories.iter().map(|c| {

@@ -16,7 +16,6 @@ import { EditorPanel } from './preview.js';
 import { DashboardView } from './dashboard.js';
 import { AutostartView } from './autostart.js';
 import { ServicesView } from './services.js';
-import { BloatwareView } from './bloatware.js';
 import { OptimizerView } from './optimizer.js';
 import { UpdatesView } from './updates.js';
 import { ExplorerDualPanel } from './explorer-dual-panel.js';
@@ -63,7 +62,6 @@ const state = {
 const tabLoaded = {
     autostart: false,
     services: false,
-    bloatware: false,
     updates: false,
     duplicates: false,
     optimizer: false,
@@ -121,7 +119,6 @@ const cleanupView = new CleanupView(document.getElementById('view-cleanup'));
 const dashboardView = new DashboardView(document.getElementById('view-dashboard'));
 const autostartView = new AutostartView(document.getElementById('view-autostart'));
 const servicesView = new ServicesView(document.getElementById('view-services'));
-const bloatwareView = new BloatwareView(document.getElementById('view-bloatware'));
 const optimizerView = new OptimizerView(document.getElementById('view-optimizer'));
 const updatesView = new UpdatesView(document.getElementById('view-updates'));
 const dualPanel = new ExplorerDualPanel(document.getElementById('view-explorer'), {
@@ -223,7 +220,6 @@ async function init() {
     setupTopFilesFilters();
     await autostartView.init();
     await servicesView.init();
-    await bloatwareView.init();
     await optimizerView.init();
     await updatesView.init();
     await dualPanel.init();
@@ -680,12 +676,6 @@ async function autoLoadTab(tabName) {
                 setStatus('Dienste werden geladen...', true);
                 await servicesView.load();
                 tabLoaded.services = true;
-                setStatus('Bereit');
-                break;
-            case 'bloatware':
-                setStatus('Bloatware wird gesucht...', true);
-                await bloatwareView.scan();
-                tabLoaded.bloatware = true;
                 setStatus('Bereit');
                 break;
             case 'updates':

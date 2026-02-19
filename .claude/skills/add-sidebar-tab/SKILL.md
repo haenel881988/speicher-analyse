@@ -140,7 +140,7 @@ case '<tab-name>':
 |--------|--------|
 | `start` | Dashboard, Explorer |
 | `analyse` | Dateitypen, Verzeichnisbaum, Treemap, Top 100, Duplikate, Alte Dateien |
-| `bereinigung` | Bereinigung, Registry, Autostart, Dienste, Bloatware |
+| `bereinigung` | Bereinigung, Registry, Autostart, Dienste |
 | `system` | Optimierung, Updates, S.M.A.R.T., System-Score |
 | `sicherheit` | Privacy, Netzwerk, Software-Audit |
 | `extras` | Scan-Vergleich, Export |

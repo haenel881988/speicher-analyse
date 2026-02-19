@@ -129,11 +129,8 @@
 | 4.3.1 | Optimierungsmöglichkeiten anzeigen | MUSS | `getOptimizations()` |
 | 4.3.2 | Optimierung anwenden | MUSS | `applyOptimization(id)` |
 
-### 4.4 Bloatware-Scanner
-| # | Anforderung | Status | Backend-Funktion |
-|---|-------------|--------|------------------|
-| 4.4.1 | Vorinstallierte/unnötige Apps erkennen | MUSS | `scanBloatware()` |
-| 4.4.2 | App deinstallieren | MUSS | `uninstallBloatware(entry)` |
+### ~~4.4 Bloatware-Scanner~~ — ENTFALLEN (19.02.2026)
+> Entfallen — Windows Defender und MSRT decken diesen Bereich ab.
 
 ### 4.5 Update-Manager
 | # | Anforderung | Status | Backend-Funktion |
@@ -377,7 +374,7 @@
 | Autostart | `get_autostart_entries` (L498) |
 | Dienste | `get_services` (L543), `control_service` (L554), `set_service_start_type` (L566) |
 | Optimierer | `get_optimizations` (L581) |
-| Bloatware | `scan_bloatware` (L602), `uninstall_bloatware` (L622) |
+| ~~Bloatware~~ | ~~ENTFALLEN (19.02.2026)~~ |
 | Updates | `check_windows_updates` (L632), `get_update_history` (L644), `check_software_updates` (L657), `update_software` (L679) |
 | Treiber/HW | `get_driver_info` (L685), `get_hardware_info` (L698) |
 | Datenschutz | `get_privacy_settings` (L1000), `get_scheduled_tasks_audit` (L1052), `disable_scheduled_task` (L1068) |

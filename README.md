@@ -19,7 +19,6 @@ Kein Abo. Keine Cloud. Alles bleibt auf deinem Rechner.
 ### System-Optimierung
 - **Bereinigung** von Temp-Dateien, Caches, Logs und anderem Ballast
 - **Autostart-Manager** zeigt was heimlich mit Windows startet
-- **Bloatware-Erkennung** findet vorinstallierte Software die nur Platz frisst
 
 ### Sicherheit & Datenschutz
 - **Privacy Dashboard** zeigt welche Windows-Einstellungen deine Daten teilen
