@@ -683,6 +683,8 @@ Die App hat bereits einen beeindruckenden Funktionsumfang. Jetzt geht es darum, 
 
 → *Neues Feature, kein bestehendes Issue*
 
+**Status:** Umgesetzt (19.02.2026) — Eigener Sidebar-Tab "Diagnose" in der Start-Gruppe. Prüft parallel: Festplattenplatz, S.M.A.R.T.-Gesundheit, Datenschutz-Einstellungen, Sicherheits-Check. Zeigt Gesamtbewertung (0–100), Ampel-Karten pro Kategorie und priorisierte Empfehlungen mit Direktlinks zu den betroffenen Bereichen. Keine neuen Backend-Commands nötig — nutzt bestehende APIs (getDrives, getDiskHealth, getPrivacySettings, runSecurityAudit). Ergebnisse werden gecacht und bei erneutem Aufruf sofort angezeigt.
+
 ---
 
 #### 1.2 Intelligenter Bloatware-Scanner — Issue #8
@@ -767,18 +769,18 @@ Die App hat bereits einen beeindruckenden Funktionsumfang. Jetzt geht es darum, 
 | #4 | Privacy Dashboard verständlicher machen | Wartet auf Test |
 | #5 | PDF Vollansicht und Bearbeitung | Offen |
 | ~~#12~~ | ~~WCAG-Kontrast vollständig konform~~ | Bestätigt 19.02.2026 |
-| #13 | Fenster-Bereiche frei verschiebbar | Offen |
+| #13 | Fenster-Bereiche frei verschiebbar | Größtenteils umgesetzt |
 | #14 | Echte Terminal-Emulation | Teilweise |
 
 ---
 
 ### Stufe 1 — Zusammenfassung
 
-| Was | Nutzen | Aufwand |
-|-----|--------|---------|
-| Diagnose-Knopf | Sofortiger Überblick für alle Nutzer | Mittel |
-| Bloatware 5-Stufen (#8) | Ehrliche Bewertung, hebt sich von Konkurrenz ab | Mittel |
-| System-Profil (#10) | Admins sparen Zeit, Support wird einfacher | Klein |
+| Was | Nutzen | Aufwand | Status |
+|-----|--------|---------|--------|
+| ~~Diagnose-Knopf~~ | ~~Sofortiger Überblick für alle Nutzer~~ | ~~Mittel~~ | Umgesetzt |
+| Bloatware 5-Stufen (#8) | Ehrliche Bewertung, hebt sich von Konkurrenz ab | Mittel | Offen |
+| ~~System-Profil (#10)~~ | ~~Admins sparen Zeit, Support wird einfacher~~ | ~~Klein~~ | Größtenteils |
 | Apps-Kontrollzentrum (#9) | Alle Programme im Griff, vergessene Apps finden | Gross |
 | Intelligente Scandaten (#7) | Veränderungen sichtbar machen, Delta-Scan | Gross |
 | Undo-Log (#15) | Vertrauen aufbauen, Angst nehmen | Mittel |
@@ -1082,15 +1084,15 @@ Basierend auf Aufwand, Nutzen und Abhängigkeiten:
 
 | Schritt | Was | Begründung |
 |---------|-----|------------|
-| 1 | Issue #2/#3 fertig testen (Scandaten) | Grundlage für alles Weitere |
+| ~~1~~ | ~~Issue #2/#3 fertig testen (Scandaten)~~ | ~~Grundlage für alles Weitere~~ Bestätigt |
 | 2 | Issue #4 fertig testen (Privacy Dashboard) | Bereits implementiert, wartet auf Test |
-| 3 | System-Profil (#10) | Klein, sofort sichtbarer Mehrwert |
+| ~~3~~ | ~~System-Profil (#10)~~ | ~~Klein, sofort sichtbarer Mehrwert~~ Größtenteils umgesetzt |
 | 4 | Bloatware 5-Stufen (#8) | Differenzierung vom Wettbewerb |
-| 5 | Diagnose-Knopf (neu) | Bringt alles zusammen, "Wow-Effekt" |
+| ~~5~~ | ~~Diagnose-Knopf (neu)~~ | ~~Bringt alles zusammen, "Wow-Effekt"~~ Umgesetzt |
 | 6 | Apps-Kontrollzentrum (#9) | Grösseres Projekt, ersetzt bestehenden Tab |
 | 7 | Intelligente Scandaten (#7) | Technisch aufwändig, baut auf #2/#3 auf |
 | 8 | Undo-Log (#15) | Vertrauensaufbau, kann parallel laufen |
-| 9 | Verbleibende Issues (#5, #12, #13, #14) | Feinschliff und Qualität |
+| 9 | Verbleibende Issues (#5, ~~#12~~, #13, #14) | Feinschliff und Qualität |
 
 ---
 
