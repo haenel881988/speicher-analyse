@@ -159,7 +159,7 @@ Weitere Funktionen fehlen bei entsprechenden Dateitypen, bei Bildern z.B.: die A
 | ~~8~~ | ~~#11~~ | ~~Netzwerk-Paketaufzeichnung~~ | ENTFALLEN (AV-Risiko) |
 | ~~9~~ | ~~#20~~ | ~~Netzwerk-Geräte falsch erkannt~~ | OBSOLET (Scanner wird entfernt) |
 | ~~10~~ | ~~#12~~ | ~~WCAG-Kontrast vollständig WCAG 2.2 konform~~ | Bestätigt 19.02.2026 |
-| 11 | #13 | Fenster-Bereiche frei verschiebbar/skalierbar | Offen |
+| 11 | #13 | Fenster-Bereiche frei verschiebbar/skalierbar | Größtenteils umgesetzt |
 | 12 | #14 | Echte Terminal-Emulation (Farben, Cursor, interaktive Tools) | Teilweise |
 | 13 | #15 | Vertrauens-System: Undo-Log mit Wiederherstellung | Teilweise |
 | 14 | #16 | Backup-Modul (lokale/Netzwerk-Sicherung) | Geplant |
@@ -496,7 +496,16 @@ Eine Art "Waage für die Festplatte":
 
 **Wunsch:** Die Bereiche sollen per Ziehen am Rand skalierbar sein (wie in VS Code). Terminal grösser machen, Vorschau kleiner — individuell anpassbar.
 
-**Status:** Offen
+**Was bereits umgesetzt ist:**
+- Sidebar: Per Drag am rechten Rand skalierbar (140–400px) wenn expandiert
+- Vorschau-Panel: Per Drag am linken Rand skalierbar (250px–70% Fensterbreite)
+- Terminal-Panel: Per Drag am oberen Rand skalierbar (120px–70% Fensterhöhe)
+
+**Was noch fehlt:**
+- Breiten/Höhen über Neustarts hinweg speichern (Preferences)
+- Panels frei umplatzieren (z.B. Terminal nach rechts verschieben)
+
+**Status:** Größtenteils umgesetzt — alle 3 Bereiche skalierbar
 
 → *Aus Visionen: "Resizable Panels / Fenster-Individualisierung"*
 
