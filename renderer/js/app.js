@@ -215,6 +215,7 @@ async function init() {
     setupContextMenuActions();
     setupKeyboardShortcuts();
     setupPreviewToggle();
+    setupSidebarResize();
     setupPreviewResize();
     setupSmartLayout();
     setupTopFilesFilters();
@@ -1246,6 +1247,54 @@ function setupPreviewToggle() {
     els.previewToggle.onclick = () => editorPanel.toggle();
 }
 
+// ===== Sidebar Resize (Drag) =====
+function setupSidebarResize() {
+    const handle = document.getElementById('sidebar-resize-handle');
+    const sidebar = document.getElementById('sidebar');
+    if (!handle || !sidebar) return;
+
+    let startX = 0;
+    let startWidth = 0;
+
+    const onMouseMove = (e) => {
+        const delta = e.clientX - startX;
+        const newWidth = Math.max(140, Math.min(400, startWidth + delta));
+        sidebar.style.width = newWidth + 'px';
+        sidebar.style.minWidth = newWidth + 'px';
+    };
+
+    const onMouseUp = () => {
+        handle.classList.remove('active');
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+    };
+
+    handle.addEventListener('mousedown', (e) => {
+        if (!sidebar.classList.contains('expanded')) return;
+        e.preventDefault();
+        startX = e.clientX;
+        startWidth = sidebar.offsetWidth;
+        handle.classList.add('active');
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+        // Signal to SmartLayout: user has manually resized
+        document.dispatchEvent(new CustomEvent('sidebar-manual-resize'));
+    });
+
+    // Reset custom width when sidebar is collapsed
+    const observer = new MutationObserver(() => {
+        if (!sidebar.classList.contains('expanded')) {
+            sidebar.style.width = '';
+            sidebar.style.minWidth = '';
+        }
+    });
+    observer.observe(sidebar, { attributes: true, attributeFilter: ['class'] });
+}
+
 // ===== Preview Panel Resize (Drag) =====
 function setupPreviewResize() {
     const handle = document.getElementById('preview-resize-handle');
@@ -1296,6 +1345,7 @@ function setupSmartLayout() {
     if (sidebarToggle) {
         sidebarToggle.addEventListener('click', () => { userToggledSidebar = true; });
     }
+    document.addEventListener('sidebar-manual-resize', () => { userToggledSidebar = true; });
 
     // Preference laden
     window.api.getPreferences().then(prefs => {
