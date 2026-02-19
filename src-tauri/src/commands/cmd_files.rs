@@ -502,6 +502,69 @@ pub async fn extract_archive(archive_path: String, dest_dir: Option<String>) -> 
     }
 }
 
+// === Archive Creation ===
+
+#[tauri::command]
+pub async fn create_archive(source_paths: Vec<String>, dest_path: Option<String>) -> Result<Value, String> {
+    if source_paths.is_empty() {
+        return Err("Keine Dateien zum Komprimieren ausgewählt".to_string());
+    }
+
+    // Validate all source paths exist
+    for p in &source_paths {
+        if !std::path::Path::new(p).exists() {
+            return Err(format!("Datei/Ordner existiert nicht: {}", p));
+        }
+    }
+
+    // Determine destination: name.zip next to first source file, or custom dest_path
+    let destination = if let Some(d) = dest_path {
+        d
+    } else if source_paths.len() == 1 {
+        // Single file/folder: use its name + .zip
+        let source = std::path::Path::new(&source_paths[0]);
+        let stem = source.file_stem().and_then(|s| s.to_str()).unwrap_or("archiv");
+        let parent = source.parent().and_then(|p| p.to_str()).unwrap_or(".");
+        format!("{}\\{}.zip", parent, stem)
+    } else {
+        // Multiple files: use parent folder name + .zip
+        let first = std::path::Path::new(&source_paths[0]);
+        let parent = first.parent().and_then(|p| p.to_str()).unwrap_or(".");
+        let parent_name = std::path::Path::new(parent)
+            .file_name().and_then(|n| n.to_str()).unwrap_or("archiv");
+        format!("{}\\{}.zip", parent, parent_name)
+    };
+
+    let safe_dest = destination.replace("'", "''");
+
+    // Build PowerShell path list
+    let safe_sources: Vec<String> = source_paths.iter()
+        .map(|p| format!("'{}'", p.replace("'", "''")))
+        .collect();
+    let source_list = safe_sources.join(",");
+
+    let script = format!(
+        "Compress-Archive -LiteralPath @({}) -DestinationPath '{}' -Force; Write-Output 'OK'",
+        source_list, safe_dest
+    );
+
+    match crate::ps::run_ps_with_timeout(&script, 120).await {
+        Ok(output) => {
+            if output.trim().contains("OK") || output.trim().is_empty() {
+                let file_size = std::fs::metadata(&destination).map(|m| m.len()).unwrap_or(0);
+                Ok(json!({
+                    "success": true,
+                    "destination": destination,
+                    "size": file_size
+                }))
+            } else {
+                Ok(json!({ "success": false, "error": output.trim() }))
+            }
+        }
+        Err(e) => Err(format!("ZIP-Erstellung fehlgeschlagen: {}", e)),
+    }
+}
+
 // === Context Menu ===
 
 #[tauri::command]

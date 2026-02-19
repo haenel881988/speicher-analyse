@@ -223,6 +223,7 @@ pub fn run() {
             commands::show_in_explorer,
             commands::run_as_admin,
             commands::extract_archive,
+            commands::create_archive,
             // Context Menu
             commands::show_context_menu,
             // Dialog

@@ -97,6 +97,7 @@
         showInExplorer: makeInvoke('show_in_explorer', 'file_path'),
         runAsAdmin: makeInvoke('run_as_admin', 'file_path'),
         extractArchive: makeInvoke('extract_archive', 'archive_path', 'dest_dir'),
+        createArchive: makeInvoke('create_archive', 'source_paths', 'dest_path'),
 
         // === Context Menu ===
         showContextMenu: makeInvoke('show_context_menu', 'menu_type', 'context'),

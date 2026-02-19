@@ -138,6 +138,9 @@ Weitere Funktionen fehlen bei entsprechenden Dateitypen, bei Bildern z.B.: die A
 | — | Eigenschaften-Dialog mit 4 Tabs (Allgemein, Sicherheit, Details, Vorgängerversionen) | 19.02.2026 |
 | — | Eigenschaften-Dialog Performance: Rust-native statt PowerShell | 19.02.2026 |
 | — | Letzte Electron-Fragmente bereinigt | 19.02.2026 |
+| #2/#3 | Scandaten speichern + wiederherstellen | 19.02.2026 |
+| #12 | WCAG-Kontrast vollständig lesbar | 19.02.2026 |
+| — | Tiefenanalyse 25/25 Findings behoben (100%) | 19.02.2026 |
 
 ---
 
@@ -145,7 +148,7 @@ Weitere Funktionen fehlen bei entsprechenden Dateitypen, bei Bildern z.B.: die A
 
 | Prio | Issue | Thema | Status |
 |------|-------|-------|--------|
-| 1 | #2 + #3 | Scandaten überall speichern + wiederherstellen | Neuer Fix — wartet auf Simons Test |
+| ~~1~~ | ~~#2 + #3~~ | ~~Scandaten überall speichern + wiederherstellen~~ | Bestätigt 19.02.2026 |
 | 2 | #7 | Intelligente Scandaten (Delta-Scan, Verlauf, Hintergrund) | Planung |
 | 3 | #8 | Intelligenter Bloatware-Scanner (5-Stufen-Bewertung) | Planung |
 | 4 | #9 | Apps-Kontrollzentrum (ersetzt "Updates"-Tab) | Planung |
@@ -154,7 +157,7 @@ Weitere Funktionen fehlen bei entsprechenden Dateitypen, bei Bildern z.B.: die A
 | 7 | #5 | PDF Vollansicht + Bearbeitung | Offen |
 | ~~8~~ | ~~#11~~ | ~~Netzwerk-Paketaufzeichnung~~ | ENTFALLEN (AV-Risiko) |
 | ~~9~~ | ~~#20~~ | ~~Netzwerk-Geräte falsch erkannt~~ | OBSOLET (Scanner wird entfernt) |
-| 10 | #12 | WCAG-Kontrast vollständig WCAG 2.2 konform | Teilweise umgesetzt |
+| ~~10~~ | ~~#12~~ | ~~WCAG-Kontrast vollständig WCAG 2.2 konform~~ | Bestätigt 19.02.2026 |
 | 11 | #13 | Fenster-Bereiche frei verschiebbar/skalierbar | Offen |
 | 12 | #14 | Echte Terminal-Emulation (Farben, Cursor, interaktive Tools) | Teilweise |
 | 13 | #15 | Vertrauens-System: Undo-Log mit Wiederherstellung | Teilweise |

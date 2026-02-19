@@ -268,8 +268,9 @@ pub fn has_scan(scan_id: &str) -> bool {
     s.contains_key(scan_id)
 }
 
-/// Persist current scan data to disk (bincode for fast load, metadata as JSON)
+/// Persist current scan data to disk (zstd-compressed bincode + metadata as JSON)
 pub fn save_to_disk(data_dir: &std::path::Path) -> Result<Value, String> {
+    let start = std::time::Instant::now();
     let s = store().lock().unwrap_or_else(|e| e.into_inner());
     let (_, data) = s.iter().next().ok_or("Keine Scan-Daten vorhanden")?;
 
@@ -288,25 +289,36 @@ pub fn save_to_disk(data_dir: &std::path::Path) -> Result<Value, String> {
     let meta_str = serde_json::to_string_pretty(&meta).map_err(|e| e.to_string())?;
     std::fs::write(&meta_path, &meta_str).map_err(|e| format!("scan-meta.json schreiben: {}", e))?;
 
-    // Write file entries as bincode (5-10x faster to load than JSON)
-    let data_path = data_dir.join("scan-data.bin");
-    let file = std::fs::File::create(&data_path).map_err(|e| format!("scan-data.bin erstellen: {}", e))?;
-    let writer = std::io::BufWriter::with_capacity(512 * 1024, file);
-    bincode::serialize_into(writer, &data.files).map_err(|e| format!("scan-data.bin schreiben: {}", e))?;
+    // Write file entries as zstd-compressed bincode (~5-8x smaller than raw bincode)
+    let zst_path = data_dir.join("scan-data.zst");
+    let file = std::fs::File::create(&zst_path).map_err(|e| format!("scan-data.zst erstellen: {}", e))?;
+    let zst_writer = zstd::Encoder::new(file, 3)
+        .map_err(|e| format!("zstd-Encoder erstellen: {}", e))?;
+    let mut buf_writer = std::io::BufWriter::with_capacity(512 * 1024, zst_writer);
+    bincode::serialize_into(&mut buf_writer, &data.files)
+        .map_err(|e| format!("scan-data.zst schreiben: {}", e))?;
+    // Finish zstd stream (flush + write footer)
+    let zst_writer = buf_writer.into_inner().map_err(|e| format!("BufWriter flush: {}", e))?;
+    zst_writer.finish().map_err(|e| format!("zstd finalize: {}", e))?;
 
-    // Remove old JSON format if it exists (migration cleanup)
+    // Remove old formats (migration cleanup)
+    let _ = std::fs::remove_file(data_dir.join("scan-data.bin"));
     let _ = std::fs::remove_file(data_dir.join("scan-data.json"));
 
+    let elapsed_ms = start.elapsed().as_millis();
+    let file_size_kb = std::fs::metadata(&zst_path).map(|m| m.len() / 1024).unwrap_or(0);
     tracing::info!(
         scan_id = %data.scan_id,
         files = data.files.len(),
-        "Scan-Daten auf Disk persistiert (bincode)"
+        file_size_kb = file_size_kb,
+        elapsed_ms = elapsed_ms,
+        "Scan-Daten auf Disk persistiert (zstd-komprimiert)"
     );
 
     Ok(meta)
 }
 
-/// Load scan data from disk into memory store (bincode preferred, JSON fallback)
+/// Load scan data from disk into memory store (zstd → bincode → JSON fallback)
 pub fn load_from_disk(data_dir: &std::path::Path) -> Result<Value, String> {
     let start = std::time::Instant::now();
     let meta_path = data_dir.join("scan-meta.json");
@@ -320,33 +332,34 @@ pub fn load_from_disk(data_dir: &std::path::Path) -> Result<Value, String> {
     let meta: Value = serde_json::from_str(&meta_str)
         .map_err(|e| format!("scan-meta.json parsen: {}", e))?;
 
-    // Try bincode first (fast), then JSON fallback (backward compatibility)
+    // Try formats in order: zstd (fastest) → bincode → JSON (backward compat)
+    let zst_path = data_dir.join("scan-data.zst");
     let bin_path = data_dir.join("scan-data.bin");
     let json_path = data_dir.join("scan-data.json");
 
-    let files: Vec<FileEntry> = if bin_path.exists() {
+    let (files, format): (Vec<FileEntry>, &str) = if zst_path.exists() {
+        let file = std::fs::File::open(&zst_path)
+            .map_err(|e| format!("scan-data.zst öffnen: {}", e))?;
+        let zst_reader = zstd::Decoder::new(file)
+            .map_err(|e| format!("zstd-Decoder: {}", e))?;
+        let buf_reader = std::io::BufReader::with_capacity(512 * 1024, zst_reader);
+        let loaded = bincode::deserialize_from(buf_reader)
+            .map_err(|e| format!("scan-data.zst parsen: {}", e))?;
+        (loaded, "zstd")
+    } else if bin_path.exists() {
         let file = std::fs::File::open(&bin_path)
             .map_err(|e| format!("scan-data.bin öffnen: {}", e))?;
         let reader = std::io::BufReader::with_capacity(512 * 1024, file);
-        bincode::deserialize_from(reader)
-            .map_err(|e| format!("scan-data.bin parsen: {}", e))?
+        let loaded = bincode::deserialize_from(reader)
+            .map_err(|e| format!("scan-data.bin parsen: {}", e))?;
+        (loaded, "bincode")
     } else if json_path.exists() {
         let file = std::fs::File::open(&json_path)
             .map_err(|e| format!("scan-data.json öffnen: {}", e))?;
         let reader = std::io::BufReader::with_capacity(256 * 1024, file);
-        let loaded: Vec<FileEntry> = serde_json::from_reader(reader)
+        let loaded = serde_json::from_reader(reader)
             .map_err(|e| format!("scan-data.json parsen: {}", e))?;
-
-        // Auto-migrate: save as bincode for faster future loads
-        if let Ok(out_file) = std::fs::File::create(&bin_path) {
-            let writer = std::io::BufWriter::with_capacity(512 * 1024, out_file);
-            if bincode::serialize_into(writer, &loaded).is_ok() {
-                let _ = std::fs::remove_file(&json_path);
-                tracing::info!("Scan-Daten automatisch von JSON zu bincode migriert");
-            }
-        }
-
-        loaded
+        (loaded, "json")
     } else {
         return Err("Keine Scan-Datendatei gefunden".to_string());
     };
@@ -369,11 +382,17 @@ pub fn load_from_disk(data_dir: &std::path::Path) -> Result<Value, String> {
     tracing::info!(
         scan_id = %scan_id,
         files_count = meta["files_count"].as_u64().unwrap_or(0),
+        format = format,
         load_ms = load_ms,
         index_ms = total_ms - load_ms,
         total_ms = total_ms,
         "Scan-Daten von Disk geladen + Index erstellt"
     );
+
+    // Auto-migrate old formats to zstd on next save (will happen naturally)
+    if format != "zstd" {
+        tracing::info!("Altes Format '{}' erkannt — wird beim nächsten Scan als zstd gespeichert", format);
+    }
 
     Ok(meta)
 }

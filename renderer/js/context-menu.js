@@ -134,6 +134,9 @@ function buildMenuItems(type, context, options) {
         }
 
         items.push({ separator: true });
+        items.push({ label: 'Als ZIP komprimieren', action: 'compress-zip' });
+
+        items.push({ separator: true });
         items.push({ label: 'Ausschneiden', action: 'cut', shortcut: 'Ctrl+X' });
         items.push({ label: 'Kopieren', action: 'copy', shortcut: 'Ctrl+C' });
         items.push({ label: 'Pfad kopieren', action: 'copy-path' });
@@ -165,6 +168,7 @@ function buildMenuItems(type, context, options) {
         items.push({ label: 'Pfad kopieren', action: 'copy-path' });
 
         items.push({ separator: true });
+        items.push({ label: 'Als ZIP komprimieren', action: 'compress-zip' });
         items.push({ label: 'Ordnergrösse berechnen', action: 'calculate-folder-size' });
 
         items.push({ separator: true });

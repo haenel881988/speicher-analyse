@@ -1038,6 +1038,21 @@ function executeContextAction(action) {
                     }).catch(e => showToast(e.message || String(e), 'error'));
                 }
                 break;
+            case 'compress-zip':
+                if (paths.length > 0 || path) {
+                    const sourcePaths = paths.length > 0 ? paths : [path];
+                    showToast('Komprimiere...', 'info');
+                    window.api.createArchive(sourcePaths).then(result => {
+                        if (result.success) {
+                            const sizeStr = formatBytes(result.size);
+                            showToast(`ZIP erstellt: ${result.destination} (${sizeStr})`, 'success');
+                            refresh();
+                        } else {
+                            showToast(result.error || 'Fehler beim Komprimieren', 'error');
+                        }
+                    }).catch(e => showToast(e.message || String(e), 'error'));
+                }
+                break;
             case 'calculate-folder-size':
                 if (path) {
                     window.api.calculateFolderSize(path).then(result => {
