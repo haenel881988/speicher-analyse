@@ -2,7 +2,7 @@
 
 > **Zweck:** Dieser Prompt wird verwendet um das gesamte Projekt systematisch auf Probleme, Schwachstellen und Optimierungsmöglichkeiten zu durchleuchten.
 > **Anwendung:** Kopiere diesen Prompt in eine neue Claude-Sitzung (oder verwende ihn als Kontext) zusammen mit dem Quellcode.
-> **Version:** 2.0 — komplett überarbeitet für Tauri v2 (Migration von Electron abgeschlossen)
+> **Version:** 2.1 — erweitert um Verifikationsschritte, Konsistenzprüfungen und Querverweise
 
 ---
 
@@ -160,6 +160,15 @@ Gehe jeden der folgenden Bereiche systematisch durch. Für jeden gefundenen Punk
 - [ ] Gibt es noch einen `main/`-Ordner mit altem Electron-Code?
 - [ ] Gibt es noch `launch.js`, `scripts/rebuild-pty.js` oder andere Electron-Starter?
 - [ ] Sind in `package.json` noch Electron-Abhängigkeiten aufgeführt?
+
+#### 1.6 Strategische Entfernungen — Vollständigkeit prüfen
+- [ ] **Netzwerk-Scanner:** Sind alle aktiven Scanner-Commands entfernt? (`scan_local_network`, `scan_network_active`, `scan_device_ports`, `get_smb_shares`)
+- [ ] **Firewall-Verwaltung:** Sind alle Firewall-Commands entfernt? (`get_firewall_rules`, `block_process`, `unblock_process`)
+- [ ] **OUI-Datenbank:** `oui.rs` existiert noch — wird sie noch benötigt oder ist sie eine Altlast?
+- [ ] **Registry-Cleaner:** Sind alle Schreib-Commands entfernt? (`scan_registry`, `clean_registry`, `export_registry_backup`, `restore_registry_backup`)
+- [ ] Gibt es Frontend-Views oder Sidebar-Tabs die auf entfernte Features verweisen?
+- [ ] Gibt es Bridge-Einträge in `tauri-bridge.js` für entfernte Commands?
+- [ ] Gibt es CSS-Klassen für entfernte UI-Elemente?
 
 ---
 
@@ -370,6 +379,230 @@ Gehe jeden der folgenden Bereiche systematisch durch. Für jeden gefundenen Punk
 
 ---
 
+### 9. Konsistenz & Querverweise (Cross-Reference)
+
+> Dieser Bereich prüft ob die verschiedenen Schichten der App zueinander passen. Inkonsistenzen sind die häufigste Fehlerquelle nach einer Migration.
+
+#### 9.1 Dreifach-Abgleich: Bridge ↔ Commands ↔ Registrierung
+
+Die API besteht aus drei Schichten die synchron sein MÜSSEN:
+
+| Schicht | Datei | Was dort steht |
+|---------|-------|----------------|
+| **Frontend-Bridge** | `renderer/js/tauri-bridge.js` | `window.api.methodName = (params) => invoke('method_name', {params})` |
+| **Rust-Commands** | `src-tauri/src/commands.rs` | `#[tauri::command] fn method_name(...)` |
+| **Registrierung** | `src-tauri/src/lib.rs` | `.invoke_handler(generate_handler![..., method_name, ...])` |
+
+Prüfe:
+- [ ] **Jede** Bridge-Methode hat einen passenden Command in `commands.rs`
+- [ ] **Jeder** Command in `commands.rs` ist in `lib.rs` registriert
+- [ ] **Jede** Registrierung in `lib.rs` hat einen implementierten Command
+- [ ] Gibt es "Geister-Einträge" in einer der drei Schichten die nirgendwo sonst existieren?
+- [ ] Werden Parameter-Namen korrekt übersetzt? (camelCase ↔ snake_case)
+
+#### 9.2 Stub-Erkennung (unvollständige Migration)
+
+Suche gezielt nach diesen Mustern in `commands.rs`:
+```
+json!([])           → Leeres Array zurückgeben statt echter Daten
+json!(null)         → Null zurückgeben statt Fehler
+json!({})           → Leeres Objekt statt Implementierung
+"stub"              → Expliziter Stub-Marker
+"not implemented"   → Nicht implementiert
+todo!()             → Rust-Platzhalter
+unimplemented!()    → Rust-Platzhalter
+Ok("".to_string())  → Leerer String statt Daten
+```
+
+Für jeden gefundenen Stub: Welche Frontend-View ruft diesen Command auf und was sieht der User?
+
+#### 9.3 Sidebar ↔ Views ↔ Commands
+
+Prüfe die Kette: HTML-Tab → JS-View → Backend-Commands
+
+- [ ] Hat jeder Sidebar-Tab in `index.html` eine zugehörige JS-View-Datei?
+- [ ] Ruft jede JS-View ihre Backend-Commands über `window.api.*` auf?
+- [ ] Existieren die aufgerufenen Commands tatsächlich im Backend?
+- [ ] Gibt es JS-View-Dateien die keinem Sidebar-Tab zugeordnet sind?
+
+#### 9.4 Anforderungen vs. Implementierung
+
+Das Dokument `docs/issues/anforderungen.md` definiert ~150 Backend-Funktionen mit Status (MUSS/SOLL/KANN).
+
+- [ ] Sind alle MUSS-Anforderungen tatsächlich implementiert (nicht nur als Stub)?
+- [ ] Gibt es implementierte Funktionen die NICHT in den Anforderungen stehen? (Feature Creep oder vergessene Doku)
+- [ ] Stimmen die Backend-Funktionsnamen in den Anforderungen mit den tatsächlichen Command-Namen überein?
+
+#### 9.5 Lokalisierung & Textqualität
+
+- [ ] Sind ALLE user-sichtbaren Texte auf Deutsch? (Buttons, Labels, Fehlermeldungen, Tooltips)
+- [ ] Werden korrekte Umlaute verwendet? (ä/ö/ü, NICHT ae/oe/ue)
+- [ ] Gibt es englische Texte die dem User angezeigt werden? (z.B. "Error", "Loading", "Success")
+- [ ] Werden Rust-Fehlermeldungen unübersetzt ans Frontend durchgereicht?
+- [ ] Sind Fehlermeldungen verständlich formuliert? (kein Fachjargon, keine Stack Traces)
+
+---
+
+### 10. Bekannte Muster & Anti-Patterns
+
+> Dieses Projekt hat dokumentierte Lektionen aus vergangenen Fehlern (`docs/lessons-learned/lessons-learned.md`). Die Analyse soll prüfen ob diese Fehler erneut vorkommen.
+
+#### 10.1 Realitätsprinzip (aus CLAUDE.md)
+
+**Anti-Pattern:** Statische Listen für Erkennung/Klassifizierung. Diese funktionieren nur auf dem Entwickler-PC.
+
+- [ ] Gibt es feste Hersteller→Gerätetyp Zuordnungen? (z.B. "Canon = Drucker")
+- [ ] Gibt es feste Programmnamen→Kategorie Listen? (z.B. "Firefox = Browser")
+- [ ] Gibt es feste Bloatware-Listen die leicht umgangen werden können?
+- [ ] Gibt es feste Dateipfade für Bereinigung die nicht auf jedem System existieren?
+- [ ] Gibt es feste Dateiendungen→Kategorie Zuordnungen denen neue Formate fehlen? (z.B. .heic, .avif, .webp)
+- [ ] Gibt es sprachabhängige Erkennung die nur auf deutsch/englischem Windows funktioniert?
+
+#### 10.2 Wiederkehrende Fehlermuster (aus Lessons Learned)
+
+- [ ] **False Success:** Gibt es Commands die `Ok(success: true)` zurückgeben obwohl nichts passiert ist? (Lesson #42)
+- [ ] **Fehlende Fehlerbehandlung:** Gibt es PowerShell-Aufrufe ohne try/catch? (Lesson #45)
+- [ ] **Ignorierte Parameter:** Gibt es Funktionsparameter mit `_`-Prefix die eigentlich verwendet werden sollten? (Lesson #46)
+- [ ] **Ok statt Err:** Gibt es Fehler die als `Ok` mit `null`/`None`-Wert zurückgegeben werden statt als `Err`? (Lesson #48)
+- [ ] **Falsche Feldnamen:** Stimmen die Feldnamen zwischen Funktionen die Daten weitergeben überein? (Lesson #33)
+- [ ] **Substring-Matching:** Gibt es `.contains()`-Prüfungen die zu breit matchen? (Lesson #24)
+- [ ] **Bug-Drift:** Wurde bei Fixes geprüft ob die Änderung Seiteneffekte in anderen Funktionen hat? (Lesson #18)
+
+#### 10.3 Memory-Leak-Muster (aus CLAUDE.md)
+
+- [ ] Hat jede View eine `destroy()` Methode?
+- [ ] Wird `destroy()` in `app.js` beim View-Wechsel aufgerufen?
+- [ ] Werden alle `setInterval` in `destroy()` mit `clearInterval` gestoppt?
+- [ ] Werden Event-Listener nur einmal registriert? (Flag-Pattern oder removeEventListener)
+- [ ] Werden `ResizeObserver` in `destroy()` mit `.disconnect()` beendet?
+- [ ] Werden dynamische DOM-Elemente (Overlays, Modals, Tooltips) in `destroy()` entfernt?
+
+---
+
+### 11. Toter Code (Dead Code)
+
+> Nach einer Migration + strategischen Entfernungen bleibt oft Code zurück der nie ausgeführt wird. Toter Code ist ein Wartungs- und Sicherheitsrisiko.
+
+#### 11.1 CSS Dead Code
+- [ ] Gibt es CSS-Klassen in `style.css` die in keiner HTML- oder JS-Datei referenziert werden?
+- [ ] Gibt es CSS-Regeln für entfernte Features? (Netzwerk-Scanner, Registry-Cleaner)
+- [ ] Gibt es Media Queries oder Theme-Varianten die nie aktiv werden?
+
+#### 11.2 JavaScript Dead Code
+- [ ] Gibt es Funktionen in Views die nie aufgerufen werden?
+- [ ] Gibt es importierte Module/Dateien die nicht verwendet werden?
+- [ ] Gibt es Event Listener für Events die nie ausgelöst werden?
+- [ ] Gibt es Branches in if/else die nie erreicht werden können?
+
+#### 11.3 Rust Dead Code
+- [ ] Gibt es `#[allow(dead_code)]` Attribute die toten Code verstecken?
+- [ ] Gibt es Hilfsfunktionen in `commands.rs`/`ps.rs`/`scan.rs` die nie aufgerufen werden?
+- [ ] Gibt es `use`-Imports die nicht verwendet werden?
+- [ ] Meldet `cargo build` Warnungen über ungenutzten Code?
+
+#### 11.4 Dokumentation Dead Code
+- [ ] Gibt es Dokumentationsdateien die auf nichts mehr verweisen? (z.B. `netzwerk-erkennung.md` nach Entfernung des Scanners)
+- [ ] Gibt es interne Links in Docs die auf gelöschte Dateien/Abschnitte zeigen?
+
+---
+
+## Konkrete Verifikationsschritte
+
+> Diese Schritte kann der Analyst direkt ausführen um schnell ein Bild der Lage zu bekommen.
+
+### Schritt 1: Electron-Altlasten finden
+```bash
+# In eigenem Code (NICHT in renderer/lib/ suchen — das sind Drittanbieter)
+grep -ri "electron" renderer/js/ renderer/css/ src-tauri/ tools/ docs/ --include="*.js" --include="*.rs" --include="*.md" --include="*.ps1" --include="*.css" --exclude-dir="lib"
+
+# Spezifische Electron-APIs
+grep -ri "ipcRenderer\|ipcMain\|contextBridge\|BrowserWindow\|nodeIntegration\|preload\.js" renderer/js/ src-tauri/ docs/ --include="*.js" --include="*.rs" --include="*.md"
+
+# Node.js-Globals im Frontend
+grep -r "process\.env\|process\.platform\|require(" renderer/js/ --include="*.js"
+```
+
+### Schritt 2: Stubs finden
+```bash
+# Rust-Stubs
+grep -n "json!\(\[\]\)\|json!(null)\|json!({})\|todo!()\|unimplemented!()\|\"stub\"\|\"not implemented\"" src-tauri/src/commands.rs
+
+# Leere Rückgaben
+grep -n 'Ok("".to_string())\|Ok(String::new())' src-tauri/src/commands.rs
+```
+
+### Schritt 3: Dreifach-Abgleich
+```bash
+# Alle Commands in commands.rs auflisten
+grep -c "#\[tauri::command\]" src-tauri/src/commands.rs
+
+# Alle registrierten Commands in lib.rs auflisten
+grep "generate_handler" src-tauri/src/lib.rs
+
+# Alle Bridge-Methoden in tauri-bridge.js auflisten
+grep -c "invoke(" renderer/js/tauri-bridge.js
+```
+
+### Schritt 4: Strategische Entfernungen prüfen
+```bash
+# Netzwerk-Scanner Reste
+grep -rn "scan_local_network\|scan_network_active\|scan_device_ports\|get_smb_shares\|block_process\|unblock_process\|get_firewall" src-tauri/src/ renderer/js/ --include="*.rs" --include="*.js"
+
+# Registry-Cleaner Reste
+grep -rn "clean_registry\|scan_registry\|export_registry_backup\|restore_registry_backup" src-tauri/src/ renderer/js/ --include="*.rs" --include="*.js"
+```
+
+### Schritt 5: Bekannte Anti-Patterns
+```bash
+# unwrap() in Commands (Crash-Risiko)
+grep -n "\.unwrap()" src-tauri/src/commands.rs
+
+# innerHTML mit Variablen (XSS-Risiko)
+grep -n "innerHTML.*\$\|innerHTML.*\`" renderer/js/*.js
+
+# format!() mit User-Input ohne Escaping (Injection-Risiko)
+grep -n "format!(" src-tauri/src/commands.rs | head -50
+
+# Leere catch-Blöcke (verschluckte Fehler)
+grep -A1 "catch" renderer/js/*.js | grep "{}"
+```
+
+### Schritt 6: Memory-Leak-Risiko
+```bash
+# Views ohne destroy()
+for f in renderer/js/*.js; do
+  if grep -q "class.*View\|class.*Panel\|class.*Manager" "$f" && ! grep -q "destroy()" "$f"; then
+    echo "KEIN destroy(): $f"
+  fi
+done
+
+# setInterval ohne clearInterval
+grep -l "setInterval" renderer/js/*.js | while read f; do
+  if ! grep -q "clearInterval" "$f"; then
+    echo "setInterval OHNE clearInterval: $f"
+  fi
+done
+```
+
+---
+
+## Referenz-Dokumente
+
+> Diese Dokumente im Projekt liefern zusätzlichen Kontext für die Analyse.
+
+| Dokument | Pfad | Relevanz |
+|----------|------|----------|
+| **Anforderungen** | `docs/issues/anforderungen.md` | Vollständige API-Referenz (~150 Methoden) — Soll vs. Ist |
+| **Lessons Learned** | `docs/lessons-learned/lessons-learned.md` | Dokumentierte Fehler — nicht wiederholen |
+| **Governance** | `docs/planung/governance.md` | Code-Qualitätsregeln (WCAG, Security, Performance) |
+| **Migrations-Checkliste** | `docs/planung/migrations-checkliste.md` | Status der Electron→Tauri Migration |
+| **Meta-Analyse** | `docs/issues/issue_meta_analyse.md` | Migrations-Analyse (Vorarbeit) |
+| **Code-Audit** | `docs/issues/issue_code_audit.md` | Früherer Audit (Vergleichsbasis) |
+| **Strategische Entscheidungen** | `docs/issues/issue.md` (Abschnitt) | Netzwerk-Scanner + Registry-Cleaner Entfernung |
+| **Simons Ideen** | `docs/issues/issue.md` (Abschnitt "Ideen Salat") | Geplante Features: Explorer-Kontextmenü, Datei-Icons, Terminal als Admin, etc. |
+
+---
+
 ## Ausgabe-Anweisungen
 
 ### 1. Issue-Datei erstellen
@@ -456,6 +689,12 @@ Füge in `docs/issues/issue.md` unter "Offene Issues" einen Verweis auf die Tief
 
 8. **Strategische Entscheidungen beachten.** Netzwerk-Scanner und Registry-Cleaner wurden bewusst entfernt (AV-Risiko). Code-Reste dieser Features sind Altlasten.
 
+9. **Lessons Learned konsultieren.** Das Projekt hat eine Datei mit dokumentierten Fehlern (`docs/lessons-learned/lessons-learned.md`). Prüfe ob dieselben Fehler erneut vorkommen — das wäre besonders peinlich.
+
+10. **Anforderungen als Referenz.** `docs/issues/anforderungen.md` definiert was die App können MUSS. Jede MUSS-Anforderung die nur als Stub implementiert ist, ist ein kritisches Problem.
+
+11. **Dreifach-Abgleich ist Pflicht.** Die häufigste Fehlerquelle nach einer Migration ist eine Inkonsistenz zwischen Bridge, Commands und Registrierung. Dieser Abgleich muss lückenlos sein.
+
 ---
 
 ## Erweiterungen (wird laufend ergänzt)
@@ -473,4 +712,4 @@ Füge in `docs/issues/issue.md` unter "Offene Issues" einen Verweis auf die Tief
 
 ---
 
-*Letzte Aktualisierung: 19.02.2026 — v2.0 (komplett überarbeitet für Tauri v2)*
+*Letzte Aktualisierung: 19.02.2026 — v2.1 (erweitert um Verifikation, Konsistenz, Querverweise)*
