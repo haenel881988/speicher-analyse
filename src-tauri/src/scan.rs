@@ -26,6 +26,24 @@ fn store() -> &'static Mutex<HashMap<String, ScanData>> {
 }
 
 pub fn save(data: ScanData) {
+    let file_count = data.files.len();
+    // Estimate RAM usage: ~200 bytes per FileEntry (path ~120 + name ~40 + fields ~40)
+    let estimated_ram_mb = (file_count * 200) / (1024 * 1024);
+
+    if file_count > 1_000_000 {
+        tracing::warn!(
+            files = file_count,
+            estimated_ram_mb = estimated_ram_mb,
+            "Scan hat über 1 Million Dateien — hoher RAM-Verbrauch möglich"
+        );
+    } else {
+        tracing::info!(
+            files = file_count,
+            estimated_ram_mb = estimated_ram_mb,
+            "Scan-Daten werden gespeichert"
+        );
+    }
+
     build_dir_index(&data.files);
     let mut s = store().lock().unwrap_or_else(|e| e.into_inner());
     s.clear();

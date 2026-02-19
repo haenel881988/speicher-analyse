@@ -26,12 +26,11 @@ fn safe_truncate(s: &str, max_bytes: usize) -> &str {
     &s[..end]
 }
 
-/// Run a PowerShell script and return stdout as String.
-/// Uses UTF-8 output encoding, 30s timeout equivalent.
-/// CREATE_NO_WINDOW prevents visible PowerShell console windows.
-pub async fn run_ps(script: &str) -> Result<String, String> {
+/// Run a PowerShell script with configurable timeout and return stdout as String.
+/// Uses UTF-8 output encoding. CREATE_NO_WINDOW prevents visible console windows.
+pub async fn run_ps_with_timeout(script: &str, timeout_secs: u64) -> Result<String, String> {
     let preview = script_preview(script);
-    tracing::debug!(script = %preview, "PowerShell starte");
+    tracing::debug!(script = %preview, timeout_s = timeout_secs, "PowerShell starte");
 
     let start = std::time::Instant::now();
     let utf8_prefix = "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; ";
@@ -52,14 +51,14 @@ pub async fn run_ps(script: &str) -> Result<String, String> {
     cmd.creation_flags(CREATE_NO_WINDOW);
 
     let output = tokio::time::timeout(
-        std::time::Duration::from_secs(30),
+        std::time::Duration::from_secs(timeout_secs),
         cmd.output()
     )
         .await
         .map_err(|_| {
             let elapsed = start.elapsed();
-            tracing::error!(script = %preview, elapsed_ms = elapsed.as_millis(), "PowerShell TIMEOUT nach 30s");
-            "PowerShell-Timeout nach 30 Sekunden".to_string()
+            tracing::error!(script = %preview, elapsed_ms = elapsed.as_millis(), timeout_s = timeout_secs, "PowerShell TIMEOUT");
+            format!("PowerShell-Timeout nach {} Sekunden", timeout_secs)
         })?
         .map_err(|e| {
             tracing::error!(script = %preview, error = %e, "PowerShell Start fehlgeschlagen");
@@ -90,6 +89,11 @@ pub async fn run_ps(script: &str) -> Result<String, String> {
     }
 }
 
+/// Run a PowerShell script with default 30s timeout.
+pub async fn run_ps(script: &str) -> Result<String, String> {
+    run_ps_with_timeout(script, 30).await
+}
+
 /// Run PowerShell and parse output as JSON Value
 pub async fn run_ps_json(script: &str) -> Result<serde_json::Value, String> {
     let output = run_ps(script).await?;
@@ -103,10 +107,28 @@ pub async fn run_ps_json(script: &str) -> Result<serde_json::Value, String> {
     })
 }
 
+/// Run PowerShell with custom timeout and parse output as JSON Value
+pub async fn run_ps_json_timeout(script: &str, timeout_secs: u64) -> Result<serde_json::Value, String> {
+    let output = run_ps_with_timeout(script, timeout_secs).await?;
+    if output.is_empty() {
+        return Ok(serde_json::Value::Null);
+    }
+    serde_json::from_str(&output).map_err(|e| {
+        let preview = safe_truncate(&output, 200);
+        tracing::warn!(error = %e, output_start = %preview, "JSON-Parse fehlgeschlagen");
+        format!("JSON-Parsing fehlgeschlagen: {} — Ausgabe: {}", e, preview)
+    })
+}
+
 /// Run PowerShell, parse as JSON, and ensure result is always an array.
 /// PowerShell's ConvertTo-Json returns a single object (not array) when there's only one item.
 pub async fn run_ps_json_array(script: &str) -> Result<serde_json::Value, String> {
-    let result = run_ps_json(script).await?;
+    run_ps_json_array_timeout(script, 30).await
+}
+
+/// Run PowerShell with custom timeout, parse as JSON array.
+pub async fn run_ps_json_array_timeout(script: &str, timeout_secs: u64) -> Result<serde_json::Value, String> {
+    let result = run_ps_json_timeout(script, timeout_secs).await?;
     if result.is_array() {
         Ok(result)
     } else if result.is_null() {
