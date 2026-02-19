@@ -147,6 +147,14 @@ Weitere Funktionen fehlen bei entsprechenden Dateitypen, bei Bildern z.B.: die A
 
 # Offene Issues
 
+## Tiefenanalyse (19.02.2026)
+
+→ Vollständige Ergebnisse in [`issue_tiefenanalyse.md`](issue_tiefenanalyse.md)
+**23 Findings:** 3 Kritisch, 7 Hoch, 6 Mittel, 4 Niedrig, 3 Hinweise
+**Wichtigste Punkte:** "Entfernte" Features noch im Code (AV-Risiko), fehlende Pfadprüfung bei Datei-Lese-Befehlen, 18 Ansichten ohne Aufräum-Funktion
+
+---
+
 ## 2. Scandaten werden nicht wiederhergestellt
 
 **Problem:** Wenn die App geschlossen und wieder geöffnet wird, sind die vorherigen Scan-Ergebnisse weg. Der Scan muss komplett neu durchgeführt werden, die Lüfter drehen hoch.
