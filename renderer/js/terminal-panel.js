@@ -1,7 +1,7 @@
 /**
  * Terminal Panel - Global embedded multi-shell terminal (VS Code style).
  * Supports PowerShell, CMD, and WSL (if installed).
- * Uses node-pty (backend) + xterm.js (frontend) for full PTY support.
+ * Uses piped I/O (Rust backend) + xterm.js (frontend).
  * All commands run natively - including claude, ssh, vim, python, etc.
  */
 

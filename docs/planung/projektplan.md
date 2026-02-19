@@ -66,7 +66,7 @@ Historische Pläne: siehe [`archiv/projektplan_v3-v5.md`](archiv/projektplan_v3-
 - WinGet-Verfügbarkeit wird geprüft und UI zeigt Hinweis wenn fehlend
 
 ### Batterie-Awareness
-- `battery.js` - Electron powerMonitor + Web Battery API
+- `battery.js` - Web Battery API + Tauri System-Info
 - Battery-Badge in Statusleiste (Prozent-Anzeige auf Laptops)
 - Scan-Warnung bei <50% Akku (Bestätigungsdialog)
 - Low-Battery-Toast bei <20% während Scan

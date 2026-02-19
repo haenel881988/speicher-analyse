@@ -156,7 +156,6 @@ Weitere Funktionen fehlen bei entsprechenden Dateitypen, bei Bildern z.B.: die A
 - Sicherheitslücke: `unsafe-eval` in CSP + fehlende Pfadprüfung bei Lösch-Befehl
 - 4 Event-Listener im Frontend die auf nie gesendete Backend-Events warten
 - 18 Ansichten ohne Aufräum-Funktion, PowerShell-Fehler auf Englisch
-- restore-window.ps1 sucht noch nach Electron-Prozess
 
 ---
 

@@ -14,6 +14,7 @@ Archiv: [`archiv/aenderungsprotokoll_n61-75.md`](archiv/aenderungsprotokoll_n61-
 
 | # | Datum | Version | Typ | Beschreibung |
 |---|-------|---------|-----|-------------|
+| 96 | 2026-02-19 | v7.2.1 | refactor | **Letzte Electron-Fragmente bereinigt** — Systematische Suche nach Electron-Resten im gesamten Projekt: (1) terminal-panel.js Kommentar korrigiert ("node-pty" durch "piped I/O" ersetzt). (2) issue.md: Veralteten Eintrag "restore-window.ps1 sucht nach Electron" entfernt (bereits in v7.2.1 #95 gefixt). (3) projektplan.md: "Electron powerMonitor" durch "Web Battery API + Tauri System-Info" ersetzt. (4) visionen.md: "Electron" durch "Tauri v2" ersetzt. (5) Changelog: 5 Electron-Ära Lessons (#4-#8) entfernt — bereits in docs/lessons-learned archiviert, für Tauri irrelevant. Drittanbieter-Libs (Monaco, mammoth, html2pdf), historische Docs und Lessons-Learned korrekt als "kein Handlungsbedarf" verifiziert. |
 | 95 | 2026-02-19 | v7.2.1 | improve | **Tiefenanalyse-Fixes: 14 Findings behoben (3 Kritisch, 4 Hoch, 3 Mittel, 1 Niedrig, 3 kein Fix nötig)** — Ergebnis der systematischen Tiefenanalyse v2.2. (1) KRITISCH K-1: Scanner/Firewall/Registry-Code komplett entfernt (~849 Zeilen commands.rs, registry.js gelöscht, oui.rs auf hostname_to_company+is_tracker reduziert, Bridge/lib.rs/app.js/dashboard.js/index.html bereinigt) — AV-Risiko eliminiert. (2) KRITISCH K-2: `unsafe-eval` aus CSP entfernt. (3) KRITISCH K-3: `validate_path()` Prüfung vor `delete_to_trash` hinzugefügt. (4) HOCH H-1: restore-window.ps1 Electron-Referenz auf Speicher-Analyse korrigiert. (5) HOCH H-2: Toten Event-Listener `onFileOpProgress` entfernt (3 weitere als gültig verifiziert). (6) HOCH H-3: Mutex `.lock().unwrap()` durch `.unwrap_or_else(|e| e.into_inner())` ersetzt — verhindert Cascade-Panics bei Mutex-Poisoning (commands.rs + scan.rs). (7) HOCH H-4: 3 englische PowerShell-Fehlermeldungen auf Deutsch übersetzt (ps.rs). (8) HOCH H-6: `destroy()` Methode zu 15 Views hinzugefügt (autostart, bloatware, cleanup, dashboard, duplicates, old-files, optimizer, preview, search, security-audit, services, settings, system-profil, tree, updates). (9) MITTEL M-1: `#[allow(dead_code)]` von ScanData entfernt. (10) MITTEL M-6: `open_external` blockiert URLs mit `@` (eingebettete Anmeldedaten). (11) NIEDRIG N-4: `delete_network_recording` von `std::fs` auf `tokio::fs` migriert (async). 3 Findings als bereits korrekt implementiert bestätigt (H-7 activate/deactivate, H-8 stub-check system_score, M-4 read-Pfade). |
 | 94 | 2026-02-18 | v7.2.1 | refactor | **CLAUDE.md Lesson-Learned-Migration + Gründlichkeits-Policy** — Sämtliche Lesson-Learned-Inhalte (historische Anekdoten, Migrations-Erzählungen, Bug-Referenzen) aus CLAUDE.md in `docs/lessons-learned/lessons-learned.md` migriert (#86, #87). CLAUDE.md enthält jetzt nur noch Prinzipien und Regeln, keine Geschichten. Neue Policy "Prinzip 3c: Gründlichkeit vor Effizienz" hinzugefügt — verbietet oberflächliche Quick-Scans und erzwingt vollständiges Lesen, alle Treffer prüfen, Analysen abschliessen. Veraltete API-Zahlen korrigiert (147→150 Methoden, 21 Event-Listener). MEMORY.md synchronisiert. |
 | 93 | 2026-02-18 | v7.2.1 | security | **XSS-Fix: escapeHtml() escaped keine Anführungszeichen** — `escapeHtml()` in utils.js nutzte den `textContent→innerHTML`-DOM-Trick, der laut HTML-Spec nur `<>&` escaped, NICHT `"'`. In 15+ Dateien wurde `escapeHtml()` in Attribut-Kontexten verwendet (`title="..."`, `data-path="..."`, `value="..."`) → Dateinamen mit `"` hätten aus Attributen ausbrechen können. Fix: Regex-basierte Implementierung die `&<>"'` escaped. `escapeAttr()` = Alias für `escapeHtml()`. 4 lokale Varianten entfernt (autostart.js eigene `esc()`, explorer.js `escAttr()`, explorer-tabs.js `_escAttr()`, treemap.js `escapeHtml()`). Bridge-Zähler korrigiert (150/21 statt 149/22). Lesson-Learned #85 dokumentiert. |
@@ -57,60 +58,6 @@ Siehe auch: [`archiv/aenderungsprotokoll_v7.3-v7.5.md`](archiv/aenderungsprotoko
 - Der User muss NIEMALS zweimal auf dasselbe Problem hinweisen. Beim ersten Hinweis: ganzheitlich prüfen, nicht nur den gemeldeten Fall fixen.
 - Grep-Patterns für Stub-Erkennung: `stub: true`, `json!([])`, `json!(null)`, `"not implemented"`, `"not yet"`, `todo!()`, `unimplemented!()`
 
----
 
-### #4: node-pty + Electron: Native Module Builds (2026-02-10)
 
-**Problem:** node-pty@1.1.0 brauchte winpty (GetCommitHash.bat Fehler). node-pty@1.2.0-beta.11 (ConPTY-only) scheiterte an Spectre-Mitigation.
-
-**Lösung:** `scripts/rebuild-pty.js` patcht binding.gyp automatisch vor electron-rebuild. In package.json als postinstall registriert.
-
-**Lehre:** Native Electron-Module können plattformspezifische Build-Probleme haben. Automatische Patches als postinstall-Scripts sind robuster als manuelle Fixes.
-
----
-
-### #5: Session-Save im before-quit muss synchron sein (2026-02-10)
-
-**Problem:** Electrons `before-quit` Event wartet NICHT auf async Operationen. `await session.saveSession()` wird nie fertig.
-
-**Lösung:** Synchrone Variante: `zlib.gzipSync()` + `fs.writeFileSync()` direkt im before-quit Handler. Die async Variante wird nur für after-scan und manuelles Speichern verwendet.
-
-**Lehre:** Electron Lifecycle-Events (before-quit, will-quit) sind synchron. Für Cleanup-Code immer synchrone APIs verwenden.
-
----
-
-### #6: Chromium file:// blockiert Module Workers (2026-02-10)
-
-**Problem:** pdf.js Worker-Datei ist `.mjs` → pdf.js erstellt `new Worker(url, { type: 'module' })`. Chromium blockiert Module Workers von `file://` URLs (null origin, CORS-Check fehlschlägt).
-
-**Lösung:** Worker-Script per `fetch()` laden, `export{}` Statement entfernen (ungültig in Classic Worker), als `Blob` + `URL.createObjectURL()` laden. CSP erlaubt `worker-src blob:`.
-
-**Lehre:** In Electron (file:// Protokoll) niemals Module Workers (.mjs) verwenden. Immer Classic Workers via Blob-URL oder .js-Dateien nutzen.
-
----
-
-### #7: Node.js Buffer.buffer enthält Pool-Daten (2026-02-10)
-
-**Problem:** `fs.readFile()` gibt Buffer zurück. `buffer.buffer` ist der unterliegende ArrayBuffer, der bei kleinen Dateien den GESAMTEN Pool enthält (8KB+). `new Uint8Array(buffer.buffer)` enthält dann Müll-Daten.
-
-**Lösung:** `buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)` für sauberen ArrayBuffer.
-
-**Lehre:** NIEMALS `buffer.buffer` direkt über IPC senden. Immer `.slice()` für einen sauberen ArrayBuffer verwenden.
-
----
-
-### #8: Electron Admin-Elevation: Single-Instance Lock Race Condition (2026-02-11)
-
-**Problem:** `Start-Process -Verb RunAs` startet den neuen Prozess, PowerShell gibt Return, und `app.quit()` wird aufgerufen. Aber `app.quit()` ist ASYNC — bis die alte Instanz den Lock freigibt, hat die neue Instanz bereits `requestSingleInstanceLock()` aufgerufen, `false` bekommen, und sich sofort beendet. Ergebnis: App schließt sich und nichts passiert.
-
-**Lösung:** 4 Fixes zusammen:
-1. `app.releaseSingleInstanceLock()` EXPLIZIT VOR dem Spawn der neuen Instanz aufrufen (Electron API seit v15)
-2. `app.exit(0)` statt `app.quit()` — sofortiger Exit ohne async Event-Queue
-3. `execFileAsync` statt `execAsync` — bypassed cmd.exe komplett (keine Double-Quote-Nesting-Probleme)
-4. `app._isElevating` Flag — verhindert dass Window-Close/Tray/window-all-closed während der UAC-Wartezeit `app.quit()` aufrufen
-
-**Lehre:**
-- `app.quit()` ist ASYNC und feuert Events (before-quit, will-quit, window-all-closed). Für Elevation immer `app.exit(0)` verwenden.
-- `requestSingleInstanceLock()` muss EXPLIZIT mit `releaseSingleInstanceLock()` freigegeben werden bevor die neue Instanz startet. Sich auf `app.quit()` verlassen funktioniert nicht (Race Condition).
-- `exec()` geht durch `cmd.exe /c "..."` — fragile Verschachtelung bei PowerShell-Befehlen. `execFile()` spawnt direkt.
-- Während Elevation (UAC-Wartezeit bis 120s) muss ALLES was `app.quit()` aufrufen könnte blockiert werden: Window-Close, window-all-closed, Tray-Menü. Sonst wird `before-quit` gefeuert, Cleanup-Code räumt die scans-Map ab, und die Elevation-Daten sind weg.
+> Electron-Ära Lessons (#1-#8) wurden in [`docs/lessons-learned/lessons-learned.md`](../../lessons-learned/lessons-learned.md) archiviert (Kategorien: Allgemein, Migration).

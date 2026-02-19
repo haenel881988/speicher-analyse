@@ -122,7 +122,7 @@ Die Vision: Custom Shell Replacement / Power User Overlay. Windows 11 wird immer
 
 Wenn das "Speicher Analyse" Tool zum zentralen Hub wird, wo man Dateien verwaltet und direkt Code-Snippets bearbeiten oder Terminals öffnen kann, dann ist das ein massiver Workflow-Booster.
 
-Vorbild: Total Commander auf Steroiden oder Directory Opus, aber modern mit Web-Technologien (Electron).
+Vorbild: Total Commander auf Steroiden oder Directory Opus, aber modern mit Web-Technologien (Tauri v2).
 
 ### Architektur-Empfehlung: Plattform statt Monolith
 
