@@ -38,8 +38,9 @@ Weitere Funktionen fehlen bei entsprechenden Dateitypen, bei Bildern z.B.: die A
 > - ~~Keine Extraktion möglich~~ → **Umgesetzt** (v7.2.1 #91) — ZIP-Extraktion im Kontextmenü
 > - ~~Erweiterte Eigenschaften fehlen~~ → **Umgesetzt** (v7.2.1 #99-100) — 4-Tab Eigenschaften-Dialog wie Windows Explorer (Allgemein, Sicherheit, Details, Vorgängerversionen)
 > - ~~Exe als Admin ausführen~~ → **Umgesetzt** (v7.2.1 #91) — "Als Administrator ausführen" im Kontextmenü
-> - Bildvorschau → **Noch offen** — Vorschau für Bilder/Medien fehlt noch
-> - Datei-Icons → **Teilweise** — `getFileIcon()` existiert im Explorer, aber im Verzeichnisbaum sehen Dateien noch gleich aus
+> - ~~Bildvorschau~~ → **Umgesetzt** — Vorschau-Panel (Ctrl+P) für Bilder, PDF, DOCX, XLSX, Code (Monaco Editor)
+> - ~~Datei-Icons~~ → **Umgesetzt** — `getFileIcon()` zeigt dateityp-spezifische Icons in der Explorer-Dateiliste (Verzeichnisbaum zeigt korrekterweise nur Ordner-Icons)
+> - ~~ZIP-Komprimierung~~ → **Umgesetzt** (v7.2.1 #107) — "Als ZIP komprimieren" im Kontextmenü
 
 ### Terminal-Funktionen
 
@@ -152,7 +153,7 @@ Weitere Funktionen fehlen bei entsprechenden Dateitypen, bei Bildern z.B.: die A
 | 2 | #7 | Intelligente Scandaten (Delta-Scan, Verlauf, Hintergrund) | Planung |
 | 3 | #8 | Intelligenter Bloatware-Scanner (5-Stufen-Bewertung) | Planung |
 | 4 | #9 | Apps-Kontrollzentrum (ersetzt "Updates"-Tab) | Planung |
-| 5 | #10 | System-Profil (Hardware, Seriennummer, Hersteller-Links) | Planung |
+| 5 | #10 | System-Profil (Hardware, Seriennummer, Hersteller-Links) | Größtenteils umgesetzt |
 | 6 | #4 | Privacy Dashboard anwenderfreundlicher | Überarbeitung — wartet auf Test |
 | 7 | #5 | PDF Vollansicht + Bearbeitung | Offen |
 | ~~8~~ | ~~#11~~ | ~~Netzwerk-Paketaufzeichnung~~ | ENTFALLEN (AV-Risiko) |
@@ -226,7 +227,7 @@ Weitere Funktionen fehlen bei entsprechenden Dateitypen, bei Bildern z.B.: die A
 **Problem:** `Win32_LogicalDisk` wird beim App-Start zweimal innerhalb von 300ms aufgerufen — derselbe Datensatz wird doppelt abgefragt.
 **Lösung:** `loadDrives()` verwendet jetzt die bereits vom Explorer geladenen Daten wieder.
 
-**Status:** L-1, L-3, L-4, L-5 behoben. L-2 (Verzeichnis-Cache) noch offen.
+**Status:** Alle behoben (L-1 bis L-5). L-2 Verzeichnis-Cache seit #104 implementiert (5s TTL, 10 Einträge).
 
 ---
 
@@ -439,7 +440,19 @@ Eine Art "Waage für die Festplatte":
 - "Dein System auf einen Blick" als Karte im Dashboard
 - Exportierbar als Text oder PDF (für Support-Anfragen)
 
-**Status:** Planung
+**Was bereits umgesetzt ist:**
+- Sidebar-Tab "System-Profil" mit 8 Karten (Gerät, OS, CPU, GPU, RAM, Festplatten, Netzwerk, Links)
+- Seriennummer, Mainboard, BIOS automatisch ausgelesen
+- Windows-Produktschlüssel (letzte 5 Zeichen) automatisch ausgelesen
+- Hersteller-Links dynamisch generiert (Lenovo, Dell, HP, ASUS, Acer, MSI, Samsung, Microsoft)
+- Treiber-Links für Intel, AMD, NVIDIA basierend auf CPU/GPU-Erkennung
+- Text-Export ("Kopieren"-Button) für Support-Anfragen
+
+**Was noch fehlt:**
+- PDF-Export (aktuell nur Text-Copy)
+- Dashboard-Karte "Dein System auf einen Blick"
+
+**Status:** Größtenteils umgesetzt — wartet auf Simons Test
 
 ---
 
@@ -741,10 +754,10 @@ Die App hat bereits einen beeindruckenden Funktionsumfang. Jetzt geht es darum, 
 
 | Issue | Was | Status |
 |-------|-----|--------|
-| #2/#3 | Scandaten korrekt speichern und wiederherstellen | Wartet auf Test |
+| #2/#3 | Scandaten korrekt speichern und wiederherstellen | Bestätigt 19.02.2026 |
 | #4 | Privacy Dashboard verständlicher machen | Wartet auf Test |
 | #5 | PDF Vollansicht und Bearbeitung | Offen |
-| #12 | WCAG-Kontrast vollständig konform | Teilweise |
+| ~~#12~~ | ~~WCAG-Kontrast vollständig konform~~ | Bestätigt 19.02.2026 |
 | #13 | Fenster-Bereiche frei verschiebbar | Offen |
 | #14 | Echte Terminal-Emulation | Teilweise |
 
