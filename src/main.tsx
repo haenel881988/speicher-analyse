@@ -1,6 +1,9 @@
-import React from 'react';
+import React, { lazy, Suspense } from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import { AppProvider } from './context/AppContext';
+
+const PdfEditorView = lazy(() => import('./views/PdfEditorView'));
 
 // Polyfill: Uint8Array.toHex/fromHex (benötigt von pdf.js v5.4)
 if (!(Uint8Array.prototype as any).toHex) {
@@ -30,8 +33,20 @@ window.addEventListener('unhandledrejection', (event) => {
   console.error('[Unhandled Rejection]', event.reason);
 });
 
+// Standalone PDF-Fenster: ?pdf=<encoded-path> Parameter erkennen
+const urlParams = new URLSearchParams(window.location.search);
+const pdfPath = urlParams.get('pdf');
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <App />
+    {pdfPath ? (
+      <AppProvider>
+        <Suspense fallback={<div className="loading-state">PDF wird geladen...</div>}>
+          <PdfEditorView filePath={decodeURIComponent(pdfPath)} onClose={() => window.close()} />
+        </Suspense>
+      </AppProvider>
+    ) : (
+      <App />
+    )}
   </React.StrictMode>
 );

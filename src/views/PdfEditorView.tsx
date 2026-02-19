@@ -402,6 +402,38 @@ export default function PdfEditorView({ filePath = '', onClose }: { filePath?: s
     else setActiveTab('explorer');
   }, [unsavedChanges, onClose, setActiveTab]);
 
+  const exportAs = useCallback(async () => {
+    if (!filePath) return;
+    try {
+      const defaultName = filePath.replace(/\.pdf$/i, '_annotiert.pdf');
+      const result = await api.showSaveDialog({
+        title: 'PDF exportieren',
+        defaultPath: defaultName,
+        filters: [{ name: 'PDF', extensions: ['pdf'] }],
+      });
+      if (!result || result.canceled) return;
+      const outputPath = result.path || result;
+      if (typeof outputPath !== 'string') return;
+      await api.pdfSaveAnnotations(filePath, outputPath, annotationsRef.current);
+      showToast('PDF exportiert: ' + outputPath.split(/[\\/]/).pop(), 'success');
+    } catch (err: any) {
+      showToast('Export fehlgeschlagen: ' + err.message, 'error');
+    }
+  }, [filePath, showToast]);
+
+  const handlePrint = useCallback(() => {
+    window.print();
+  }, []);
+
+  const detachWindow = useCallback(async () => {
+    if (!filePath) return;
+    try {
+      await api.openPdfWindow(filePath);
+    } catch (err: any) {
+      showToast('Fenster konnte nicht geöffnet werden: ' + err.message, 'error');
+    }
+  }, [filePath, showToast]);
+
   const runOcr = useCallback(async (language: string, allPages: boolean) => {
     if (!pdfDocRef.current) return;
     setOcrProgress({ running: true, text: 'Starte OCR...', percent: 0 });
@@ -533,8 +565,11 @@ export default function PdfEditorView({ filePath = '', onClose }: { filePath?: s
         <span className="pdf-editor-info">{infoText}</span>
         <div className="pdf-editor-toolbar-right">
           <button className="pdf-editor-btn" onClick={save} title="Speichern (Ctrl+S)">Speichern</button>
+          <button className="pdf-editor-btn" onClick={exportAs} title="Als Kopie speichern...">Exportieren</button>
+          <button className="pdf-editor-btn" onClick={handlePrint} title="PDF drucken">Drucken</button>
           <button className="pdf-editor-btn" onClick={() => setShowOcr(true)} title="OCR-Texterkennung">OCR</button>
           <button className="pdf-editor-btn" onClick={() => { setMergeFiles([filePath]); setShowMerge(true); }} title="PDF zusammenfügen">Zusammenfügen</button>
+          {!onClose && <button className="pdf-editor-btn" onClick={detachWindow} title="In eigenem Fenster öffnen">Fenster lösen</button>}
         </div>
       </div>
 

@@ -4129,6 +4129,26 @@ textarea::placeholder {
     background: var(--bg-hover);
 }
 
+/* ===== PDF-Editor Druck-Styles ===== */
+@media print {
+    /* Nur PDF-Seiten drucken, alles andere ausblenden */
+    body > *:not(#root) { display: none !important; }
+    #app > *:not(#content) { display: none !important; }
+    #sidebar, .toolbar, .status-bar, #terminal-global,
+    .pdf-editor-toolbar, .pdf-editor-anno-toolbar,
+    .pdf-editor-thumbnails, .pdf-page-label,
+    .pdf-page-context-menu { display: none !important; }
+    .pdf-editor { overflow: visible !important; height: auto !important; }
+    .pdf-editor-body { overflow: visible !important; height: auto !important; }
+    .pdf-editor-pages { overflow: visible !important; height: auto !important; }
+    .pdf-editor-page {
+        break-inside: avoid;
+        page-break-inside: avoid;
+        margin: 0 !important;
+    }
+    .pdf-page-canvas { max-width: 100% !important; height: auto !important; }
+}
+
 /* ===== v7.3: Global Terminal Panel (VS Code style) ===== */
 #terminal-global {
     flex-shrink: 0;

@@ -215,6 +215,26 @@ pub async fn show_save_dialog(app: tauri::AppHandle, options: Option<Value>) -> 
         .unwrap_or("")
         .to_string();
 
+    let default_path = options.as_ref()
+        .and_then(|o| o.get("defaultPath"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+
+    let filters: Vec<(String, Vec<String>)> = options.as_ref()
+        .and_then(|o| o.get("filters"))
+        .and_then(|v| v.as_array())
+        .map(|arr| arr.iter().filter_map(|f| {
+            let name = f.get("name")?.as_str()?.to_string();
+            let exts: Vec<String> = f.get("extensions")?
+                .as_array()?
+                .iter()
+                .filter_map(|e| e.as_str().map(|s| s.to_string()))
+                .collect();
+            Some((name, exts))
+        }).collect())
+        .unwrap_or_default();
+
     if is_directory {
         // Ordner-Auswahl-Dialog
         let (tx, rx) = std::sync::mpsc::channel();
@@ -238,6 +258,13 @@ pub async fn show_save_dialog(app: tauri::AppHandle, options: Option<Value>) -> 
         let mut builder = app.dialog().file();
         if !title.is_empty() {
             builder = builder.set_title(&title);
+        }
+        if !default_path.is_empty() {
+            builder = builder.set_file_name(&default_path);
+        }
+        for (name, exts) in &filters {
+            let ext_refs: Vec<&str> = exts.iter().map(|s| s.as_str()).collect();
+            builder = builder.add_filter(name, &ext_refs);
         }
         builder.save_file(move |path| {
             let _ = tx.send(path);

@@ -303,6 +303,8 @@ export const pdfDeletePages = (filePath: string, outputPath: string, pageNums: n
   invoke<any>('pdf_delete_pages', { filePath, outputPath, pageNums });
 export const pdfMerge = (filePaths: string[], outputPath: string) =>
   invoke<any>('pdf_merge', { filePaths, outputPath });
+export const openPdfWindow = (filePath: string) =>
+  invoke<any>('open_pdf_window', { filePath });
 
 // === Frontend Logging ===
 export const logFrontend = (level: string, message: string, context?: string) =>

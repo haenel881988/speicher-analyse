@@ -379,6 +379,7 @@ pub fn run() {
             commands::pdf_rotate_page,
             commands::pdf_delete_pages,
             commands::pdf_merge,
+            commands::open_pdf_window,
         ])
         .run(tauri::generate_context!())
         .expect("Fehler beim Starten der Anwendung");

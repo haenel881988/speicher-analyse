@@ -577,6 +577,40 @@ pub async fn pdf_merge(
     }).await.map_err(|e| format!("Task fehlgeschlagen: {e}"))?
 }
 
+// === Detached Window ===
+
+#[tauri::command]
+pub async fn open_pdf_window(app: tauri::AppHandle, file_path: String) -> Result<Value, String> {
+    use tauri::WebviewWindowBuilder;
+
+    validate_path(&file_path)?;
+
+    let label = format!("pdf-{}", std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis());
+
+    // Einfache URL-Kodierung für Dateipfade (Backslash, Leerzeichen, etc.)
+    let encoded_path: String = file_path.bytes().map(|b| match b {
+        b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b':' | b'/' => (b as char).to_string(),
+        b'\\' => "%5C".to_string(),
+        _ => format!("%{:02X}", b),
+    }).collect();
+    let url = format!("/index.html?pdf={}", encoded_path);
+
+    let window = WebviewWindowBuilder::new(&app, &label, tauri::WebviewUrl::App(url.into()))
+        .title(format!("PDF — {}", file_path.split(&['\\', '/'][..]).last().unwrap_or("PDF")))
+        .inner_size(1000.0, 800.0)
+        .min_inner_size(600.0, 400.0)
+        .resizable(true)
+        .build()
+        .map_err(|e| format!("Fenster konnte nicht erstellt werden: {e}"))?;
+
+    let _ = window.set_focus();
+
+    Ok(json!({ "success": true, "label": label }))
+}
+
 // === Helpers ===
 
 /// Hex-Farbstring (#RRGGBB oder #RRGGBBAA) zu PdfColor parsen
