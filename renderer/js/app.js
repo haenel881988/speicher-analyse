@@ -28,6 +28,7 @@ import { SoftwareAuditView } from './software-audit.js';
 import { NetworkView } from './network.js';
 import { SecurityAuditView } from './security-audit.js';
 import { SystemProfilView } from './system-profil.js';
+import { HealthCheckView } from './health-check.js';
 import { TerminalPanel } from './terminal-panel.js';
 import { showContextMenu, closeContextMenu } from './context-menu.js';
 
@@ -135,6 +136,7 @@ const softwareAuditView = new SoftwareAuditView(document.getElementById('view-so
 const networkView = new NetworkView(document.getElementById('view-network'));
 const securityAuditView = new SecurityAuditView(document.getElementById('view-security-audit'));
 const systemProfilView = new SystemProfilView(document.getElementById('view-system-profil'));
+const healthCheckView = new HealthCheckView(document.getElementById('view-health-check'));
 // Global Terminal Panel (VS Code style, accessible from any tab via Ctrl+`)
 const globalTerminal = new TerminalPanel(document.getElementById('terminal-global'));
 
@@ -744,6 +746,12 @@ async function autoLoadTab(tabName) {
                 tabLoaded['system-profil'] = true;
                 setStatus('Bereit');
                 break;
+            case 'health-check':
+                setStatus('PC-Diagnose wird geladen...', true);
+                await healthCheckView.init();
+                tabLoaded['health-check'] = true;
+                setStatus('Bereit');
+                break;
         }
     } catch (e) {
         console.error(`Tab '${tabName}' laden fehlgeschlagen:`, e);
@@ -811,6 +819,11 @@ async function refreshCurrentView() {
             case 'security-audit':
                 securityAuditView._loaded = false;
                 await securityAuditView.init();
+                break;
+            case 'health-check':
+                healthCheckView._loaded = false;
+                healthCheckView._results = null;
+                await healthCheckView.init();
                 break;
             default:
                 // Für alle anderen Tabs: autoLoadTab aufrufen
