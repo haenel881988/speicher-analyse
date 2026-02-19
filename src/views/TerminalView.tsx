@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import '@xterm/xterm/css/xterm.css';
 import * as api from '../api/tauri-api';
+import { useAppContext } from '../context/AppContext';
 
 const DARK_THEME = {
   background: '#1a1d2e', foreground: '#e2e4f0', cursor: '#6c5ce7', cursorAccent: '#1a1d2e',
@@ -27,6 +28,7 @@ function getXtermTheme() {
 }
 
 export default function TerminalPanel() {
+  const { theme } = useAppContext();
   const [visible, setVisible] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [currentShell, setCurrentShell] = useState('powershell');
@@ -145,14 +147,10 @@ export default function TerminalPanel() {
     }
   }, [visible]);
 
-  // Theme change listener
+  // Theme change — react to context theme via prop
   useEffect(() => {
-    const handler = () => {
-      if (xtermRef.current) xtermRef.current.options.theme = getXtermTheme();
-    };
-    document.addEventListener('settings-theme-change', handler);
-    return () => document.removeEventListener('settings-theme-change', handler);
-  }, []);
+    if (xtermRef.current) xtermRef.current.options.theme = getXtermTheme();
+  }, [theme]);
 
   // Cleanup on unmount
   useEffect(() => {

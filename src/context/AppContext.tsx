@@ -28,6 +28,7 @@ interface AppState {
   capabilities: any;
   batteryInfo: { onBattery: boolean; percentage: number | null; isCharging: boolean } | null;
   lastScanProgress: ScanProgress | null;
+  theme: string;
 }
 
 interface AppContextType extends AppState {
@@ -39,6 +40,7 @@ interface AppContextType extends AppState {
   setCapabilities: (caps: any) => void;
   setBatteryInfo: (info: AppState['batteryInfo']) => void;
   setLastScanProgress: (progress: ScanProgress | null) => void;
+  setTheme: (theme: string) => void;
   showToast: (message: string, type?: 'success' | 'error' | 'info' | 'warning') => void;
 }
 
@@ -66,6 +68,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     capabilities: null,
     batteryInfo: null,
     lastScanProgress: null,
+    theme: localStorage.getItem('speicher-analyse-theme') || 'dark',
   });
 
   const setDrives = useCallback((drives: Drive[]) =>
@@ -84,6 +87,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setState(s => ({ ...s, batteryInfo })), []);
   const setLastScanProgress = useCallback((lastScanProgress: ScanProgress | null) =>
     setState(s => ({ ...s, lastScanProgress })), []);
+  const setTheme = useCallback((theme: string) =>
+    setState(s => ({ ...s, theme })), []);
 
   const showToast = useCallback((message: string, type: string = 'info') => {
     if (toastCallback) toastCallback(message, type);
@@ -100,6 +105,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setCapabilities,
       setBatteryInfo,
       setLastScanProgress,
+      setTheme,
       showToast,
     }}>
       {children}

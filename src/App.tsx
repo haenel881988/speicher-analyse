@@ -18,16 +18,18 @@ function AppInner() {
   const [selectedDrive, setSelectedDrive] = useState('');
   const [statusText, setStatusText] = useState('Bereit');
   const [statusLoading, setStatusLoading] = useState(false);
-  const [theme, setTheme] = useState(() => localStorage.getItem('speicher-analyse-theme') || 'dark');
+  const [scanProgressData, setScanProgressData] = useState<any>(null);
+  const [scanCompleteData, setScanCompleteData] = useState<any>(null);
+  const [scanErrorData, setScanErrorData] = useState<any>(null);
   const batteryIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const tabLoadedRef = useRef<Record<string, boolean>>({});
 
-  // Theme
+  // Theme — synced to DOM and localStorage via context
   useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    localStorage.setItem('speicher-analyse-theme', theme);
-    api.setPreference('theme', theme).catch(() => {});
-  }, [theme]);
+    document.documentElement.dataset.theme = ctx.theme;
+    localStorage.setItem('speicher-analyse-theme', ctx.theme);
+    api.setPreference('theme', ctx.theme).catch(() => {});
+  }, [ctx.theme]);
 
   // Register stub toast callback
   useEffect(() => {
@@ -114,24 +116,27 @@ function AppInner() {
     } catch { /* ignore */ }
   }
 
-  // Scan event listeners
+  // Scan event listeners — data passed via props to ProgressBar
   useTauriEvent('scan-progress', (progress: any) => {
-    document.dispatchEvent(new CustomEvent('scan-ui-progress', { detail: progress }));
+    setScanProgressData(progress);
+    setScanCompleteData(null);
+    setScanErrorData(null);
   });
 
   useTauriEvent('scan-complete', (progress: any) => {
     ctx.setScanning(false);
     ctx.setLastScanProgress(progress);
-    document.dispatchEvent(new CustomEvent('scan-ui-complete', { detail: progress }));
+    setScanCompleteData(progress);
+    setScanProgressData(null);
     setStatusText('Bereit');
     setStatusLoading(false);
-    // Reset tab loaded flags so they reload
     tabLoadedRef.current = {};
   });
 
   useTauriEvent('scan-error', (error: any) => {
     ctx.setScanning(false);
-    document.dispatchEvent(new CustomEvent('scan-ui-error', { detail: error }));
+    setScanErrorData(error);
+    setScanProgressData(null);
     setStatusText('Scan-Fehler');
     setStatusLoading(false);
   });
@@ -193,8 +198,8 @@ function AppInner() {
   }, [ctx]);
 
   const handleToggleTheme = useCallback(() => {
-    setTheme(t => t === 'dark' ? 'light' : 'dark');
-  }, []);
+    ctx.setTheme(ctx.theme === 'dark' ? 'light' : 'dark');
+  }, [ctx]);
 
   const handleTabChange = useCallback((tab: string) => {
     ctx.setActiveTab(tab);
@@ -206,20 +211,14 @@ function AppInner() {
     }).catch(() => {});
   }, [ctx, selectedDrive]);
 
-  // Keyboard shortcuts
+  // Keyboard shortcuts (Ctrl+` handled by TerminalView, Ctrl+F by ExplorerView)
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.key === '`') {
-        e.preventDefault();
-        document.dispatchEvent(new CustomEvent('toggle-global-terminal'));
-        return;
-      }
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
 
       if (e.ctrlKey && e.key === 'f') {
         e.preventDefault();
         if (ctx.activeTab !== 'explorer') handleTabChange('explorer');
-        document.dispatchEvent(new CustomEvent('activate-omnibar'));
       }
     };
     document.addEventListener('keydown', handler);
@@ -246,7 +245,7 @@ function AppInner() {
           </Suspense>
         </main>
       </div>
-      <ProgressBar />
+      <ProgressBar scanProgress={scanProgressData} scanComplete={scanCompleteData} scanError={scanErrorData} />
       <StatusBar statusText={statusText} statusLoading={statusLoading} />
       <ToastContainer />
       <div id="treemap-tooltip" className="treemap-tooltip" style={{ display: 'none' }}>

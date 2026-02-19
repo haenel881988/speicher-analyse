@@ -28,7 +28,7 @@ interface Shell {
 }
 
 export default function SettingsView() {
-  const { showToast } = useAppContext();
+  const { showToast, setTheme: setGlobalTheme } = useAppContext();
   const [prefs, setPrefs] = useState<Prefs>({});
   const [hotkey, setHotkey] = useState('');
   const [shellRegistered, setShellRegistered] = useState(false);
@@ -80,7 +80,6 @@ export default function SettingsView() {
   const setPref = useCallback(async (key: string, value: any) => {
     setPrefs(prev => ({ ...prev, [key]: value }));
     await api.setPreference(key, value);
-    document.dispatchEvent(new CustomEvent('settings-pref-change', { detail: { key, value } }));
   }, []);
 
   const togglePref = useCallback((key: string) => {
@@ -255,11 +254,11 @@ export default function SettingsView() {
             <div className="settings-theme-switch">
               <span className={`settings-theme-option ${isDark ? 'active' : ''}`} onClick={() => {
                 setPref('theme', 'dark');
-                document.dispatchEvent(new CustomEvent('settings-theme-change', { detail: { theme: 'dark' } }));
+                setGlobalTheme('dark');
               }}>Dunkel</span>
               <span className={`settings-theme-option ${!isDark ? 'active' : ''}`} onClick={() => {
                 setPref('theme', 'light');
-                document.dispatchEvent(new CustomEvent('settings-theme-change', { detail: { theme: 'light' } }));
+                setGlobalTheme('light');
               }}>Hell</span>
             </div>
           </div>

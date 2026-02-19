@@ -1,5 +1,4 @@
 import { lazy, Suspense } from 'react';
-import { useAppContext } from '../context/AppContext';
 
 // Lazy-load all views for code splitting
 const DashboardView = lazy(() => import('../views/DashboardView'));
@@ -31,44 +30,41 @@ interface TabRouterProps {
   activeTab: string;
 }
 
+const TAB_MAP: Record<string, React.LazyExoticComponent<any>> = {
+  'dashboard': DashboardView,
+  'tree': TreeView,
+  'treemap': TreemapView,
+  'types': ChartsView,
+  'top100': TopFilesView,
+  'duplicates': DuplicatesView,
+  'old-files': OldFilesView,
+  'cleanup': CleanupView,
+  'autostart': AutostartView,
+  'services': ServicesView,
+  'optimizer': OptimizerView,
+  'updates': UpdatesView,
+  'explorer': ExplorerView,
+  'privacy': PrivacyView,
+  'smart': SmartView,
+  'software-audit': SoftwareAuditView,
+  'security-audit': SecurityAuditView,
+  'network': NetworkView,
+  'system-profil': SystemProfilView,
+  'health-check': HealthCheckView,
+  'settings': SettingsView,
+  'pdf-editor': PdfEditorView,
+};
+
 export function TabRouter({ activeTab }: TabRouterProps) {
-  const { currentScanId, lastScanProgress } = useAppContext();
+  const ViewComponent = TAB_MAP[activeTab] || DashboardView;
 
   return (
     <div id="tab-content">
       <Suspense fallback={<Loading />}>
-        <TabPane active={activeTab === 'dashboard'}><DashboardView /></TabPane>
-        <TabPane active={activeTab === 'tree'}><TreeView /></TabPane>
-        <TabPane active={activeTab === 'treemap'}><TreemapView /></TabPane>
-        <TabPane active={activeTab === 'types'}><ChartsView /></TabPane>
-        <TabPane active={activeTab === 'top100'}><TopFilesView /></TabPane>
-        <TabPane active={activeTab === 'duplicates'}><DuplicatesView /></TabPane>
-        <TabPane active={activeTab === 'old-files'}><OldFilesView /></TabPane>
-        <TabPane active={activeTab === 'cleanup'}><CleanupView /></TabPane>
-        <TabPane active={activeTab === 'autostart'}><AutostartView /></TabPane>
-        <TabPane active={activeTab === 'services'}><ServicesView /></TabPane>
-        <TabPane active={activeTab === 'optimizer'}><OptimizerView /></TabPane>
-        <TabPane active={activeTab === 'updates'}><UpdatesView /></TabPane>
-        <TabPane active={activeTab === 'explorer'}><ExplorerView /></TabPane>
-        <TabPane active={activeTab === 'privacy'}><PrivacyView /></TabPane>
-        <TabPane active={activeTab === 'smart'}><SmartView /></TabPane>
-        <TabPane active={activeTab === 'software-audit'}><SoftwareAuditView /></TabPane>
-        <TabPane active={activeTab === 'security-audit'}><SecurityAuditView /></TabPane>
-        <TabPane active={activeTab === 'network'}><NetworkView /></TabPane>
-        <TabPane active={activeTab === 'system-profil'}><SystemProfilView /></TabPane>
-        <TabPane active={activeTab === 'health-check'}><HealthCheckView /></TabPane>
-        <TabPane active={activeTab === 'settings'}><SettingsView /></TabPane>
-        <TabPane active={activeTab === 'pdf-editor'}><PdfEditorView /></TabPane>
+        <div className="tab-view active">
+          <ViewComponent />
+        </div>
       </Suspense>
-    </div>
-  );
-}
-
-function TabPane({ active, children }: { active: boolean; children: React.ReactNode }) {
-  // Keep mounted but hidden (preserve state like original app)
-  return (
-    <div className={`tab-view ${active ? 'active' : ''}`} style={{ display: active ? undefined : 'none' }}>
-      {children}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { formatNumber, formatBytes, formatDuration } from '../utils/format';
 
@@ -7,46 +7,54 @@ interface StatusBarProps {
   statusLoading: boolean;
 }
 
-export function ProgressBar() {
-  const { scanning, lastScanProgress } = useAppContext();
+interface ProgressBarProps {
+  scanProgress: any | null;
+  scanComplete: any | null;
+  scanError: any | null;
+}
+
+export function ProgressBar({ scanProgress, scanComplete, scanError }: ProgressBarProps) {
   const [progressText, setProgressText] = useState('');
   const [progressPath, setProgressPath] = useState('');
   const [active, setActive] = useState(false);
   const [animating, setAnimating] = useState(false);
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Exposed via custom event for scan updates
+  // Scan progress update
   useEffect(() => {
-    const onProgress = (e: CustomEvent) => {
-      const p = e.detail;
-      setProgressText(
-        `${formatNumber(p.dirs_scanned)} Ordner \u00B7 ${formatNumber(p.files_found)} Dateien \u00B7 ${formatBytes(p.total_size)} \u00B7 ${formatDuration(p.elapsed_seconds)}`
-      );
-      setProgressPath(p.current_path);
-      setActive(true);
-      setAnimating(true);
-    };
-    const onComplete = (e: CustomEvent) => {
-      const p = e.detail;
-      setProgressText(
-        `Fertig! ${formatNumber(p.dirs_scanned)} Ordner \u00B7 ${formatNumber(p.files_found)} Dateien \u00B7 ${formatBytes(p.total_size)} \u00B7 ${formatDuration(p.elapsed_seconds)}` +
-        (p.errors_count > 0 ? ` \u00B7 ${p.errors_count} Fehler` : '')
-      );
-      setAnimating(false);
-      setTimeout(() => setActive(false), 3000);
-    };
-    const onError = (e: CustomEvent) => {
-      setProgressText('Fehler: ' + (e.detail?.current_path || 'Unbekannt'));
-      setAnimating(false);
-    };
+    if (!scanProgress) return;
+    const p = scanProgress;
+    setProgressText(
+      `${formatNumber(p.dirs_scanned)} Ordner \u00B7 ${formatNumber(p.files_found)} Dateien \u00B7 ${formatBytes(p.total_size)} \u00B7 ${formatDuration(p.elapsed_seconds)}`
+    );
+    setProgressPath(p.current_path);
+    setActive(true);
+    setAnimating(true);
+    if (hideTimerRef.current) { clearTimeout(hideTimerRef.current); hideTimerRef.current = null; }
+  }, [scanProgress]);
 
-    document.addEventListener('scan-ui-progress', onProgress as EventListener);
-    document.addEventListener('scan-ui-complete', onComplete as EventListener);
-    document.addEventListener('scan-ui-error', onError as EventListener);
-    return () => {
-      document.removeEventListener('scan-ui-progress', onProgress as EventListener);
-      document.removeEventListener('scan-ui-complete', onComplete as EventListener);
-      document.removeEventListener('scan-ui-error', onError as EventListener);
-    };
+  // Scan complete
+  useEffect(() => {
+    if (!scanComplete) return;
+    const p = scanComplete;
+    setProgressText(
+      `Fertig! ${formatNumber(p.dirs_scanned)} Ordner \u00B7 ${formatNumber(p.files_found)} Dateien \u00B7 ${formatBytes(p.total_size)} \u00B7 ${formatDuration(p.elapsed_seconds)}` +
+      (p.errors_count > 0 ? ` \u00B7 ${p.errors_count} Fehler` : '')
+    );
+    setAnimating(false);
+    hideTimerRef.current = setTimeout(() => setActive(false), 3000);
+  }, [scanComplete]);
+
+  // Scan error
+  useEffect(() => {
+    if (!scanError) return;
+    setProgressText('Fehler: ' + (scanError?.current_path || 'Unbekannt'));
+    setAnimating(false);
+  }, [scanError]);
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => { if (hideTimerRef.current) clearTimeout(hideTimerRef.current); };
   }, []);
 
   return (

@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import * as api from '../api/tauri-api';
 import { useAppContext } from '../context/AppContext';
 import { formatBytes } from '../utils/format';
-import { getFileIcon, isTempFile, getSizeClass, TAG_COLORS, QA_ICONS } from '../utils/file-icons';
+import { FileIcon, QaIcon, isTempFile, getSizeClass, TAG_COLORS } from '../utils/file-icons';
 
 interface FileEntry {
   name: string;
@@ -25,13 +25,6 @@ const COLUMNS = [
   { id: 'type' as const, label: 'Typ', width: 120, sortable: true, align: 'left' as const },
   { id: 'modified' as const, label: 'Geändert', width: 160, sortable: true, align: 'left' as const },
 ];
-
-const PREVIEW_EXTS = new Set([
-  '.pdf', '.docx', '.xlsx', '.xls', '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.svg',
-  '.txt', '.md', '.json', '.js', '.ts', '.py', '.html', '.css', '.xml', '.yaml', '.yml',
-  '.csv', '.ini', '.cfg', '.log', '.bat', '.cmd', '.ps1', '.sh', '.sql', '.java', '.c',
-  '.cpp', '.cs', '.rs', '.go', '.rb', '.php', '.lua',
-]);
 
 export default function ExplorerView() {
   const { currentScanId, showToast } = useAppContext();
@@ -195,8 +188,6 @@ export default function ExplorerView() {
     const files = newEntries.filter(e => !e.isDirectory).length;
     const totalSize = newEntries.filter(e => !e.isDirectory).reduce((s, e) => s + e.size, 0);
     setStatusText(`${dirs} Ordner, ${files} Dateien — ${formatBytes(pSize > 0 ? pSize : totalSize)}`);
-
-    document.dispatchEvent(new CustomEvent('explorer-navigate', { detail: { path: dirPath } }));
   }, [currentPath, currentScanId]);
 
   const goBack = useCallback(() => {
@@ -285,12 +276,7 @@ export default function ExplorerView() {
     if (entry.isDirectory) {
       navigateTo(entry.path);
     } else {
-      const ext = entry.name.includes('.') ? '.' + entry.name.split('.').pop()!.toLowerCase() : '';
-      if (PREVIEW_EXTS.has(ext)) {
-        document.dispatchEvent(new CustomEvent('open-in-preview', { detail: { path: entry.path } }));
-      } else {
-        api.openFile(entry.path);
-      }
+      api.openFile(entry.path);
     }
   }, [navigateTo]);
 
@@ -449,7 +435,7 @@ export default function ExplorerView() {
             <div key={folder.path}
               className={`explorer-qa-item ${currentPath === folder.path || currentPath.startsWith(folder.path + '\\') ? 'active' : ''}`}
               onClick={() => navigateTo(folder.path)} title={folder.path}>
-              <span dangerouslySetInnerHTML={{ __html: QA_ICONS[folder.icon] || QA_ICONS.documents }} />
+              <span><QaIcon name={folder.icon} /></span>
               <span>{folder.name}</span>
             </div>
           ))}
@@ -461,7 +447,7 @@ export default function ExplorerView() {
               className={`explorer-qa-item ${currentPath === drive.mountpoint || currentPath.startsWith(drive.mountpoint) ? 'active' : ''}`}
               onClick={() => navigateTo(drive.mountpoint)}
               title={`${drive.device || drive.mountpoint}${drive.free ? ` - ${formatBytes(drive.free)} frei` : ''}`}>
-              <span dangerouslySetInnerHTML={{ __html: QA_ICONS.drive }} />
+              <span><QaIcon name="drive" /></span>
               <span>{drive.mountpoint.replace('\\', '')}</span>
             </div>
           ))}
@@ -547,7 +533,7 @@ export default function ExplorerView() {
             <div className="omni-dropdown-results">
               {omniResults.map((r, i) => (
                 <div key={i} className="omni-result-item" onClick={() => handleOmniResultClick(r.dirPath || r.path)}>
-                  <span className="omni-result-icon" dangerouslySetInnerHTML={{ __html: getFileIcon(r.isDir ? null : (r.name?.substring(r.name.lastIndexOf('.')) || ''), r.isDir) }} />{/* SVG-only: getFileIcon gibt nur statische SVGs zurück */}
+                  <span className="omni-result-icon"><FileIcon extension={r.isDir ? null : (r.name?.substring(r.name.lastIndexOf('.')) || '')} isDirectory={r.isDir} /></span>
                   <span className="omni-result-name">{r.name}</span>
                   <span className="omni-result-dir" title={r.dirPath}>{shortenPath(r.dirPath)}</span>
                 </div>
@@ -608,7 +594,7 @@ export default function ExplorerView() {
                       onDragOver={entry.isDirectory ? e => { e.preventDefault(); e.dataTransfer.dropEffect = e.ctrlKey ? 'copy' : 'move'; (e.currentTarget as HTMLElement).classList.add('drag-over'); } : undefined}
                       onDragLeave={entry.isDirectory ? e => (e.currentTarget as HTMLElement).classList.remove('drag-over') : undefined}
                       onDrop={entry.isDirectory ? e => { (e.currentTarget as HTMLElement).classList.remove('drag-over'); handleDrop(e, entry.path); } : undefined}>
-                      <td className="explorer-col-icon" dangerouslySetInnerHTML={{ __html: getFileIcon(entry.extension, entry.isDirectory) }} />
+                      <td className="explorer-col-icon"><FileIcon extension={entry.extension} isDirectory={entry.isDirectory} /></td>
                       <td className={entry.isDirectory ? 'explorer-col-name dir-name' : 'explorer-col-name'} title={entry.path}>
                         {tag && <span className="explorer-tag-dot" style={{ background: TAG_COLORS[tag.color]?.hex || '#888' }} title={tag.note || tag.color} />}
                         {isRenaming ? (
