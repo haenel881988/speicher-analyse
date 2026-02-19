@@ -466,85 +466,121 @@ pub async fn file_properties(file_path: String) -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn file_properties_general(file_path: String) -> Result<Value, String> {
-    let safe_path = file_path.replace("'", "''");
-    let script = format!(
-        r#"
-$item = Get-Item -LiteralPath '{0}' -Force
-$isDir = $item.PSIsContainer
+    use std::os::windows::fs::MetadataExt;
 
-# Cluster-Size für "Größe auf Datenträger"
-$clusterSize = 4096
-try {{
-    $driveLetter = (Split-Path '{0}' -Qualifier).TrimEnd(':')
-    $vol = Get-Volume -DriveLetter $driveLetter -ErrorAction SilentlyContinue
-    if ($vol.AllocationUnitSize -gt 0) {{ $clusterSize = $vol.AllocationUnitSize }}
-}} catch {{}}
+    let path = std::path::Path::new(&file_path);
+    let meta = tokio::fs::metadata(&file_path).await
+        .map_err(|e| format!("Metadaten-Fehler: {}", e))?;
 
-$totalSize = 0
-$sizeOnDisk = 0
-$fileCount = -1
-$dirCount = -1
+    let name = path.file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| file_path.clone());
+    let parent_path = path.parent()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_default();
+    let extension = path.extension()
+        .map(|e| format!(".{}", e.to_string_lossy()))
+        .unwrap_or_default();
+    let is_dir = meta.is_dir();
+    let size = if is_dir { 0u64 } else { meta.len() };
 
-if ($isDir) {{
-    # Ordner: Nicht rekursiv — Frontend berechnet async via calculateFolderSize
-    $totalSize = 0
-}} else {{
-    $totalSize = [long]$item.Length
-    $sizeOnDisk = [long]([math]::Ceiling($item.Length / $clusterSize) * $clusterSize)
-}}
+    // sizeOnDisk: cluster-aligned (4096 = Standard-NTFS-Allokationseinheit)
+    let size_on_disk = if is_dir || size == 0 { 0u64 } else {
+        ((size + 4095) / 4096) * 4096
+    };
 
-# Dateityp-Beschreibung + Öffnen-mit
-$typeDesc = ''
-$openWith = ''
-if (-not $isDir) {{
-    $ext = $item.Extension
-    if ($ext) {{
-        try {{
-            $assocResult = cmd /c "assoc $ext" 2>$null
-            if ($assocResult) {{
-                $assocType = ($assocResult -replace "^[^=]+=","").Trim()
-                $typeDesc = $assocType
-                try {{
-                    $ftypeResult = cmd /c "ftype $assocType" 2>$null
-                    if ($ftypeResult) {{
-                        $openWith = ($ftypeResult -replace "^[^=]+=","").Trim()
-                    }}
-                }} catch {{}}
-            }}
-        }} catch {{}}
-    }}
-    if (-not $typeDesc) {{ $typeDesc = if ($ext) {{ "$($ext.TrimStart('.').ToUpper())-Datei" }} else {{ 'Datei' }} }}
-}} else {{
-    $typeDesc = 'Dateiordner'
-}}
+    // Windows FILETIME → ISO 8601 via chrono
+    let to_iso = |ft: u64| -> String {
+        if ft == 0 { return String::new(); }
+        let secs = (ft / 10_000_000) as i64 - 11_644_473_600;
+        let nanos = ((ft % 10_000_000) * 100) as u32;
+        chrono::DateTime::from_timestamp(secs, nanos)
+            .map(|dt| dt.with_timezone(&chrono::Local).to_rfc3339())
+            .unwrap_or_default()
+    };
+    let created = to_iso(meta.creation_time());
+    let modified = to_iso(meta.last_write_time());
+    let accessed = to_iso(meta.last_access_time());
 
-# Attribute
-$attrs = $item.Attributes
-[PSCustomObject]@{{
-    name = $item.Name
-    path = $item.FullName
-    parentPath = if ($item.PSIsContainer) {{ $item.Parent.FullName }} else {{ $item.DirectoryName }}
-    extension = $item.Extension
-    isDir = $isDir
-    size = [long]$totalSize
-    sizeOnDisk = [long]$sizeOnDisk
-    sizeBytes = [long]$totalSize
-    fileCount = $fileCount
-    dirCount = $dirCount
-    created = $item.CreationTime.ToString('o')
-    modified = $item.LastWriteTime.ToString('o')
-    accessed = $item.LastAccessTime.ToString('o')
-    typeDescription = $typeDesc
-    openWith = $openWith
-    readOnly = ($attrs -band [IO.FileAttributes]::ReadOnly) -ne 0
-    hidden = ($attrs -band [IO.FileAttributes]::Hidden) -ne 0
-    system = ($attrs -band [IO.FileAttributes]::System) -ne 0
-    archive = ($attrs -band [IO.FileAttributes]::Archive) -ne 0
-}} | ConvertTo-Json -Compress
-"#,
-        safe_path
-    );
-    crate::ps::run_ps_json(&script).await
+    // Windows-Dateiattribute
+    let fa = meta.file_attributes();
+    let read_only = (fa & 0x1) != 0;   // FILE_ATTRIBUTE_READONLY
+    let hidden    = (fa & 0x2) != 0;   // FILE_ATTRIBUTE_HIDDEN
+    let system    = (fa & 0x4) != 0;   // FILE_ATTRIBUTE_SYSTEM
+    let archive   = (fa & 0x20) != 0;  // FILE_ATTRIBUTE_ARCHIVE
+
+    // Dateityp + "Öffnen mit" via cmd.exe (~50ms statt ~300ms PowerShell)
+    let mut type_desc = String::new();
+    let mut open_with = String::new();
+
+    if !is_dir && !extension.is_empty()
+        && extension.chars().all(|c| c.is_alphanumeric() || c == '.')
+    {
+        if let Ok(out) = tokio::process::Command::new("cmd")
+            .args(["/c", &format!("assoc {}", &extension)])
+            .creation_flags(0x08000000)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .output().await
+        {
+            let s = String::from_utf8_lossy(&out.stdout);
+            if let Some(eq) = s.find('=') {
+                let prog_id = s[eq + 1..].trim();
+                if !prog_id.is_empty() {
+                    type_desc = prog_id.to_string();
+                    // prog_id gegen cmd-Injection validieren
+                    if !prog_id.chars().any(|c| "&|;<>^%()!`\"'".contains(c)) {
+                        if let Ok(ft) = tokio::process::Command::new("cmd")
+                            .args(["/c", &format!("ftype {}", prog_id)])
+                            .creation_flags(0x08000000)
+                            .stdin(std::process::Stdio::null())
+                            .stdout(std::process::Stdio::piped())
+                            .stderr(std::process::Stdio::piped())
+                            .output().await
+                        {
+                            let fs = String::from_utf8_lossy(&ft.stdout);
+                            if let Some(fe) = fs.find('=') {
+                                open_with = fs[fe + 1..].trim().to_string();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if type_desc.is_empty() {
+        type_desc = if is_dir {
+            "Dateiordner".to_string()
+        } else if extension.is_empty() {
+            "Datei".to_string()
+        } else {
+            format!("{}-Datei", extension.trim_start_matches('.').to_uppercase())
+        };
+    }
+
+    Ok(json!({
+        "name": name,
+        "path": file_path,
+        "parentPath": parent_path,
+        "extension": extension,
+        "isDir": is_dir,
+        "size": size,
+        "sizeOnDisk": size_on_disk,
+        "sizeBytes": size,
+        "fileCount": -1,
+        "dirCount": -1,
+        "created": created,
+        "modified": modified,
+        "accessed": accessed,
+        "typeDescription": type_desc,
+        "openWith": open_with,
+        "readOnly": read_only,
+        "hidden": hidden,
+        "system": system,
+        "archive": archive
+    }))
 }
 
 #[tauri::command]

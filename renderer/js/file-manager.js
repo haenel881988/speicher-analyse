@@ -238,13 +238,17 @@ class PropertiesDialog {
             let html = '';
             switch (tabName) {
                 case 'general':  html = await this._renderGeneral(); break;
-                case 'security': html = await this._renderSecurity(); break;
-                case 'details':  html = await this._renderDetails(); break;
+                case 'security':
+                case 'details':
+                    // Security + Details parallel laden (spart ~300ms PowerShell-Start)
+                    await this._loadSecurityAndDetails();
+                    html = this.cache[tabName] || '';
+                    break;
                 case 'versions': html = await this._renderVersions(); break;
             }
-            this.cache[tabName] = html;
+            if (!this.cache[tabName]) this.cache[tabName] = html;
             if (this.activeTab === tabName) {
-                this.body.innerHTML = html;
+                this.body.innerHTML = this.cache[tabName];
                 this._wireTabContent(tabName);
             }
         } catch (e) {
@@ -254,6 +258,17 @@ class PropertiesDialog {
             errDiv.textContent = 'Fehler: ' + e.message;
             this.body.appendChild(errDiv);
         }
+    }
+
+    async _loadSecurityAndDetails() {
+        // Beide Tabs parallel laden — spart einen PowerShell-Prozessstart (~300ms)
+        if (this.cache.security && this.cache.details) return;
+        const [secHtml, detHtml] = await Promise.all([
+            this.cache.security ? Promise.resolve(this.cache.security) : this._renderSecurity(),
+            this.cache.details  ? Promise.resolve(this.cache.details)  : this._renderDetails()
+        ]);
+        this.cache.security = secHtml;
+        this.cache.details = detHtml;
     }
 
     async _renderGeneral() {
