@@ -9,7 +9,7 @@ public class Win32 {
 }
 "@
 
-$procs = Get-Process | Where-Object { $_.ProcessName -like '*electron*' -or $_.MainWindowTitle -like '*Speicher*' }
+$procs = Get-Process | Where-Object { $_.ProcessName -like '*speicher*' -or $_.MainWindowTitle -like '*Speicher*' }
 foreach ($p in $procs) {
     if ($p.MainWindowHandle -ne [IntPtr]::Zero) {
         Write-Host "Found: $($p.ProcessName) PID=$($p.Id) Title='$($p.MainWindowTitle)' Handle=$($p.MainWindowHandle)"
@@ -20,5 +20,5 @@ foreach ($p in $procs) {
 }
 
 if (-not $procs) {
-    Write-Host "No Electron process found"
+    Write-Host "Kein Speicher-Analyse-Prozess gefunden"
 }

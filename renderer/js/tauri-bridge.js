@@ -97,9 +97,6 @@
         showContextMenu: makeInvoke('show_context_menu', 'menu_type', 'context'),
         onContextMenuAction: makeListener('context-menu-action'),
 
-        // === File Op Progress ===
-        onFileOpProgress: makeListener('file-op-progress'),
-
         // === Dialog ===
         showConfirmDialog: makeInvoke('show_confirm_dialog', 'options'),
 
@@ -130,12 +127,6 @@
         readFileContent: makeInvoke('read_file_content', 'file_path'),
         writeFileContent: makeInvoke('write_file_content', 'file_path', 'content'),
         readFileBinary: makeInvoke('read_file_binary', 'file_path'),
-
-        // === Registry ===
-        scanRegistry: makeInvoke('scan_registry'),
-        exportRegistryBackup: makeInvoke('export_registry_backup', 'entries'),
-        cleanRegistry: makeInvoke('clean_registry', 'entries'),
-        restoreRegistryBackup: makeInvoke('restore_registry_backup'),
 
         // === Autostart ===
         getAutoStartEntries: makeInvoke('get_autostart_entries'),
@@ -250,9 +241,6 @@
         // === Network Monitor ===
         getConnections: makeInvoke('get_connections'),
         getBandwidth: makeInvoke('get_bandwidth'),
-        getFirewallRules: makeInvoke('get_firewall_rules', 'direction'),
-        blockProcess: makeInvoke('block_process', 'name', 'path'),
-        unblockProcess: makeInvoke('unblock_process', 'rule_name'),
         getNetworkSummary: makeInvoke('get_network_summary'),
         getGroupedConnections: makeInvoke('get_grouped_connections'),
         resolveIPs: makeInvoke('resolve_ips', 'ip_addresses'),
@@ -273,14 +261,6 @@
         getNetworkHistory: makeInvoke('get_network_history'),
         clearNetworkHistory: makeInvoke('clear_network_history'),
         exportNetworkHistory: makeInvoke('export_network_history', 'format'),
-        scanLocalNetwork: makeInvoke('scan_local_network'),
-        scanNetworkActive: makeInvoke('scan_network_active'),
-        getLastNetworkScan: makeInvoke('get_last_network_scan'),
-        scanDevicePorts: makeInvoke('scan_device_ports', 'ip'),
-        getSMBShares: makeInvoke('get_smb_shares', 'ip'),
-        updateOUIDatabase: makeInvoke('update_oui_database'),
-        onNetworkScanProgress: makeListener('network-scan-progress'),
-
         // === System Info ===
         getSystemInfo: makeInvoke('get_system_info'),
 

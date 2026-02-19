@@ -156,6 +156,12 @@ export class BloatwareView {
         btn.disabled = this.selectedItems.size === 0;
     }
 
+    destroy() {
+        this.container.innerHTML = '';
+        this.results = [];
+        this.selectedItems.clear();
+    }
+
     async uninstallSelected() {
         if (this.selectedItems.size === 0) return;
 

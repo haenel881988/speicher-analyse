@@ -232,6 +232,12 @@ export class OldFilesView {
         return Math.round(num * (m[unit] || 1));
     }
 
+    destroy() {
+        this.container.innerHTML = '';
+        this.data = null;
+        this.selectedFiles.clear();
+    }
+
     async autoSearch() {
         if (!this.scanId) return null;
         try {

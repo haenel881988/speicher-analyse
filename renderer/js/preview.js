@@ -605,7 +605,12 @@ if(!Uint8Array.fromHex){Uint8Array.fromHex=function(s){const b=new Uint8Array(s.
         return doc.body.innerHTML;
     }
 
-    // escapeHtml: use the imported central function from utils.js
+    destroy() {
+        this._disposeMonaco();
+        this.container.innerHTML = '';
+        this.currentPath = null;
+        this._dirty = false;
+    }
 
     _showToast(msg, type) {
         const event = new CustomEvent('show-toast', { detail: { message: msg, type } });

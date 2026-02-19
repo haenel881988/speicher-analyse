@@ -388,6 +388,13 @@ export class TreeView {
         input.addEventListener('blur', commit);
     }
 
+    destroy() {
+        this.container.innerHTML = '';
+        this.cache.clear();
+        this.expandedPaths.clear();
+        this.selectedPaths.clear();
+    }
+
     // escapeHtml + escapeAttr importiert aus utils.js (keine lokalen Kopien)
 }
 

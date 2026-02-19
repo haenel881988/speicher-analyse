@@ -33,6 +33,12 @@ export class DashboardView {
         this.renderCards();
     }
 
+    destroy() {
+        this.container.innerHTML = '';
+        this.scanData = null;
+        this.analysisResults = null;
+    }
+
     renderCards() {
         const cardsEl = this.container.querySelector('#dashboard-cards');
         if (!cardsEl) return;
@@ -42,7 +48,6 @@ export class DashboardView {
 
         const cleanupVal = r.cleanup && r.cleanup.status === 'fulfilled' && r.cleanup.value;
         const oldFilesVal = r.oldFiles && r.oldFiles.status === 'fulfilled' && r.oldFiles.value;
-        const registryVal = r.registry && r.registry.status === 'fulfilled' && r.registry.value;
         const optimizerVal = r.optimizer && r.optimizer.status === 'fulfilled' && r.optimizer.value;
         const dupVal = r.sizeDuplicates && r.sizeDuplicates.status === 'fulfilled' && r.sizeDuplicates.value;
 
@@ -66,13 +71,6 @@ export class DashboardView {
                 <div class="dash-card-title">Alte Dateien</div>
                 <div class="dash-card-value">${oldFilesVal ? formatNumber(oldFilesVal.totalCount) + ' Dateien' : 'Wird analysiert...'}</div>
                 <div class="dash-card-detail">${oldFilesVal ? formatBytes(oldFilesVal.totalSize) + ' (&gt;1 Jahr, &gt;1MB)' : ''}</div>
-            </div>
-
-            <div class="dash-card ${registryVal ? 'clickable' : 'loading'}" data-action="registry">
-                <div class="dash-card-icon">&#x1F527;</div>
-                <div class="dash-card-title">Registry</div>
-                <div class="dash-card-value">${registryVal ? registryVal.totalEntries + ' Eintr&auml;ge' : 'Wird analysiert...'}</div>
-                <div class="dash-card-detail">${registryVal ? registryVal.categories + ' Kategorien' : ''}</div>
             </div>
 
             <div class="dash-card ${dupVal ? 'clickable' : 'loading'}" data-action="duplicates">

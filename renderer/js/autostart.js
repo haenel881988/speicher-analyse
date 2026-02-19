@@ -135,5 +135,10 @@ export class AutostartView {
         });
     }
 
+    destroy() {
+        this.container.innerHTML = '';
+        this.entries = [];
+    }
+
     esc(text) { return escapeHtml(text); }
 }

@@ -284,6 +284,12 @@ export class SystemProfilView {
             </div>`;
     }
 
+    destroy() {
+        this.container.innerHTML = '';
+        this.profile = null;
+        this._loaded = false;
+    }
+
     // --- Events ------------------------------------------------------------
 
     _setupEvents() {

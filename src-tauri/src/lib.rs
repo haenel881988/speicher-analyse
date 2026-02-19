@@ -131,16 +131,9 @@ pub fn run() {
 
             tracing::info!("App gestartet, Menüleiste erstellt");
 
-            // Dynamische OUI-Datenbank laden (falls vorhanden)
-            // Gleicher Pfad wie get_data_dir() in commands.rs: %APPDATA%/speicher-analyse
+            // Gespeicherten Global Hotkey beim Start registrieren
             let appdata = std::env::var("APPDATA").unwrap_or_else(|_| ".".to_string());
             let data_dir = std::path::PathBuf::from(appdata).join("speicher-analyse");
-            let oui_count = oui::load_dynamic_oui(&data_dir);
-            if oui_count > 0 {
-                tracing::info!("OUI-Datenbank geladen: {} Einträge", oui_count);
-            }
-
-            // Gespeicherten Global Hotkey beim Start registrieren
             {
                 use tauri_plugin_global_shortcut::GlobalShortcutExt;
                 let prefs_path = data_dir.join("preferences.json");
@@ -245,11 +238,6 @@ pub fn run() {
             commands::read_file_content,
             commands::write_file_content,
             commands::read_file_binary,
-            // Registry
-            commands::scan_registry,
-            commands::export_registry_backup,
-            commands::clean_registry,
-            commands::restore_registry_backup,
             // Autostart
             commands::get_autostart_entries,
             commands::toggle_autostart,
@@ -338,9 +326,6 @@ pub fn run() {
             // Network Monitor
             commands::get_connections,
             commands::get_bandwidth,
-            commands::get_firewall_rules,
-            commands::block_process,
-            commands::unblock_process,
             commands::get_network_summary,
             commands::get_grouped_connections,
             commands::resolve_ips,
@@ -361,12 +346,6 @@ pub fn run() {
             commands::get_network_history,
             commands::clear_network_history,
             commands::export_network_history,
-            commands::scan_local_network,
-            commands::scan_network_active,
-            commands::get_last_network_scan,
-            commands::scan_device_ports,
-            commands::get_smb_shares,
-            commands::update_oui_database,
             // System Info
             commands::get_system_info,
             // Security Audit

@@ -74,5 +74,10 @@ export class SearchPanel {
         });
     }
 
+    destroy() {
+        this.results.innerHTML = '';
+        this.scanId = null;
+    }
+
     // escapeHtml + escapeAttr importiert aus utils.js (keine lokalen Kopien)
 }

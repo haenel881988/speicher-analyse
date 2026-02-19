@@ -147,11 +147,16 @@ Weitere Funktionen fehlen bei entsprechenden Dateitypen, bei Bildern z.B.: die A
 
 # Offene Issues
 
-## Tiefenanalyse (19.02.2026)
+## Tiefenanalyse (19.02.2026, aktualisiert)
 
 → Vollständige Ergebnisse in [`issue_tiefenanalyse.md`](issue_tiefenanalyse.md)
-**23 Findings:** 3 Kritisch, 7 Hoch, 6 Mittel, 4 Niedrig, 3 Hinweise
-**Wichtigste Punkte:** "Entfernte" Features noch im Code (AV-Risiko), fehlende Pfadprüfung bei Datei-Lese-Befehlen, 18 Ansichten ohne Aufräum-Funktion
+**25 Findings:** 3 Kritisch, 8 Hoch, 8 Mittel, 6 Niedrig + 5 Optimierungsmöglichkeiten
+**Wichtigste Punkte:**
+- "Entfernte" Features (Scanner, Firewall, Registry-Cleaner) noch im Code — AV-Risiko
+- Sicherheitslücke: `unsafe-eval` in CSP + fehlende Pfadprüfung bei Lösch-Befehl
+- 4 Event-Listener im Frontend die auf nie gesendete Backend-Events warten
+- 18 Ansichten ohne Aufräum-Funktion, PowerShell-Fehler auf Englisch
+- restore-window.ps1 sucht noch nach Electron-Prozess
 
 ---
 

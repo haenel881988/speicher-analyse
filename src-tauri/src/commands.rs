@@ -89,7 +89,6 @@ fn prev_connections_store() -> &'static Mutex<Vec<Value>> {
 const MAX_BW_HISTORY: usize = 60;
 
 use std::sync::LazyLock;
-static LAST_NETWORK_SCAN: LazyLock<Mutex<Option<Value>>> = LazyLock::new(|| Mutex::new(None));
 /// Cache for IP → company name resolution (populated by resolve_ips, used by get_polling_data)
 static IP_RESOLVE_CACHE: LazyLock<Mutex<HashMap<String, String>>> = LazyLock::new(|| Mutex::new(HashMap::new()));
 
@@ -358,6 +357,9 @@ pub async fn show_save_dialog(app: tauri::AppHandle, options: Option<Value>) -> 
 #[tauri::command]
 pub async fn delete_to_trash(paths: Vec<String>) -> Result<Value, String> {
     tracing::info!(count = paths.len(), "Papierkorb-Löschung angefordert");
+    for p in &paths {
+        validate_path(p)?;
+    }
     let ps_paths = paths.iter().map(|p| format!("'{}'", p.replace("'", "''"))).collect::<Vec<_>>().join(",");
     let script = format!(
         r#"Add-Type -AssemblyName Microsoft.VisualBasic
@@ -888,118 +890,6 @@ pub async fn read_file_binary(file_path: String) -> Result<Value, String> {
     use base64::Engine;
     let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
     Ok(json!({ "data": b64, "size": bytes.len() }))
-}
-
-// === Registry ===
-
-#[tauri::command]
-pub async fn scan_registry() -> Result<Value, String> {
-    crate::ps::run_ps_json_array(
-        r#"$categories = @()
-# Verwaiste Deinstallationseinträge
-$orphaned = @()
-$paths = @('HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*','HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*')
-foreach ($p in $paths) {
-    Get-ItemProperty $p -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName } | ForEach-Object {
-        $installPath = $_.InstallLocation
-        if ($installPath -and !(Test-Path $installPath)) {
-            $orphaned += [PSCustomObject]@{ name=$_.DisplayName; key=$_.PSPath; reason="Installationsverzeichnis nicht gefunden: $installPath" }
-        }
-    }
-}
-$categories += [PSCustomObject]@{ id='orphaned_uninstall'; name='Verwaiste Deinstallationseinträge'; icon='uninstall'; description='Programme deren Installationsverzeichnis nicht mehr existiert'; entries=$orphaned }
-# Verwaiste COM/ActiveX
-$comOrph = @()
-Get-ChildItem 'HKLM:\SOFTWARE\Classes\CLSID' -ErrorAction SilentlyContinue | Select-Object -First 200 | ForEach-Object {
-    $server = Get-ItemProperty "$($_.PSPath)\InprocServer32" -ErrorAction SilentlyContinue
-    if ($server -and $server.'(default)' -and !(Test-Path $server.'(default)')) {
-        $comOrph += [PSCustomObject]@{ name=$_.PSChildName; key=$_.PSPath; reason="DLL nicht gefunden: $($server.'(default)')" }
-    }
-}
-$categories += [PSCustomObject]@{ id='orphaned_com'; name='Verwaiste COM-Einträge'; icon='component'; description='COM-Objekte deren DLL-Dateien fehlen'; entries=$comOrph }
-$categories | ConvertTo-Json -Depth 3 -Compress"#
-    ).await
-}
-
-#[tauri::command]
-pub async fn export_registry_backup(entries: Value) -> Result<Value, String> {
-    let backup_dir = get_data_dir().join("registry-backups");
-    let _ = std::fs::create_dir_all(&backup_dir);
-    let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S").to_string();
-    let backup_file = backup_dir.join(format!("registry_backup_{}.json", timestamp));
-    let content = serde_json::to_string_pretty(&entries).map_err(|e| e.to_string())?;
-    std::fs::write(&backup_file, content)
-        .map_err(|e| format!("Backup schreiben fehlgeschlagen: {}", e))?;
-    Ok(json!({ "success": true, "path": backup_file.to_string_lossy().to_string() }))
-}
-
-#[tauri::command]
-pub async fn clean_registry(entries: Value) -> Result<Value, String> {
-    tracing::warn!(entries_count = entries.as_array().map_or(0, |a| a.len()), "Registry-Bereinigung gestartet");
-    // First create a backup
-    let backup_dir = get_data_dir().join("registry-backups");
-    let _ = std::fs::create_dir_all(&backup_dir);
-    let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S").to_string();
-    let backup_file = backup_dir.join(format!("pre_clean_{}.json", timestamp));
-    let content = serde_json::to_string_pretty(&entries).map_err(|e| e.to_string())?;
-    let _ = std::fs::write(&backup_file, &content);
-
-    let mut cleaned = 0u64;
-    let mut errors = Vec::new();
-    if let Some(categories) = entries.as_array() {
-        for cat in categories {
-            if let Some(cat_entries) = cat.get("entries").and_then(|e| e.as_array()) {
-                for entry in cat_entries {
-                    if let Some(key) = entry.get("key").and_then(|k| k.as_str()) {
-                        let safe_key = key.replace("'", "''");
-                        let script = format!("Remove-Item -Path '{}' -Force -ErrorAction Stop", safe_key);
-                        match crate::ps::run_ps(&script).await {
-                            Ok(_) => cleaned += 1,
-                            Err(e) => errors.push(format!("{}: {}", key, e)),
-                        }
-                    }
-                }
-            }
-        }
-    }
-    Ok(json!({ "success": true, "cleaned": cleaned, "errors": errors, "backupPath": backup_file.to_string_lossy().to_string() }))
-}
-
-#[tauri::command]
-pub async fn restore_registry_backup() -> Result<Value, String> {
-    // List available backups and let the user select
-    let backup_dir = get_data_dir().join("registry-backups");
-    let mut backups = Vec::new();
-    if let Ok(entries) = std::fs::read_dir(&backup_dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.extension().map(|e| e == "json").unwrap_or(false) {
-                let filename = path.file_name().unwrap_or_default().to_string_lossy().to_string();
-                let meta = std::fs::metadata(&path).ok();
-                let file_size = meta.as_ref().map(|m| m.len()).unwrap_or(0);
-                let modified = meta.and_then(|m| m.modified().ok())
-                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                    .map(|d| d.as_millis() as i64)
-                    .unwrap_or(0);
-
-                // Try to read backup to count entries
-                let entry_count = std::fs::read_to_string(&path).ok()
-                    .and_then(|c| serde_json::from_str::<Value>(&c).ok())
-                    .and_then(|v| v.get("entries").and_then(|e| e.as_array().map(|a| a.len())))
-                    .unwrap_or(0);
-
-                backups.push(json!({
-                    "filename": filename,
-                    "path": path.to_string_lossy().to_string(),
-                    "fileSize": file_size,
-                    "modified": modified,
-                    "entryCount": entry_count
-                }));
-            }
-        }
-    }
-    backups.sort_by(|a, b| b["modified"].as_i64().cmp(&a["modified"].as_i64()));
-    Ok(json!({ "backups": backups }))
 }
 
 // === Autostart ===
@@ -1667,9 +1557,13 @@ pub async fn get_platform() -> Result<String, String> {
 
 #[tauri::command]
 pub async fn open_external(url: String) -> Result<Value, String> {
-    // Only allow http/https URLs
+    // Only allow http/https URLs — block file://, javascript:, data:, etc.
     if !url.starts_with("http://") && !url.starts_with("https://") {
         return Err(format!("Nur HTTP/HTTPS-URLs erlaubt, nicht: {}", &url[..url.len().min(50)]));
+    }
+    // Block URLs with embedded credentials (user:pass@host)
+    if url.contains('@') {
+        return Err("URLs mit eingebetteten Anmeldedaten sind nicht erlaubt".to_string());
     }
     crate::ps::run_ps(&format!("Start-Process '{}'", url.replace("'", "''"))).await?;
     Ok(json!({ "success": true }))
@@ -1961,7 +1855,7 @@ pub async fn terminal_create(app: tauri::AppHandle, cwd: Option<String>, shell_t
                     }
                     // stdout closed → process likely exited, get exit code
                     let code = {
-                        let mut sessions = TERMINAL_SESSIONS.lock().unwrap();
+                        let mut sessions = TERMINAL_SESSIONS.lock().unwrap_or_else(|e| e.into_inner());
                         sessions.get_mut(&id_out)
                             .and_then(|s| s.child.try_wait().ok().flatten())
                             .and_then(|s| s.code())
@@ -2009,7 +1903,7 @@ pub async fn terminal_create(app: tauri::AppHandle, cwd: Option<String>, shell_t
                 }
             }
 
-            let mut sessions = TERMINAL_SESSIONS.lock().unwrap();
+            let mut sessions = TERMINAL_SESSIONS.lock().unwrap_or_else(|e| e.into_inner());
             sessions.insert(id.clone(), TerminalSession { child, stdin });
             tracing::debug!(id = %id, shell = %shell_path, "Terminal erstellt");
             Ok(json!({ "id": id, "shell": shell_path, "cwd": dir }))
@@ -2020,7 +1914,7 @@ pub async fn terminal_create(app: tauri::AppHandle, cwd: Option<String>, shell_t
 
 #[tauri::command]
 pub async fn terminal_write(id: String, data: String) -> Result<Value, String> {
-    let mut sessions = TERMINAL_SESSIONS.lock().unwrap();
+    let mut sessions = TERMINAL_SESSIONS.lock().unwrap_or_else(|e| e.into_inner());
     if let Some(session) = sessions.get_mut(&id) {
         if let Some(ref mut stdin) = session.stdin {
             use std::io::Write;
@@ -2045,7 +1939,7 @@ pub async fn terminal_resize(_id: String, _cols: u32, _rows: u32) -> Result<Valu
 #[tauri::command]
 pub async fn terminal_destroy(id: String) -> Result<Value, String> {
     let session_opt = {
-        let mut sessions = TERMINAL_SESSIONS.lock().unwrap();
+        let mut sessions = TERMINAL_SESSIONS.lock().unwrap_or_else(|e| e.into_inner());
         sessions.remove(&id)
     };
     if let Some(mut session) = session_opt {
@@ -2574,8 +2468,8 @@ $sm = @{}; foreach ($s in $stats) { $sm[$s.Name] = $s }
 
     let now_ms = chrono::Utc::now().timestamp_millis();
     let arr = raw.as_array().cloned().unwrap_or_default();
-    let mut prev_store = bw_prev_store().lock().unwrap();
-    let mut hist_store = bw_history_store().lock().unwrap();
+    let mut prev_store = bw_prev_store().lock().unwrap_or_else(|e| e.into_inner());
+    let mut hist_store = bw_history_store().lock().unwrap_or_else(|e| e.into_inner());
 
     let bandwidth: Vec<Value> = arr.iter().map(|b| {
         let name = b["name"].as_str().unwrap_or("").to_string();
@@ -2608,43 +2502,6 @@ $sm = @{}; foreach ($s in $stats) { $sm[$s.Name] = $s }
     }).collect();
 
     Ok(json!(bandwidth))
-}
-
-#[tauri::command]
-pub async fn get_firewall_rules(direction: Option<String>) -> Result<Value, String> {
-    let dir = direction.unwrap_or_else(|| "Inbound".to_string());
-    let safe_dir = match dir.as_str() {
-        "Inbound" => "Inbound",
-        "Outbound" => "Outbound",
-        _ => return Err("Ungültige Richtung: nur 'Inbound' oder 'Outbound' erlaubt".to_string()),
-    };
-    let script = format!(
-        r#"Get-NetFirewallRule -Direction '{}' -Enabled True -ErrorAction SilentlyContinue | Select-Object DisplayName, Direction, Action, Profile -First 100 | ConvertTo-Json -Compress"#,
-        safe_dir
-    );
-    crate::ps::run_ps_json_array(&script).await
-}
-
-#[tauri::command]
-pub async fn block_process(name: String, path: Option<String>) -> Result<Value, String> {
-    tracing::warn!(process = %name, "Firewall-Block erstellen");
-    let prog = path.unwrap_or_else(|| name.clone());
-    let safe_name = name.replace("'", "''");
-    let safe_prog = prog.replace("'", "''");
-    let script = format!(
-        r#"New-NetFirewallRule -DisplayName 'Block {}' -Direction Outbound -Program '{}' -Action Block"#,
-        safe_name, safe_prog
-    );
-    crate::ps::run_ps(&script).await?;
-    Ok(json!({ "success": true }))
-}
-
-#[tauri::command]
-pub async fn unblock_process(rule_name: String) -> Result<Value, String> {
-    tracing::info!(rule = %rule_name, "Firewall-Block entfernen");
-    let safe_name = rule_name.replace("'", "''");
-    crate::ps::run_ps(&format!("Remove-NetFirewallRule -DisplayName '{}'", safe_name)).await?;
-    Ok(json!({ "success": true }))
 }
 
 #[tauri::command]
@@ -2729,7 +2586,7 @@ $result | ConvertTo-Json -Compress"#,
 
     // Store in cache for use by get_polling_data (including empty to avoid re-resolving)
     {
-        let mut cache = IP_RESOLVE_CACHE.lock().unwrap();
+        let mut cache = IP_RESOLVE_CACHE.lock().unwrap_or_else(|e| e.into_inner());
         for (ip, info) in &result_map {
             if let Some(company) = info["company"].as_str() {
                 cache.insert(ip.clone(), company.to_string());
@@ -2835,7 +2692,7 @@ $uips=@($conns|Where-Object{$_.RemoteAddress -ne '0.0.0.0' -and $_.RemoteAddress
     };
 
     // Read IP resolve cache for per-connection company resolution
-    let ip_cache = IP_RESOLVE_CACHE.lock().unwrap().clone();
+    let ip_cache = IP_RESOLVE_CACHE.lock().unwrap_or_else(|e| e.into_inner()).clone();
 
     // Build all connections (TCP + UDP)
     let mut all_conns: Vec<Value> = tcp_arr.iter().map(|c| {
@@ -2941,7 +2798,7 @@ $uips=@($conns|Where-Object{$_.RemoteAddress -ne '0.0.0.0' -and $_.RemoteAddress
     if !uncached_ips.is_empty() {
         tokio::spawn(async move {
             if let Ok(result) = resolve_ips_background(&uncached_ips).await {
-                let mut cache = IP_RESOLVE_CACHE.lock().unwrap();
+                let mut cache = IP_RESOLVE_CACHE.lock().unwrap_or_else(|e| e.into_inner());
                 if let Some(obj) = result.as_object() {
                     for (ip, info) in obj {
                         if let Some(company) = info["company"].as_str() {
@@ -2976,8 +2833,8 @@ $uips=@($conns|Where-Object{$_.RemoteAddress -ne '0.0.0.0' -and $_.RemoteAddress
         _ => vec![],
     };
 
-    let mut prev_store = bw_prev_store().lock().unwrap();
-    let mut hist_store = bw_history_store().lock().unwrap();
+    let mut prev_store = bw_prev_store().lock().unwrap_or_else(|e| e.into_inner());
+    let mut hist_store = bw_history_store().lock().unwrap_or_else(|e| e.into_inner());
 
     let bandwidth: Vec<Value> = bw_raw.iter().map(|b| {
         let name = b["n"].as_str().unwrap_or("").to_string();
@@ -3010,7 +2867,7 @@ $uips=@($conns|Where-Object{$_.RemoteAddress -ne '0.0.0.0' -and $_.RemoteAddress
 
     // Store connections for diff tracking
     {
-        let mut prev = prev_connections_store().lock().unwrap();
+        let mut prev = prev_connections_store().lock().unwrap_or_else(|e| e.into_inner());
         *prev = all_conns.clone();
     }
 
@@ -3035,7 +2892,7 @@ $pn = (Get-Process -Id $_.OwningProcess -EA SilentlyContinue).ProcessName
         format!("{}:{}->{}:{}", c["la"].as_str().unwrap_or(""), c["lp"], c["ra"].as_str().unwrap_or(""), c["rp"])
     }).collect();
 
-    let prev_store = prev_connections_store().lock().unwrap();
+    let prev_store = prev_connections_store().lock().unwrap_or_else(|e| e.into_inner());
     let prev_keys: Vec<String> = prev_store.iter().map(|c| {
         format!("{}:{}->{}:{}", c["localAddress"].as_str().unwrap_or(""), c["localPort"], c["remoteAddress"].as_str().unwrap_or(""), c["remotePort"])
     }).collect();
@@ -3084,7 +2941,7 @@ $pn = (Get-Process -Id $_.OwningProcess -EA SilentlyContinue).ProcessName
 
 #[tauri::command]
 pub async fn get_bandwidth_history() -> Result<Value, String> {
-    let store = bw_history_store().lock().unwrap();
+    let store = bw_history_store().lock().unwrap_or_else(|e| e.into_inner());
     let mut result = json!({});
     for (name, history) in store.iter() {
         result[name] = json!(history);
@@ -3166,7 +3023,7 @@ pub async fn start_network_recording() -> Result<Value, String> {
     let header = json!({ "type": "header", "startedAt": now, "version": 1 });
     tokio::fs::write(&filepath, format!("{}\n", header)).await.map_err(|e| e.to_string())?;
 
-    let mut rec = NETWORK_RECORDING.lock().unwrap();
+    let mut rec = NETWORK_RECORDING.lock().unwrap_or_else(|e| e.into_inner());
     *rec = Some(NetworkRecordingState {
         started_at: now,
         event_count: 0,
@@ -3181,7 +3038,7 @@ pub async fn start_network_recording() -> Result<Value, String> {
 pub async fn stop_network_recording() -> Result<Value, String> {
     // Extract state from mutex quickly, then do I/O outside the lock
     let state_opt = {
-        let mut rec = NETWORK_RECORDING.lock().unwrap();
+        let mut rec = NETWORK_RECORDING.lock().unwrap_or_else(|e| e.into_inner());
         rec.take()
     };
     if let Some(state) = state_opt {
@@ -3208,7 +3065,7 @@ pub async fn stop_network_recording() -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn get_network_recording_status() -> Result<Value, String> {
-    let rec = NETWORK_RECORDING.lock().unwrap();
+    let rec = NETWORK_RECORDING.lock().unwrap_or_else(|e| e.into_inner());
     if let Some(state) = rec.as_ref() {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -3230,7 +3087,7 @@ pub async fn get_network_recording_status() -> Result<Value, String> {
 pub async fn append_network_recording_events(events: Value) -> Result<Value, String> {
     // Extract filename and validate under lock, then do I/O outside
     let (filepath, arr_len) = {
-        let rec = NETWORK_RECORDING.lock().unwrap();
+        let rec = NETWORK_RECORDING.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(state) = rec.as_ref() {
             if let Some(arr) = events.as_array() {
                 (Some(get_recordings_dir().join(&state.filename)), arr.len())
@@ -3252,7 +3109,7 @@ pub async fn append_network_recording_events(events: Value) -> Result<Value, Str
             }
             // Update event count under lock
             let total = {
-                let mut rec = NETWORK_RECORDING.lock().unwrap();
+                let mut rec = NETWORK_RECORDING.lock().unwrap_or_else(|e| e.into_inner());
                 if let Some(state) = rec.as_mut() {
                     state.event_count += arr_len as u32;
                     state.event_count
@@ -3363,8 +3220,8 @@ pub async fn delete_network_recording(filename: String) -> Result<Value, String>
         return Err("Ungültiger Dateiname".to_string());
     }
     let path = get_recordings_dir().join(&filename);
-    if path.exists() {
-        std::fs::remove_file(&path).map_err(|e| format!("Löschen fehlgeschlagen: {}", e))?;
+    if tokio::fs::metadata(&path).await.is_ok() {
+        tokio::fs::remove_file(&path).await.map_err(|e| format!("Löschen fehlgeschlagen: {}", e))?;
         Ok(json!({ "success": true }))
     } else {
         Ok(json!({ "success": false, "error": "Datei nicht gefunden" }))
@@ -3485,705 +3342,6 @@ pub async fn export_network_history(format: Option<String>) -> Result<Value, Str
     }
 
     Ok(json!({ "success": true, "path": export_path.to_string_lossy().to_string(), "count": all_snapshots.len() }))
-}
-
-/// Detect OS from TTL, SSDP SERVER header, SSH banner, and port profile.
-/// TTL heuristic: 64 = Linux/macOS, 128 = Windows, 255 = Network Equipment
-fn detect_os(ttl: i64, ssdp_server: &str, ssh_banner: &str, open_ports: &[u16]) -> String {
-    // 1. SSDP SERVER header is most reliable (e.g. "Windows/10.0 UPnP/2.0 ..." or "Linux/3.x ...")
-    let server_lower = ssdp_server.to_lowercase();
-    if server_lower.contains("windows") {
-        // Use server_lower consistently to avoid byte-index mismatch
-        if let Some(start) = server_lower.find("windows/") {
-            let ver = &server_lower[start..];
-            let end = ver.find(' ').unwrap_or(ver.len());
-            return ver[..end].replace('/', " ").to_string();
-        }
-        return "Windows".to_string();
-    }
-    if server_lower.contains("linux") {
-        return "Linux".to_string();
-    }
-
-    // 2. SSH banner (e.g. "SSH-2.0-OpenSSH_8.9p1 Ubuntu-3ubuntu0.1")
-    let ssh_lower = ssh_banner.to_lowercase();
-    if ssh_lower.contains("ubuntu") { return "Linux (Ubuntu)".to_string(); }
-    if ssh_lower.contains("debian") { return "Linux (Debian)".to_string(); }
-    if ssh_lower.contains("raspbian") || ssh_lower.contains("raspberry") {
-        return "Linux (Raspberry Pi)".to_string();
-    }
-    if ssh_lower.contains("openssh") && !ssh_lower.contains("windows") {
-        return "Linux/Unix".to_string();
-    }
-    if ssh_lower.contains("dropbear") { return "Linux (Embedded)".to_string(); }
-
-    // 3. TTL-based heuristic
-    if ttl > 0 {
-        if ttl <= 64 {
-            // iOS devices have port 62078
-            if open_ports.contains(&62078) { return "iOS".to_string(); }
-            return "Linux/macOS".to_string();
-        }
-        if ttl <= 128 {
-            return "Windows".to_string();
-        }
-        if ttl <= 255 {
-            return "Netzwerkgerät".to_string();
-        }
-    }
-
-    String::new()
-}
-
-/// Quick passive scan: ARP table + parallel ping, parallel DNS (5s limit) + OUI vendor
-#[tauri::command]
-pub async fn scan_local_network() -> Result<Value, String> {
-    let raw_val = crate::ps::run_ps_json_array(
-        r#"$gateway = (Get-NetRoute -DestinationPrefix '0.0.0.0/0' -EA SilentlyContinue | Select-Object -First 1).NextHop
-if (-not $gateway) { '[]'; return }
-$subnet = $gateway -replace '\.\d+$', ''
-$arp = @{}
-arp -a | ForEach-Object { if ($_ -match '(\d+\.\d+\.\d+\.\d+)\s+([0-9a-f-]+)\s+') { $arp[$Matches[1]] = $Matches[2].Replace('-',':') } }
-$tasks = @()
-1..254 | ForEach-Object {
-    $ip = "$subnet.$_"
-    $ping = New-Object System.Net.NetworkInformation.Ping
-    $tasks += @{ip=$ip; task=$ping.SendPingAsync($ip, 1000)}
-}
-try { [void][System.Threading.Tasks.Task]::WaitAll(@($tasks | ForEach-Object { $_.task }), 5000) } catch {}
-$alive = @()
-foreach ($t in $tasks) {
-    if ($t.task.IsCompleted -and -not $t.task.IsFaulted -and $t.task.Result.Status -eq 'Success') {
-        $alive += $t
-    }
-}
-$dnsTasks = @()
-foreach ($t in $alive) {
-    $dnsTasks += @{ip=$t.ip; task=[System.Net.Dns]::GetHostEntryAsync($t.ip)}
-}
-try { [void][System.Threading.Tasks.Task]::WaitAll(@($dnsTasks | ForEach-Object { $_.task }), 5000) } catch {}
-$dnsMap = @{}
-foreach ($dt in $dnsTasks) {
-    if ($dt.task.IsCompleted -and -not $dt.task.IsFaulted) {
-        $dnsMap[$dt.ip] = $dt.task.Result.HostName
-    }
-}
-arp -a | ForEach-Object { if ($_ -match '(\d+\.\d+\.\d+\.\d+)\s+([0-9a-f-]+)\s+') { $arp[$Matches[1]] = $Matches[2].Replace('-',':') } }
-$results = @()
-foreach ($t in $alive) {
-    $ip = $t.ip
-    $results += [PSCustomObject]@{ ip=$ip; mac=$arp[$ip]; hostname=$dnsMap[$ip]; online=$true; rtt=[int]$t.task.Result.RoundtripTime }
-}
-$results | ConvertTo-Json -Compress"#
-    ).await?;
-
-    let raw_devices = raw_val.as_array().cloned().unwrap_or_default();
-
-    // Enrich with OUI vendor lookup
-    let enriched: Vec<Value> = raw_devices.iter().map(|d| {
-        let mac = d["mac"].as_str().unwrap_or("");
-        let vendor = if mac.is_empty() {
-            String::new()
-        } else {
-            crate::oui::lookup(mac).unwrap_or_default()
-        };
-        let hostname = d["hostname"].as_str().unwrap_or("");
-        // Basic ARP state classification
-        let state = if d["online"].as_bool().unwrap_or(false) { "Erreichbar" } else { "Veraltet" };
-        json!({
-            "ip": d["ip"],
-            "mac": mac,
-            "hostname": hostname,
-            "vendor": vendor,
-            "state": state,
-            "online": d["online"],
-            "rtt": d["rtt"]
-        })
-    }).collect();
-
-    Ok(json!(enriched))
-}
-
-/// Active network scan: ping sweep + ARP + parallel DNS + port scan + OUI vendor + classification
-#[tauri::command]
-pub async fn scan_network_active(app: tauri::AppHandle) -> Result<Value, String> {
-    tracing::info!("Aktiver Netzwerk-Scan gestartet");
-    // Get local IP + subnet + gateway
-    let info = crate::ps::run_ps_json(
-        r#"$adapter = Get-NetIPConfiguration | Where-Object { $_.IPv4DefaultGateway -ne $null -and $_.NetAdapter.Status -eq 'Up' } | Select-Object -First 1
-if (-not $adapter) { '{}' | Write-Output; return }
-$localIP = ($adapter.IPv4Address | Select-Object -First 1).IPAddress
-$gateway = ($adapter.IPv4DefaultGateway | Select-Object -First 1).NextHop
-$subnet = $gateway -replace '\.\d+$', ''
-[PSCustomObject]@{ localIP=$localIP; subnet=$subnet; gateway=$gateway } | ConvertTo-Json -Compress"#
-    ).await?;
-
-    let subnet = info.get("subnet").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let local_ip = info.get("localIP").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let gateway_ip = info.get("gateway").and_then(|v| v.as_str()).unwrap_or("").to_string();
-
-    if subnet.is_empty() {
-        return Ok(json!({ "devices": [], "subnet": "", "localIP": "" }));
-    }
-
-    // Phase 1: Ping Sweep + ARP + DNS
-    let _ = app.emit("network-scan-progress", json!({
-        "phase": "ping", "message": "Ping-Sweep läuft...", "percent": 10
-    }));
-
-    let phase1_script = format!(
-        r#"$subnet = '{subnet}'
-$arp = @{{}}
-arp -a | ForEach-Object {{ if ($_ -match '(\d+\.\d+\.\d+\.\d+)\s+([0-9a-f-]+)\s+') {{ $arp[$Matches[1]] = $Matches[2].Replace('-',':') }} }}
-$tasks = @()
-1..254 | ForEach-Object {{
-    $ip = "$subnet.$_"
-    $ping = New-Object System.Net.NetworkInformation.Ping
-    $tasks += @{{ip=$ip; task=$ping.SendPingAsync($ip, 1500)}}
-}}
-try {{ [void][System.Threading.Tasks.Task]::WaitAll(@($tasks | ForEach-Object {{ $_.task }}), 10000) }} catch {{}}
-$alive = @()
-foreach ($t in $tasks) {{
-    if ($t.task.IsCompleted -and -not $t.task.IsFaulted -and $t.task.Result.Status -eq 'Success') {{
-        $alive += $t
-    }}
-}}
-$dnsTasks = @()
-foreach ($t in $alive) {{
-    $dnsTasks += @{{ip=$t.ip; task=[System.Net.Dns]::GetHostEntryAsync($t.ip)}}
-}}
-try {{ [void][System.Threading.Tasks.Task]::WaitAll(@($dnsTasks | ForEach-Object {{ $_.task }}), 8000) }} catch {{}}
-$dnsMap = @{{}}
-foreach ($dt in $dnsTasks) {{
-    if ($dt.task.IsCompleted -and -not $dt.task.IsFaulted) {{
-        $dnsMap[$dt.ip] = $dt.task.Result.HostName
-    }}
-}}
-arp -a | ForEach-Object {{ if ($_ -match '(\d+\.\d+\.\d+\.\d+)\s+([0-9a-f-]+)\s+') {{ $arp[$Matches[1]] = $Matches[2].Replace('-',':') }} }}
-$results = @()
-foreach ($t in $alive) {{
-    $ip = $t.ip
-    $results += [PSCustomObject]@{{
-        ip=$ip
-        mac=$arp[$ip]
-        hostname=$dnsMap[$ip]
-        rtt=[int]$t.task.Result.RoundtripTime
-        ttl=[int]$t.task.Result.Options.Ttl
-    }}
-}}
-$results | ConvertTo-Json -Compress"#,
-        subnet = subnet.replace('\'', "''"),
-    );
-
-    let phase1_val = crate::ps::run_ps_json_array(&phase1_script).await?;
-    let phase1_raw = phase1_val.as_array().cloned().unwrap_or_default();
-    let alive_count = phase1_raw.len();
-    tracing::info!("Netzwerk-Scan Phase 1: {} Geräte gefunden", alive_count);
-
-    // Phase 2: Parallel port scan for all alive devices
-    let _ = app.emit("network-scan-progress", json!({
-        "phase": "ports", "message": format!("{} Geräte gefunden, scanne Ports...", alive_count), "percent": 40
-    }));
-
-    // Build IP list for port scan
-    let alive_ips: Vec<String> = phase1_raw.iter()
-        .filter_map(|d| d["ip"].as_str().map(|s| s.to_string()))
-        .collect();
-
-    let port_map: std::collections::HashMap<String, Vec<Value>> = if !alive_ips.is_empty() {
-        // Build PS script for parallel port scan of all devices
-        let ip_list = alive_ips.iter()
-            .map(|ip| format!("'{}'", ip.replace('\'', "''")))
-            .collect::<Vec<_>>()
-            .join(",");
-
-        let port_script = format!(
-            r#"$ips = @({ip_list})
-$portDefs = @(21,22,80,139,443,445,631,3389,5900,8080,9100)
-$portLabels = @{{21='FTP';22='SSH';80='HTTP';139='NetBIOS';443='HTTPS';445='SMB';631='IPP';3389='RDP';5900='VNC';8080='HTTP-Proxy';9100='RAW-Print'}}
-$tasks = @()
-foreach ($ip in $ips) {{
-    foreach ($port in $portDefs) {{
-        $tcp = New-Object System.Net.Sockets.TcpClient
-        $tasks += @{{ip=$ip; port=$port; task=$tcp.ConnectAsync($ip, $port); client=$tcp}}
-    }}
-}}
-try {{ [void][System.Threading.Tasks.Task]::WaitAll(@($tasks | ForEach-Object {{ $_.task }}), 12000) }} catch {{}}
-$portMap = @{{}}
-foreach ($pt in $tasks) {{
-    $ok = $pt.task.IsCompleted -and -not $pt.task.IsFaulted -and $pt.client.Connected
-    if ($ok) {{
-        if (-not $portMap[$pt.ip]) {{ $portMap[$pt.ip] = @() }}
-        $portMap[$pt.ip] += [PSCustomObject]@{{port=$pt.port; label=$portLabels[$pt.port]}}
-    }}
-    try {{ $pt.client.Close() }} catch {{}}
-}}
-$result = @{{}}
-foreach ($ip in $portMap.Keys) {{
-    $result[$ip] = @($portMap[$ip])
-}}
-$result | ConvertTo-Json -Depth 3 -Compress"#,
-            ip_list = ip_list
-        );
-
-        match crate::ps::run_ps_json(&port_script).await {
-            Ok(port_data) => {
-                let mut pm: std::collections::HashMap<String, Vec<Value>> = std::collections::HashMap::new();
-                if let Some(obj) = port_data.as_object() {
-                    for (ip, ports) in obj {
-                        let port_list = match ports {
-                            v if v.is_array() => v.as_array().unwrap().clone(),
-                            v if !v.is_null() => vec![v.clone()],
-                            _ => vec![],
-                        };
-                        pm.insert(ip.clone(), port_list);
-                    }
-                }
-                pm
-            }
-            Err(e) => {
-                tracing::warn!("Port-Scan fehlgeschlagen: {}", e);
-                std::collections::HashMap::new()
-            }
-        }
-    } else {
-        std::collections::HashMap::new()
-    };
-
-    // Phase 3: UPnP/SSDP discovery for model names + SERVER header for OS
-    let _ = app.emit("network-scan-progress", json!({
-        "phase": "identify", "message": "Gerätemodelle werden erkannt (UPnP/SSDP)...", "percent": 55
-    }));
-
-    let ssdp_map: std::collections::HashMap<String, Value> = {
-        let ssdp_script = r#"$udp = New-Object System.Net.Sockets.UdpClient
-$udp.Client.ReceiveTimeout = 3000
-$udp.Client.SendTimeout = 1000
-$msg = "M-SEARCH * HTTP/1.1`r`nHOST: 239.255.255.250:1900`r`nMAN: `"ssdp:discover`"`r`nMX: 3`r`nST: upnp:rootdevice`r`n`r`n"
-$bytes = [Text.Encoding]::UTF8.GetBytes($msg)
-$ep = New-Object System.Net.IPEndPoint([System.Net.IPAddress]::Parse('239.255.255.250'), 1900)
-try {
-    $udp.Send($bytes, $bytes.Length, $ep) | Out-Null
-    Start-Sleep -Milliseconds 500
-    $udp.Send($bytes, $bytes.Length, $ep) | Out-Null
-} catch { $udp.Close(); '{}'; return }
-$locations = @{}
-$servers = @{}
-$deadline = (Get-Date).AddSeconds(5)
-while ((Get-Date) -lt $deadline) {
-    try {
-        $remEP = New-Object System.Net.IPEndPoint([System.Net.IPAddress]::Any, 0)
-        $resp = [Text.Encoding]::UTF8.GetString($udp.Receive([ref]$remEP))
-        $ip = $remEP.Address.ToString()
-        if ($resp -match 'LOCATION:\s*(http\S+)') {
-            if (-not $locations[$ip]) { $locations[$ip] = $Matches[1] }
-        }
-        if ($resp -match 'SERVER:\s*(.+)') {
-            if (-not $servers[$ip]) { $servers[$ip] = $Matches[1].Trim() }
-        }
-    } catch { break }
-}
-$udp.Close()
-$result = @{}
-foreach ($ip in $locations.Keys) {
-    try {
-        $xml = [xml](Invoke-WebRequest -Uri $locations[$ip] -TimeoutSec 3 -UseBasicParsing).Content
-        $ns = @{d='urn:schemas-upnp-org:device-1-0'}
-        $dev = $xml | Select-Xml '//d:device' -Namespace $ns | Select-Object -First 1
-        if ($dev) {
-            $result[$ip] = [PSCustomObject]@{
-                modelName = [string]$dev.Node.modelName
-                modelNumber = [string]$dev.Node.modelNumber
-                manufacturer = [string]$dev.Node.manufacturer
-                friendlyName = [string]$dev.Node.friendlyName
-                serialNumber = [string]$dev.Node.serialNumber
-                modelDescription = [string]$dev.Node.modelDescription
-                server = [string]$servers[$ip]
-            }
-        }
-    } catch {}
-}
-foreach ($ip in $servers.Keys) {
-    if (-not $result[$ip]) { $result[$ip] = [PSCustomObject]@{ server=[string]$servers[$ip] } }
-}
-$result | ConvertTo-Json -Depth 2 -Compress"#;
-
-        match crate::ps::run_ps_json(ssdp_script).await {
-            Ok(ssdp_data) => {
-                let mut sm: std::collections::HashMap<String, Value> = std::collections::HashMap::new();
-                if let Some(obj) = ssdp_data.as_object() {
-                    for (ip, info) in obj {
-                        sm.insert(ip.clone(), info.clone());
-                    }
-                }
-                tracing::info!("SSDP-Erkennung: {} Geräte mit Modell-Info", sm.len());
-                sm
-            }
-            Err(e) => {
-                tracing::warn!("SSDP-Erkennung fehlgeschlagen: {}", e);
-                std::collections::HashMap::new()
-            }
-        }
-    };
-
-    // Phase 3b: SSH banner grabbing + HTTP Server header for devices with those ports open
-    let _ = app.emit("network-scan-progress", json!({
-        "phase": "identify", "message": "SSH/HTTP-Banner werden geprüft...", "percent": 65
-    }));
-
-    let banner_map: std::collections::HashMap<String, Value> = {
-        // Collect IPs with SSH (22) or HTTP (80/443) ports open
-        let mut ssh_ips: Vec<String> = Vec::new();
-        let mut http_ips: Vec<String> = Vec::new();
-        for (ip, ports) in &port_map {
-            let port_nums: Vec<u16> = ports.iter()
-                .filter_map(|p| p["port"].as_u64().map(|n| n as u16))
-                .collect();
-            if port_nums.contains(&22) { ssh_ips.push(ip.clone()); }
-            if port_nums.contains(&80) || port_nums.contains(&443) { http_ips.push(ip.clone()); }
-        }
-
-        let mut bm: std::collections::HashMap<String, Value> = std::collections::HashMap::new();
-
-        // SSH banner grab (parallel, 3s timeout)
-        if !ssh_ips.is_empty() {
-            let ssh_ips_str = ssh_ips.iter()
-                .map(|ip| format!("'{}'", ip.replace('\'', "''")))
-                .collect::<Vec<_>>()
-                .join(",");
-            let ssh_script = format!(r#"$ips = @({ips})
-$tasks = @()
-foreach ($ip in $ips) {{
-    $tcp = New-Object System.Net.Sockets.TcpClient
-    $tasks += @{{ ip=$ip; tcp=$tcp; task=$tcp.ConnectAsync($ip, 22) }}
-}}
-try {{ [void][System.Threading.Tasks.Task]::WaitAll(@($tasks | ForEach-Object {{ $_.task }}), 3000) }} catch {{}}
-$result = @{{}}
-foreach ($t in $tasks) {{
-    try {{
-        if ($t.task.IsCompleted -and -not $t.task.IsFaulted -and $t.tcp.Connected) {{
-            $stream = $t.tcp.GetStream()
-            $stream.ReadTimeout = 2000
-            $buf = New-Object byte[] 512
-            $n = $stream.Read($buf, 0, 512)
-            if ($n -gt 0) {{ $result[$t.ip] = [Text.Encoding]::UTF8.GetString($buf, 0, $n).Trim() }}
-        }}
-    }} catch {{}}
-    try {{ $t.tcp.Close() }} catch {{}}
-}}
-$result | ConvertTo-Json -Compress"#, ips = ssh_ips_str);
-
-            match crate::ps::run_ps_json(&ssh_script).await {
-                Ok(data) => {
-                    if let Some(obj) = data.as_object() {
-                        for (ip, banner) in obj {
-                            bm.entry(ip.clone()).or_insert_with(|| json!({}));
-                            if let Some(entry) = bm.get_mut(ip) {
-                                entry["sshBanner"] = banner.clone();
-                            }
-                        }
-                    }
-                }
-                Err(e) => tracing::warn!("SSH-Banner-Grab fehlgeschlagen: {}", e),
-            }
-        }
-
-        // HTTP Server header (parallel, 3s timeout)
-        if !http_ips.is_empty() {
-            let http_ips_str = http_ips.iter()
-                .map(|ip| format!("'{}'", ip.replace('\'', "''")))
-                .collect::<Vec<_>>()
-                .join(",");
-            let http_script = format!(r#"$ips = @({ips})
-$result = @{{}}
-foreach ($ip in $ips) {{
-    try {{
-        $resp = Invoke-WebRequest -Uri "http://$ip/" -Method HEAD -TimeoutSec 3 -UseBasicParsing -EA Stop
-        $server = $resp.Headers['Server']
-        if ($server) {{ $result[$ip] = [string]$server }}
-    }} catch {{}}
-}}
-$result | ConvertTo-Json -Compress"#, ips = http_ips_str);
-
-            match crate::ps::run_ps_json(&http_script).await {
-                Ok(data) => {
-                    if let Some(obj) = data.as_object() {
-                        for (ip, server) in obj {
-                            bm.entry(ip.clone()).or_insert_with(|| json!({}));
-                            if let Some(entry) = bm.get_mut(ip) {
-                                entry["httpServer"] = server.clone();
-                            }
-                        }
-                    }
-                }
-                Err(e) => tracing::warn!("HTTP-Header-Grab fehlgeschlagen: {}", e),
-            }
-        }
-
-        bm
-    };
-
-    // Phase 4: Enrich devices with OUI vendor + SSDP model + classification
-    let _ = app.emit("network-scan-progress", json!({
-        "phase": "classify", "message": "Geräte werden klassifiziert...", "percent": 85
-    }));
-
-    let mut enriched_devices: Vec<Value> = Vec::with_capacity(phase1_raw.len());
-    for raw_device in &phase1_raw {
-        let ip = raw_device["ip"].as_str().unwrap_or("").to_string();
-        let mac = raw_device["mac"].as_str().unwrap_or("").to_string();
-        let hostname = raw_device["hostname"].as_str().unwrap_or("").to_string();
-        let rtt = raw_device["rtt"].as_i64().unwrap_or(0);
-
-        // OUI vendor lookup
-        let vendor = if mac.is_empty() {
-            String::new()
-        } else {
-            crate::oui::lookup(&mac).unwrap_or_default()
-        };
-
-        // SSDP model info (extended)
-        let ssdp_info = ssdp_map.get(&ip);
-        let model_name = ssdp_info
-            .and_then(|i| i["modelName"].as_str())
-            .unwrap_or("")
-            .to_string();
-        let model_number = ssdp_info
-            .and_then(|i| i["modelNumber"].as_str())
-            .unwrap_or("")
-            .to_string();
-        let ssdp_manufacturer = ssdp_info
-            .and_then(|i| i["manufacturer"].as_str())
-            .unwrap_or("")
-            .to_string();
-        let friendly_name = ssdp_info
-            .and_then(|i| i["friendlyName"].as_str())
-            .unwrap_or("")
-            .to_string();
-        let ssdp_serial = ssdp_info
-            .and_then(|i| i["serialNumber"].as_str())
-            .unwrap_or("")
-            .to_string();
-        let ssdp_description = ssdp_info
-            .and_then(|i| i["modelDescription"].as_str())
-            .unwrap_or("")
-            .to_string();
-        let ssdp_server = ssdp_info
-            .and_then(|i| i["server"].as_str())
-            .unwrap_or("")
-            .to_string();
-
-        // Banner/header info
-        let banner_info = banner_map.get(&ip);
-        let ssh_banner = banner_info
-            .and_then(|i| i["sshBanner"].as_str())
-            .unwrap_or("")
-            .to_string();
-        let http_server = banner_info
-            .and_then(|i| i["httpServer"].as_str())
-            .unwrap_or("")
-            .to_string();
-
-        // Use SSDP manufacturer if OUI vendor is empty
-        let effective_vendor = if vendor.is_empty() && !ssdp_manufacturer.is_empty() {
-            ssdp_manufacturer.clone()
-        } else {
-            vendor.clone()
-        };
-
-        // Get open ports for this device
-        let open_ports = port_map.get(&ip).cloned().unwrap_or_default();
-        let open_port_numbers: Vec<u16> = open_ports.iter()
-            .filter_map(|p| p["port"].as_u64().map(|n| n as u16))
-            .collect();
-
-        // Classify device
-        let is_local = ip == local_ip;
-        let is_gateway = ip == gateway_ip;
-        let (device_type, base_label, device_icon) =
-            crate::oui::classify_device(
-                &effective_vendor, &hostname, &open_port_numbers, is_local, is_gateway,
-                &friendly_name, &model_name, &ssdp_description,
-            );
-
-        // Build enriched device label: prefer friendlyName/modelName over generic label
-        let device_label = if !friendly_name.is_empty() && !is_local && !is_gateway {
-            // SSDP friendlyName is the best user-readable label (e.g. "Wohnzimmer-Drucker")
-            friendly_name.clone()
-        } else if !model_name.is_empty() && !is_local && !is_gateway {
-            // Model name from UPnP (e.g. "HL-L2350DW")
-            if !effective_vendor.is_empty() && !model_name.to_lowercase().contains(&effective_vendor.to_lowercase()) {
-                format!("{} {}", effective_vendor, model_name)
-            } else {
-                model_name.clone()
-            }
-        } else {
-            base_label
-        };
-
-        // OS detection: TTL heuristic + SSDP SERVER header + SSH banner
-        let ttl = raw_device["ttl"].as_i64().unwrap_or(0);
-        let os = detect_os(ttl, &ssdp_server, &ssh_banner, &open_port_numbers);
-
-        // Firmware version from SSDP modelNumber or modelDescription
-        let firmware_version = if !model_number.is_empty() {
-            model_number.clone()
-        } else if !ssdp_description.is_empty() && ssdp_description.len() < 60 {
-            ssdp_description.clone()
-        } else {
-            String::new()
-        };
-
-        // Build identification method string
-        let mut id_methods = Vec::new();
-        if !vendor.is_empty() { id_methods.push("OUI"); }
-        if !open_port_numbers.is_empty() { id_methods.push("Ports"); }
-        if !model_name.is_empty() { id_methods.push("UPnP"); }
-        if !ssh_banner.is_empty() { id_methods.push("SSH"); }
-        if !http_server.is_empty() { id_methods.push("HTTP"); }
-        if id_methods.is_empty() {
-            if !hostname.is_empty() { id_methods.push("DNS"); }
-            else { id_methods.push("Ping"); }
-        }
-
-        enriched_devices.push(json!({
-            "ip": ip,
-            "mac": mac,
-            "hostname": hostname,
-            "online": true,
-            "rtt": rtt,
-            "vendor": effective_vendor,
-            "deviceType": device_type,
-            "deviceLabel": device_label,
-            "deviceIcon": device_icon,
-            "openPorts": open_ports,
-            "isLocal": is_local,
-            "os": os,
-            "modelName": model_name,
-            "friendlyName": friendly_name,
-            "manufacturer": ssdp_manufacturer,
-            "firmwareVersion": firmware_version,
-            "serialNumber": ssdp_serial,
-            "sshBanner": ssh_banner,
-            "httpServer": http_server,
-            "identifiedBy": id_methods.join(" + ")
-        }));
-    }
-
-    let _ = app.emit("network-scan-progress", json!({
-        "phase": "done", "message": "Fertig", "percent": 100
-    }));
-
-    tracing::info!("Netzwerk-Scan abgeschlossen: {} Geräte, davon {} mit Modell-Info",
-        enriched_devices.len(), ssdp_map.len());
-
-    let result = json!({
-        "devices": enriched_devices,
-        "subnet": subnet,
-        "localIP": local_ip,
-        "scannedAt": chrono::Utc::now().timestamp_millis()
-    });
-
-    // Persist to memory + disk
-    *LAST_NETWORK_SCAN.lock().unwrap() = Some(result.clone());
-    let _ = write_json_file("last-network-scan.json", &result);
-
-    Ok(result)
-}
-
-/// Return cached last network scan result
-#[tauri::command]
-pub async fn get_last_network_scan() -> Result<Value, String> {
-    // First check memory cache
-    {
-        let guard = LAST_NETWORK_SCAN.lock().unwrap();
-        if let Some(ref data) = *guard {
-            return Ok(data.clone());
-        }
-    }
-    // If memory empty, try loading from disk (survives app restart)
-    let persisted = read_json_file("last-network-scan.json");
-    if persisted.get("devices").is_some() {
-        // Restore to memory cache
-        *LAST_NETWORK_SCAN.lock().unwrap() = Some(persisted.clone());
-        return Ok(persisted);
-    }
-    Ok(json!(null))
-}
-
-#[tauri::command]
-pub async fn scan_device_ports(ip: String) -> Result<Value, String> {
-    validate_ip(&ip)?;
-    let script = format!(
-        r#"$portLabels = @{{21='FTP';22='SSH';23='Telnet';25='SMTP';53='DNS';80='HTTP';139='NetBIOS';443='HTTPS';445='SMB';3389='RDP';5900='VNC';8080='HTTP-Proxy'}}
-$ports = @(21,22,23,25,53,80,139,443,445,3389,5900,8080)
-$tasks = @()
-foreach ($port in $ports) {{
-    $tcp = New-Object System.Net.Sockets.TcpClient
-    $tasks += @{{port=$port; task=$tcp.ConnectAsync('{}', $port); client=$tcp}}
-}}
-try {{ [void][System.Threading.Tasks.Task]::WaitAll(@($tasks | ForEach-Object {{ $_.task }}), 3000) }} catch {{}}
-$results = @()
-foreach ($t in $tasks) {{
-    $open = $t.task.IsCompleted -and -not $t.task.IsFaulted -and $t.client.Connected
-    $results += [PSCustomObject]@{{ port=$t.port; open=$open; label=$portLabels[$t.port] }}
-    try {{ $t.client.Close() }} catch {{}}
-}}
-$results | ConvertTo-Json -Compress"#, ip
-    );
-    crate::ps::run_ps_json_array(&script).await
-}
-
-#[tauri::command]
-pub async fn get_smb_shares(ip: String) -> Result<Value, String> {
-    validate_ip(&ip)?;
-    let safe_ip = ip.replace("'", "''");
-    let script = format!(
-        r#"$shares = @()
-try {{
-    $shares += @(Get-SmbConnection -ServerName '{}' -EA SilentlyContinue | ForEach-Object {{ [PSCustomObject]@{{ name=$_.ShareName; path="\\$($_.ServerName)\$($_.ShareName)"; source='SmbConnection' }} }})
-}} catch {{}}
-if ($shares.Count -eq 0) {{
-    try {{
-        $net = net view '\\{}' 2>$null
-        $net | Select-String '^\s*(\S+)\s+(Platte|Disk)' | ForEach-Object {{
-            $name = $_.Matches[0].Groups[1].Value
-            $shares += [PSCustomObject]@{{ name=$name; path="\\{}\$name"; source='NetView' }}
-        }}
-    }} catch {{}}
-}}
-@($shares) | ConvertTo-Json -Compress"#, safe_ip, safe_ip, safe_ip
-    );
-    crate::ps::run_ps_json_array(&script).await
-}
-
-#[tauri::command]
-pub async fn update_oui_database() -> Result<Value, String> {
-    // Use PowerShell to download the IEEE OUI database
-    let oui_path = get_data_dir().join("oui.txt");
-    let oui_path_escaped = oui_path.to_string_lossy().replace("'", "''");
-
-    let script = format!(r#"
-try {{
-    $url = 'https://standards-oui.ieee.org/oui/oui.txt'
-    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-    Invoke-WebRequest -Uri $url -OutFile '{path}' -UseBasicParsing -TimeoutSec 30
-    $lines = (Get-Content '{path}' | Measure-Object).Count
-    [PSCustomObject]@{{ success=$true; path='{path}'; lines=$lines }} | ConvertTo-Json -Compress
-}} catch {{
-    [PSCustomObject]@{{ success=$false; error=$_.Exception.Message }} | ConvertTo-Json -Compress
-}}"#, path = oui_path_escaped);
-
-    let result = crate::ps::run_ps_json(&script).await?;
-
-    // Immediately reload into memory after successful download
-    if result["success"].as_bool().unwrap_or(false) {
-        let data_dir = get_data_dir();
-        let count = crate::oui::load_dynamic_oui(&data_dir);
-        tracing::info!("OUI-Datenbank nach Download geladen: {} Einträge", count);
-    }
-
-    Ok(result)
 }
 
 // === System Info ===

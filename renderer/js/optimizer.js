@@ -28,6 +28,13 @@ export class OptimizerView {
         }
     }
 
+    destroy() {
+        this.container.innerHTML = '';
+        this.recommendations = [];
+        this._cache = null;
+        this._cacheTime = 0;
+    }
+
     render() {
         this.container.innerHTML = `
             <div class="tool-toolbar">

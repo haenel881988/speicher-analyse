@@ -173,6 +173,11 @@ export class CleanupView {
         this.scan(); // refresh
     }
 
+    destroy() {
+        this.container.innerHTML = '';
+        this.categories = [];
+    }
+
     async autoScan() {
         if (!this.scanId) return null;
         try {

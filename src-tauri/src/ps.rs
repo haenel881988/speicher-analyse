@@ -63,7 +63,7 @@ pub async fn run_ps(script: &str) -> Result<String, String> {
         })?
         .map_err(|e| {
             tracing::error!(script = %preview, error = %e, "PowerShell Start fehlgeschlagen");
-            format!("PowerShell start failed: {}", e)
+            format!("PowerShell-Start fehlgeschlagen: {}", e)
         })?;
 
     let elapsed = start.elapsed();
@@ -86,7 +86,7 @@ pub async fn run_ps(script: &str) -> Result<String, String> {
             stderr = %stderr.trim(),
             "PowerShell Fehler"
         );
-        Err(format!("PowerShell error: {} {}", stderr.trim(), stdout.trim()))
+        Err(format!("PowerShell-Fehler: {} {}", stderr.trim(), stdout.trim()))
     }
 }
 
@@ -99,7 +99,7 @@ pub async fn run_ps_json(script: &str) -> Result<serde_json::Value, String> {
     serde_json::from_str(&output).map_err(|e| {
         let preview = safe_truncate(&output, 200);
         tracing::warn!(error = %e, output_start = %preview, "JSON-Parse fehlgeschlagen");
-        format!("JSON parse error: {} — output: {}", e, preview)
+        format!("JSON-Parsing fehlgeschlagen: {} — Ausgabe: {}", e, preview)
     })
 }
 

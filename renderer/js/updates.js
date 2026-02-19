@@ -349,6 +349,14 @@ export class UpdatesView {
         }
     }
 
+    destroy() {
+        this.container.innerHTML = '';
+        this.windowsUpdates = [];
+        this.softwareUpdates = [];
+        this.drivers = [];
+        this.updateHistory = [];
+    }
+
     async loadHistory() {
         const results = this.container.querySelector('#history-results');
         const summary = this.container.querySelector('#history-summary');

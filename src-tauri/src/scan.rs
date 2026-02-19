@@ -11,7 +11,6 @@ pub struct FileEntry {
     pub extension: String,
 }
 
-#[allow(dead_code)]
 pub struct ScanData {
     pub scan_id: String,
     pub root_path: String,
@@ -28,21 +27,21 @@ fn store() -> &'static Mutex<HashMap<String, ScanData>> {
 
 pub fn save(data: ScanData) {
     build_dir_index(&data.files);
-    let mut s = store().lock().unwrap();
+    let mut s = store().lock().unwrap_or_else(|e| e.into_inner());
     s.clear();
     s.insert(data.scan_id.clone(), data);
 }
 
 /// Mutable access to store — for releasing scan data from memory
 pub fn store_mut() -> std::sync::MutexGuard<'static, HashMap<String, ScanData>> {
-    store().lock().unwrap()
+    store().lock().unwrap_or_else(|e| e.into_inner())
 }
 
 pub fn with_scan<F, R>(scan_id: &str, f: F) -> Option<R>
 where
     F: FnOnce(&ScanData) -> R,
 {
-    let s = store().lock().unwrap();
+    let s = store().lock().unwrap_or_else(|e| e.into_inner());
     s.get(scan_id).map(f)
 }
 
@@ -175,7 +174,7 @@ pub fn old_files(scan_id: &str, threshold_days: u32, min_size: u64) -> Value {
 
 /// Get folder sizes bulk — O(1) per folder via directory index
 pub fn folder_sizes_bulk(_scan_id: &str, folder_paths: &[String]) -> Value {
-    let idx = dir_index().lock().unwrap();
+    let idx = dir_index().lock().unwrap_or_else(|e| e.into_inner());
     let mut result: HashMap<String, u64> = HashMap::new();
     for folder in folder_paths {
         let key = normalize_dir_key(folder);
@@ -209,7 +208,7 @@ pub fn export_csv(scan_id: &str) -> String {
 /// Build tree node from pre-built directory index — O(1) lookup instead of O(N) file scan
 pub fn tree_node(_scan_id: &str, path: &str, _depth: u32) -> Value {
     let key = normalize_dir_key(path);
-    let idx = dir_index().lock().unwrap();
+    let idx = dir_index().lock().unwrap_or_else(|e| e.into_inner());
 
     match idx.get(&key) {
         Some(entry) => {
@@ -247,13 +246,13 @@ pub fn tree_node(_scan_id: &str, path: &str, _depth: u32) -> Value {
 
 /// Check if a scan_id exists in memory
 pub fn has_scan(scan_id: &str) -> bool {
-    let s = store().lock().unwrap();
+    let s = store().lock().unwrap_or_else(|e| e.into_inner());
     s.contains_key(scan_id)
 }
 
 /// Persist current scan data to disk (bincode for fast load, metadata as JSON)
 pub fn save_to_disk(data_dir: &std::path::Path) -> Result<Value, String> {
-    let s = store().lock().unwrap();
+    let s = store().lock().unwrap_or_else(|e| e.into_inner());
     let (_, data) = s.iter().next().ok_or("Keine Scan-Daten vorhanden")?;
 
     let meta = json!({
@@ -479,7 +478,7 @@ fn build_dir_index(files: &[FileEntry]) {
 
     let count = entries.len();
     let elapsed = start.elapsed();
-    let mut idx = dir_index().lock().unwrap();
+    let mut idx = dir_index().lock().unwrap_or_else(|e| e.into_inner());
     *idx = entries;
 
     tracing::debug!(

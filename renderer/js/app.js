@@ -13,7 +13,6 @@ import { OldFilesView } from './old-files.js';
 import { DuplicatesView } from './duplicates.js';
 import { CleanupView } from './cleanup.js';
 import { EditorPanel } from './preview.js';
-import { RegistryView } from './registry.js';
 import { DashboardView } from './dashboard.js';
 import { AutostartView } from './autostart.js';
 import { ServicesView } from './services.js';
@@ -118,7 +117,6 @@ const editorPanel = new EditorPanel(els.previewContent, els.previewTitle, els.pr
 const oldFilesView = new OldFilesView(document.getElementById('view-old-files'));
 const duplicatesView = new DuplicatesView(document.getElementById('view-duplicates'));
 const cleanupView = new CleanupView(document.getElementById('view-cleanup'));
-const registryView = new RegistryView(document.getElementById('view-registry'));
 const dashboardView = new DashboardView(document.getElementById('view-dashboard'));
 const autostartView = new AutostartView(document.getElementById('view-autostart'));
 const servicesView = new ServicesView(document.getElementById('view-services'));
@@ -220,7 +218,6 @@ async function init() {
     setupPreviewResize();
     setupSmartLayout();
     setupTopFilesFilters();
-    await registryView.init();
     await autostartView.init();
     await servicesView.init();
     await bloatwareView.init();
@@ -618,14 +615,13 @@ async function loadAllViews(skipPostAnalysis = false) {
 
 async function runPostScanAnalysis(switchToDashboard = true) {
     setStatus('Analyse wird durchgeführt...', true);
-    const [cleanup, oldFiles, registry, optimizer, sizeDuplicates] = await Promise.allSettled([
+    const [cleanup, oldFiles, optimizer, sizeDuplicates] = await Promise.allSettled([
         cleanupView.autoScan(),
         oldFilesView.autoSearch(),
-        registryView.autoScan(),
         optimizerView.autoScan(),
         window.api.getSizeDuplicates(state.currentScanId, 1024),
     ]);
-    dashboardView.updateResults({ cleanup, oldFiles, registry, optimizer, sizeDuplicates });
+    dashboardView.updateResults({ cleanup, oldFiles, optimizer, sizeDuplicates });
     setStatus('Bereit');
     if (switchToDashboard) {
         switchToTab('dashboard');

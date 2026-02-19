@@ -1,8 +1,9 @@
-# Tiefenanalyse — Speicher Analyse v7.2.1
+# Tiefenanalyse-Ergebnisse — Speicher Analyse v7.2.1
 
-> **Erstellt:** 19.02.2026
-> **Methode:** Systematische Codebase-Recherche nach Recherche-Prompt v2.2
-> **Umfang:** 14 Analysebereiche, alle Kern-Dateien manuell geprüft
+**Datum:** 19.02.2026
+**Analysiert von:** Claude Opus 4.6 (Tiefenanalyse-Prompt v2.2)
+**Analysierte Bereiche:** 14 (Migration, Security, Performance, Stabilität, Architektur, UX, Windows, Dependencies, Konsistenz, Anti-Patterns, Events, Build, Upgrade-Pfad, Dead Code)
+**Methode:** Manuelle Datei-für-Datei-Analyse aller Kern-Dateien (kein Agent, kein Skript)
 
 ---
 
@@ -10,369 +11,455 @@
 
 | Schweregrad | Anzahl |
 |-------------|--------|
-| 🔴 Kritisch | 3 |
-| 🟠 Hoch | 7 |
-| 🟡 Mittel | 6 |
-| 🔵 Niedrig | 4 |
-| ℹ️ Hinweis | 3 |
-| **Gesamt** | **23** |
+| Kritisch | 3 |
+| Hoch | 8 |
+| Mittel | 8 |
+| Niedrig | 6 |
+| **Gesamt** | **25** |
+| Optimierungsmöglichkeiten | 5 |
 
 ---
 
-## 🔴 Kritisch
+## Kritisch
 
 ### K-1: Strategisch "entfernte" Features noch vollständig im Code
 
-**Bereich:** 14 (Dead Code) + 1 (Migration)
-**Dateien:**
-- `src-tauri/src/commands.rs` — `scan_local_network` (Z.3540), `scan_network_active` (Z.3609), `scan_device_ports` (Z.4115), `get_smb_shares` (Z.4138), `get_firewall_rules` (Z.2614), `block_process` (Z.2629), `unblock_process` (Z.2643), `scan_registry` (Z.896), `clean_registry` (Z.937), `export_registry_backup` (Z.925), `restore_registry_backup` (Z.969)
-- `src-tauri/src/lib.rs` — Alle oben genannten Commands sind in Z.249-252 (Registry) und Z.341-343 (Firewall) und Z.364-368 (Netzwerk-Scanner) registriert
-- `renderer/js/tauri-bridge.js` — Bridge-Einträge für alle "entfernten" Features existieren
-- `renderer/js/registry.js` — Komplette Registry-View mit UI noch vorhanden
-- `renderer/index.html` — Sidebar-Tab für Registry noch vorhanden
-- `src-tauri/src/oui.rs` — Komplette OUI-Datenbank (nur für Netzwerk-Scanner relevant)
-
-**Risiko:** Die strategische Entscheidung in `issue.md` (18.02.2026) definiert klar, dass Netzwerk-Scanner, Firewall-Verwaltung und Registry Cleaner entfernt werden sollen. Der Code ist aber noch vollständig vorhanden und aktiv. AV-Software kann die Funktionen erkennen und die App blockieren.
-
-**Empfehlung:** Vollständige Entfernung aller betroffenen Commands, Bridge-Einträge, Views und `oui.rs`. Registrierung in `lib.rs` entfernen.
-
----
-
-### K-2: Path Traversal — Lese-Commands ohne Pfadvalidierung
-
-**Bereich:** 2 (Security)
-**Datei:** `src-tauri/src/commands.rs`
-- `read_file_preview` (Z.866) — Liest beliebige Dateien ohne `validate_path()`
-- `read_file_content` (Z.873) — Liest beliebige Dateien ohne `validate_path()`
-- `read_file_binary` (Z.886) — Liest beliebige Dateien (inkl. Base64-Encoding) ohne `validate_path()`
-
-**Risiko:** Ein Angreifer (z.B. über XSS oder manipulierte IPC-Aufrufe) kann beliebige Dateien lesen — inklusive `C:\Windows\System32\config\SAM`, SSH-Keys, Browser-Passwörter, etc. Im Gegensatz dazu hat `write_file_content` (Z.879) korrekt `validate_path()`.
-
-**Empfehlung:** `validate_path()` vor jeder Lese-Operation aufrufen. Alternativ: Explizite Allowlist der erlaubten Pfade (z.B. nur innerhalb des Scan-Roots oder des vom User geöffneten Verzeichnisses).
+- **Bereich:** Migration / Security / AV-Kompatibilität
+- **Dateien:**
+  - `src-tauri/src/commands.rs` — 11 Commands noch vorhanden:
+    - Netzwerk-Scanner: `scan_local_network` (Z.3540), `scan_network_active` (Z.3609), `scan_device_ports` (Z.4115), `get_smb_shares` (Z.4138)
+    - Firewall: `get_firewall_rules` (Z.2614), `block_process` (Z.2629), `unblock_process` (Z.2643)
+    - Registry-Cleaner: `scan_registry` (Z.896), `clean_registry` (Z.937), `export_registry_backup` (Z.925), `restore_registry_backup` (Z.969)
+  - `src-tauri/src/lib.rs` — Alle registriert: Z.249-252 (Registry), Z.341-343 (Firewall), Z.364-368 (Scanner)
+  - `renderer/js/tauri-bridge.js` — Bridge-Einträge Z.135-138, Z.253-255, Z.276-280
+  - `renderer/js/registry.js` — Komplette RegistryView mit UI
+  - `src-tauri/src/oui.rs` — Komplette OUI-Datenbank (nur für Scanner)
+  - `src-tauri/src/lib.rs:134-141` — OUI wird beim App-Start geladen
+- **Risiko:**
+  1. AV-Software kann die App als Malware flaggen (Port-Scanning, Firewall-Manipulation, Registry-Löschung)
+  2. `clean_registry` führt echte `Remove-Item` auf Registry-Schlüssel aus — kann System beschädigen
+  3. `block_process`/`unblock_process` erstellen/löschen echte Windows-Firewall-Regeln
+  4. `scan_local_network` scannt 254 IPs per Ping-Sweep — klassisches AV-Trigger-Verhalten
+- **Empfehlung:** Vollständige Entfernung aller 11 Commands + Bridge-Einträge + Registrierung + `oui.rs` + `registry.js` + `update_oui_database` Command + `tools/build-oui-database.js`
+- **Aufwand:** Mittel
 
 ---
 
-### K-3: delete_to_trash ohne Pfadvalidierung
+### K-2: CSP erlaubt `unsafe-inline` UND `unsafe-eval` gleichzeitig
 
-**Bereich:** 2 (Security)
-**Datei:** `src-tauri/src/commands.rs`, Z.359
-**Code:**
-```rust
-pub async fn delete_to_trash(paths: Vec<String>) -> Result<Value, String> {
-    // KEIN validate_path() Aufruf!
-    let ps_paths = paths.iter().map(|p| format!("'{}'", p.replace("'", "''"))).collect::<Vec<_>>().join(",");
-```
-
-**Risiko:** Es können beliebige Dateien und Verzeichnisse in den Papierkorb verschoben werden — inklusive Systemdateien, Programmdateien, etc. Zwar wird PowerShell's `SendToRecycleBin` verwendet (nicht permanente Löschung), aber der Papierkorb kann anschließend geleert werden.
-
-**Empfehlung:** `validate_path()` für jeden Pfad in der Liste aufrufen, bevor der PowerShell-Befehl ausgeführt wird.
-
----
-
-## 🟠 Hoch
-
-### H-1: Migration-Artefakt — electron-builder.yml existiert noch
-
-**Bereich:** 1 (Migration)
-**Datei:** `electron-builder.yml` (Projekt-Root)
-
-**Risiko:** Verwirrung bei Build-Tools, falsche Signale an CI/CD-Systeme, irreführend für neue Entwickler. Enthält Electron-spezifische Konfiguration (appId, NSIS-Settings) die mit Tauri nichts zu tun hat.
-
-**Empfehlung:** Datei löschen.
+- **Bereich:** Security
+- **Datei:** `src-tauri/tauri.conf.json:26`
+- **Problem:** Die Content Security Policy enthält:
+  ```
+  script-src 'self' 'unsafe-inline' 'unsafe-eval'
+  ```
+  `unsafe-eval` erlaubt `eval()`, `new Function()` und `setTimeout(string)`. In Kombination mit `unsafe-inline` wird die CSP praktisch wirkungslos gegen XSS.
+- **Risiko:** Falls ein XSS-Vektor existiert (z.B. über Dateinamen oder Registry-Werte), kann Angreifer-Code uneingeschränkt ausgeführt werden. Über IPC dann Zugriff auf PowerShell-Ausführung.
+- **Verifikation:** Grep über gesamten eigenen JS-Code zeigt: KEIN `eval()` oder `new Function()` im eigenen Code. Monaco Editor braucht möglicherweise `unsafe-eval`.
+- **Empfehlung:**
+  - `unsafe-eval` sofort entfernen (kein eigener Code braucht es). Falls Monaco bricht: nur für Preview-View erlauben.
+  - `unsafe-inline` langfristig durch Nonce-basierte CSP ersetzen
+- **Aufwand:** Klein (1 Zeile in tauri.conf.json)
 
 ---
 
-### H-2: 18 View-Klassen ohne destroy() — Memory-Leak-Risiko
+### K-3: `delete_to_trash` ohne Pfadvalidierung
 
-**Bereich:** 3 (Performance) + 4 (Stabilität)
-**Betroffene Dateien (kein `destroy()`):**
-
-| View | Datei |
-|------|-------|
-| DashboardView | `renderer/js/dashboard.js` |
-| AutostartView | `renderer/js/autostart.js` |
-| CleanupView | `renderer/js/cleanup.js` |
-| DuplicatesView | `renderer/js/duplicates.js` |
-| ExplorerView | `renderer/js/explorer.js` |
-| ExplorerDualPanel | `renderer/js/explorer-dual-panel.js` |
-| OldFilesView | `renderer/js/old-files.js` |
-| OptimizerView | `renderer/js/optimizer.js` |
-| EditorPanel | `renderer/js/preview.js` |
-| RegistryView | `renderer/js/registry.js` |
-| SearchPanel | `renderer/js/search.js` |
-| SecurityAuditView | `renderer/js/security-audit.js` |
-| ServicesView | `renderer/js/services.js` |
-| SettingsView | `renderer/js/settings.js` |
-| SystemProfilView | `renderer/js/system-profil.js` |
-| TreeView | `renderer/js/tree.js` |
-| UpdatesView | `renderer/js/updates.js` |
-| BloatwareView | `renderer/js/bloatware.js` |
-
-**Views MIT destroy() (7):** NetworkView, PrivacyView, SmartView, SoftwareAuditView, TreemapView, SystemScoreView, TerminalPanel
-
-**Risiko:** Bei jedem Tab-Wechsel werden Event-Listener, Intervals, ResizeObserver und DOM-Referenzen nicht aufgeräumt. Bei längerer Nutzung steigt der Speicherverbrauch kontinuierlich an.
-
-**Empfehlung:** Jede View braucht eine `destroy()`-Methode. `app.js` muss `destroy()` aufrufen bevor eine neue View aktiviert wird (laut CLAUDE.md bereits als Regel definiert).
+- **Bereich:** Security / Path Traversal
+- **Datei:** `src-tauri/src/commands.rs:358-374`
+- **Problem:** `delete_to_trash` akzeptiert `Vec<String>` und schickt Pfade direkt an PowerShell. **Kein** `validate_path()` Aufruf. Im Gegensatz dazu hat `delete_permanent` (Z.377) korrekt `validate_path()`.
+  ```rust
+  pub async fn delete_to_trash(paths: Vec<String>) -> Result<Value, String> {
+      // KEIN validate_path() — direkt an PowerShell
+      let ps_paths = paths.iter().map(|p| format!("'{}'", p.replace("'", "''"))).collect();
+  ```
+- **Risiko:** Über die Bridge kann jeder Pfad (inkl. `C:\Windows\System32` oder `C:\`) in den Papierkorb verschoben werden. Zwar wiederherstellbar, aber kann laufendes System destabilisieren.
+- **Empfehlung:** `validate_path()` für jeden Pfad aufrufen (3 Zeilen Code)
+- **Aufwand:** Klein
 
 ---
 
-### H-3: app.js — Battery-Interval wird nie gestoppt
+## Hoch
 
-**Bereich:** 3 (Performance)
-**Datei:** `renderer/js/app.js`, Z.262
+### H-1: Electron-Altlast in `tools/wcag/restore-window.ps1`
 
-```javascript
-state.batteryIntervalId = setInterval(updateBatteryUI, batteryInterval);
-```
-
-Es gibt **keinen einzigen** `clearInterval`-Aufruf in der gesamten `app.js`. Das Interval läuft die gesamte Lebensdauer der App.
-
-**Risiko:** Geringes Leak, aber Verstoß gegen die Memory-Leak-Prävention-Policy in CLAUDE.md. Wenn die App lange läuft und `updateBatteryUI` interne State-Objekte akkumuliert, wächst der Speicher.
-
-**Empfehlung:** `clearInterval(state.batteryIntervalId)` in eine Cleanup-Funktion einbauen.
-
----
-
-### H-4: CSP erlaubt unsafe-inline und unsafe-eval
-
-**Bereich:** 2 (Security)
-**Datei:** `src-tauri/tauri.conf.json`, Z.26
-
-```
-script-src 'self' 'unsafe-inline' 'unsafe-eval'
-```
-
-**Risiko:** `unsafe-inline` erlaubt Inline-Scripts (XSS-Vektor). `unsafe-eval` erlaubt `eval()`, `Function()`, `setTimeout(string)` — klassische XSS-Exploitation. In einer Tauri-App mit IPC-Zugriff auf PowerShell-Ausführung ist dies besonders gefährlich.
-
-**Empfehlung:** Inline-Styles auf `style-src` beschränken (bereits korrekt). `unsafe-eval` entfernen — prüfen ob es tatsächlich benötigt wird (Monaco Editor könnte es brauchen). `unsafe-inline` in `script-src` durch Nonce oder Hash ersetzen, falls technisch möglich.
+- **Bereich:** Migration
+- **Datei:** `tools/wcag/restore-window.ps1:12,23`
+- **Problem:**
+  ```powershell
+  $procs = Get-Process | Where-Object { $_.ProcessName -like '*electron*' -or $_.MainWindowTitle -like '*Speicher*' }
+  ...
+  Write-Host "No Electron process found"
+  ```
+  Sucht nach `*electron*` statt dem Tauri-Prozessnamen.
+- **Risiko:** WCAG-Checks und visuelle Verifikation per Puppeteer funktionieren nicht korrekt. KI-Assistenten nutzen dieses Tool als Infrastruktur.
+- **Empfehlung:** `*electron*` durch `*speicher*` ersetzen, Fehlermeldung auf Deutsch
+- **Aufwand:** Klein
 
 ---
 
-### H-5: terminal_resize ist ein Stub
+### H-2: 4 Event-Listener im Frontend ohne Backend-Emitter (tote Listener)
 
-**Bereich:** 14 (Dead Code) + 4 (Stabilität)
-**Datei:** `src-tauri/src/commands.rs`, Z.2040-2042
+- **Bereich:** Konsistenz / Dead Code / UX
+- **Datei:** `renderer/js/tauri-bridge.js`
+- **Problem:** Folgende Events werden im Frontend registriert, aber im Backend **nie** emittiert:
 
-```rust
-pub async fn terminal_resize(_id: String, _cols: u32, _rows: u32) -> Result<Value, String> {
-    Ok(json!({ "stub": true, "message": "Terminal-Resize benötigt ConPTY/portable-pty" }))
-}
-```
+  | Event | Bridge-Zeile | Auswirkung |
+  |-------|-------------|------------|
+  | `file-op-progress` | 101 | Kein Fortschritts-Feedback bei Dateioperationen |
+  | `deep-search-progress` | 172 | Tiefensuche zeigt keinen Fortschritt |
+  | `tray-action` | 315 | Tray-Aktionen werden nie empfangen |
+  | `open-folder` | 316 | Ordner-Öffnen-Event wird nie empfangen |
 
-**Risiko:** Frontend ruft `terminal_resize` auf und erhält `{"stub": true}` zurück. Der User sieht ein Terminal das sich bei Fenster-Resize nicht anpasst. Die Funktion täuscht Funktionalität vor.
-
-**Empfehlung:** Entweder ConPTY/portable-pty implementieren oder das Frontend informieren dass Resize nicht verfügbar ist (kein stiller Stub).
-
----
-
-### H-6: ~35 unwrap() auf Mutex-Locks — Panic bei Poisoned Mutex
-
-**Bereich:** 4 (Stabilität)
-**Datei:** `src-tauri/src/commands.rs`
-
-Beispiele (Auszug):
-- Z.1964: `TERMINAL_SESSIONS.lock().unwrap()`
-- Z.2012: `TERMINAL_SESSIONS.lock().unwrap()`
-- Z.2577: `bw_prev_store().lock().unwrap()`
-- Z.2732: `IP_RESOLVE_CACHE.lock().unwrap()`
-- Z.3169: `NETWORK_RECORDING.lock().unwrap()`
-- Z.4088: `LAST_NETWORK_SCAN.lock().unwrap()`
-
-**Risiko:** Wenn ein Thread panicked während er einen Mutex hält, wird der Mutex "poisoned". Alle nachfolgenden `lock().unwrap()` Aufrufe werden dann ebenfalls paniken → Kaskaden-Crash der gesamten App.
-
-**Empfehlung:** `lock().unwrap_or_else(|e| e.into_inner())` für unkritische Caches, oder `.map_err()` mit Fehlermeldung an das Frontend für kritische Locks. Alternativ: `parking_lot::Mutex` verwenden (panicked nicht bei Poisoning).
+  Verifikation: `grep -rn "\.emit(" src-tauri/src/` zeigt keinen Emitter für diese 4 Events.
+- **Risiko:** Bei `file-op-progress` und `deep-search-progress` fehlt dem User Fortschritts-Feedback. Bei `tray-action` und `open-folder` könnte Tray-Funktionalität unvollständig sein.
+- **Empfehlung:** Backend-Emitter für file-op-progress und deep-search-progress implementieren. tray-action und open-folder entweder implementieren oder Listener entfernen.
+- **Aufwand:** Mittel
 
 ---
 
-### H-7: `nul`-Datei im Projekt-Root
+### H-3: ~30 `lock().unwrap()` auf Mutex — Poisoned Mutex = App-Crash
 
-**Bereich:** 1 (Migration)
-**Datei:** `nul` (498 Bytes, Projekt-Root)
-
-Windows-Artefakt von einem fehlerhaften Redirect (vermutlich `> NUL` in einem Bash-Kontext). Enthält Ping-Output.
-
-**Empfehlung:** Datei löschen.
+- **Bereich:** Stabilität
+- **Dateien:**
+  - `src-tauri/src/commands.rs` (Z.1964, 2012, 2023, 2048, 2577-2578, 2732, 2825-2838, 2944, 2974, 2979-2980, 3013, 3038, 3087, 3169, 3184, 3211, 3233, 3255, 4088, 4099, 4108)
+  - `src-tauri/src/scan.rs` (Z.31, 38, 45)
+- **Problem:** Alle Mutex-Locks verwenden `.unwrap()`. Wenn ein Thread panicked während er den Lock hält → Mutex wird "poisoned" → alle nachfolgenden `.unwrap()` paniken → Kaskaden-Crash.
+- **Risiko:** Ein einzelner Panic in einem Hintergrund-Thread (Terminal, Netzwerk-Polling) kann die gesamte App crashen.
+- **Empfehlung:** `lock().unwrap_or_else(|e| e.into_inner())` oder `parking_lot::Mutex` (panict nicht bei Poisoning)
+- **Aufwand:** Mittel (30+ Stellen, am besten mit Hilfsfunktion)
 
 ---
 
-## 🟡 Mittel
+### H-4: PowerShell-Fehlermeldungen auf Englisch ans Frontend durchgereicht
+
+- **Bereich:** Lokalisierung / UX
+- **Datei:** `src-tauri/src/ps.rs:66,89`
+- **Problem:**
+  ```rust
+  format!("PowerShell start failed: {}", e)     // Z.66
+  format!("PowerShell error: {} {}", stderr, stdout)  // Z.89
+  ```
+  Englische Meldungen + raw PowerShell stderr (mit Stack Traces) erreichen unverändert den User.
+- **Risiko:** User sieht kryptische englische Fehlermeldungen. Verstößt gegen Lokalisierungsregel (alles Deutsch).
+- **Empfehlung:** Deutsche Meldungen: "PowerShell konnte nicht gestartet werden" / "PowerShell-Befehl fehlgeschlagen". Technische Details nur ins Log.
+- **Aufwand:** Klein
+
+---
+
+### H-5: `terminal_resize` ist ein funktionsloser Stub
+
+- **Bereich:** Architektur / UX
+- **Datei:** `src-tauri/src/commands.rs:2039-2042`
+- **Problem:**
+  ```rust
+  pub async fn terminal_resize(_id: String, _cols: u32, _rows: u32) -> Result<Value, String> {
+      Ok(json!({ "stub": true, "message": "Terminal-Resize benötigt ConPTY/portable-pty" }))
+  }
+  ```
+  Terminal nutzt piped I/O statt echtem PTY. xterm.js sendet Resize-Events die ignoriert werden.
+- **Risiko:** Terminal-Inhalt wird bei Fenster-Resize abgeschnitten/verzerrt.
+- **Empfehlung:** Migration auf `portable-pty` oder `conpty` Crate. Alternativ: Stub dokumentieren und Frontend informieren.
+- **Aufwand:** Groß (PTY-Architektur-Umstellung)
+
+---
+
+### H-6: 18 View-Klassen ohne `destroy()` Methode
+
+- **Bereich:** Architektur / Memory-Leak-Prävention
+- **Betroffene Dateien:**
+
+  | View | Datei |
+  |------|-------|
+  | DashboardView | `renderer/js/dashboard.js` |
+  | AutostartView | `renderer/js/autostart.js` |
+  | CleanupView | `renderer/js/cleanup.js` |
+  | DuplicatesView | `renderer/js/duplicates.js` |
+  | ExplorerView | `renderer/js/explorer.js` |
+  | ExplorerDualPanel | `renderer/js/explorer-dual-panel.js` |
+  | ExplorerTabBar | `renderer/js/explorer-tabs.js` |
+  | OldFilesView | `renderer/js/old-files.js` |
+  | OptimizerView | `renderer/js/optimizer.js` |
+  | EditorPanel | `renderer/js/preview.js` |
+  | RegistryView | `renderer/js/registry.js` |
+  | SearchPanel | `renderer/js/search.js` |
+  | SecurityAuditView | `renderer/js/security-audit.js` |
+  | ServicesView | `renderer/js/services.js` |
+  | SettingsView | `renderer/js/settings.js` |
+  | SystemProfilView | `renderer/js/system-profil.js` |
+  | TreeView | `renderer/js/tree.js` |
+  | UpdatesView | `renderer/js/updates.js` |
+
+  Views MIT `destroy()` (10): NetworkView, PrivacyView, SmartView, SoftwareAuditView, TreemapView, SystemScoreView, TerminalPanel, FileTypeChart, BatchRenameModal, app.js
+- **Risiko:** Aktuell gering (Singleton-Instanzen, werden nie zerstört). Verstößt aber gegen CLAUDE.md Regel "Jede View MUSS destroy() haben". Bei zukünftiger Architekturänderung sofortiges Memory-Leak-Problem.
+- **Empfehlung:** Mindestens leere `destroy()` Methoden hinzufügen. Für Views mit Event-Listenern echtes Cleanup implementieren.
+- **Aufwand:** Mittel
+
+---
+
+### H-7: `switchToTab()` ruft keine `deactivate()` auf alten Views auf
+
+- **Bereich:** Performance / Architektur
+- **Datei:** `renderer/js/app.js:636-675`
+- **Problem:** Beim Tab-Wechsel wird nur CSS umgeschaltet. Nur `NetworkView` hat ein `deactivate()`-Pattern (Z.638-639). Alle anderen Views laufen im Hintergrund weiter.
+- **Risiko:** Views mit Event-Listenern und DOM-Manipulationen verbrauchen unnötig Ressourcen im Hintergrund.
+- **Empfehlung:** Einheitliches `activate()`/`deactivate()` Pattern für alle Views
+- **Aufwand:** Mittel
+
+---
+
+### H-8: `system_score` markiert sich selbst bedingt als Stub
+
+- **Bereich:** UX / Migration
+- **Datei:** `src-tauri/src/commands.rs:4400-4403`
+- **Problem:**
+  ```rust
+  if !has_real_data {
+      result["stub"] = json!(true);
+      result["message"] = json!("Keine Analysedaten übergeben — Score basiert auf Standardwerten");
+  }
+  ```
+  Beim ersten Aufruf (bevor Subsysteme analysiert) wird ein Standardwert-Score mit `stub: true` zurückgegeben.
+- **Risiko:** User sieht Score ohne Kennzeichnung dass er auf Standardwerten basiert.
+- **Empfehlung:** Frontend muss `stub: true` prüfen und deutlich anzeigen
+- **Aufwand:** Klein
+
+---
+
+## Mittel
 
 ### M-1: `#[allow(dead_code)]` auf ScanData-Struct
 
-**Bereich:** 14 (Dead Code)
-**Datei:** `src-tauri/src/scan.rs`, Z.14
-
-```rust
-#[allow(dead_code)]
-pub struct ScanData {
-```
-
-**Risiko:** Verdeckt Compiler-Warnungen über tatsächlich ungenutzten Code. Wenn Felder von ScanData wirklich nicht mehr benutzt werden, bleiben sie unentdeckt.
-
-**Empfehlung:** `#[allow(dead_code)]` entfernen und prüfen welche Felder tatsächlich ungenutzt sind. Ungenutzte Felder entfernen oder mit `_` prefixen.
+- **Bereich:** Wartbarkeit / Dead Code
+- **Datei:** `src-tauri/src/scan.rs:14`
+- **Problem:** `#[allow(dead_code)]` auf der gesamten Struct verdeckt Compiler-Warnungen über ungenutzte Felder.
+- **Risiko:** Felder wie `elapsed_seconds` werden möglicherweise nie gelesen, verbrauchen aber Memory bei jedem Scan.
+- **Empfehlung:** Attribut entfernen, Compiler-Warnungen prüfen, ungenutzte Felder entfernen
+- **Aufwand:** Klein
 
 ---
 
-### M-2: validate_path blockiert nur bekannte Systempfade
+### M-2: `validate_path()` Blocklist ist unvollständig und nicht kanonisiert
 
-**Bereich:** 2 (Security)
-**Datei:** `src-tauri/src/commands.rs`, Z.46-61
-
-Die `validate_path()`-Funktion hat eine Blocklist von 7 Systempfaden. Das ist ein Negativlist-Ansatz (alles erlaubt außer Blocklist).
-
-**Risiko:** Umgehung durch:
-- Nicht gelistete sensitive Pfade (z.B. `C:\Users\<name>\AppData\Local\Google\Chrome\User Data\`)
-- Junction Points / Symbolic Links die in blockierte Verzeichnisse zeigen
-- Relative Pfade mit `..` (wenn `p_lower` nicht kanonisiert wird)
-
-**Empfehlung:** Zusätzlich zur Blocklist eine Positivlist (Allowlist) für destruktive Operationen verwenden. Pfade vor Vergleich kanonisieren (`std::fs::canonicalize`).
-
----
-
-### M-3: commands.rs ist monolithisch (4628 Zeilen)
-
-**Bereich:** 5 (Architektur)
-**Datei:** `src-tauri/src/commands.rs`
-
-Alle ~150 Commands in einer einzigen Datei. Kategorien sind nur durch Kommentare getrennt.
-
-**Risiko:** Schwer wartbar, hohe Merge-Konflikt-Wahrscheinlichkeit bei paralleler Entwicklung, unübersichtlich.
-
-**Empfehlung:** Aufteilen in Module nach Funktionsbereich (z.B. `commands/file_management.rs`, `commands/network.rs`, `commands/terminal.rs`, etc.). Re-Export über `mod commands;` in `lib.rs`.
+- **Bereich:** Security
+- **Datei:** `src-tauri/src/commands.rs:46-64`
+- **Problem:**
+  ```rust
+  let blocked = [
+      "\\windows\\system32", "\\windows\\syswow64",
+      "\\program files\\", "\\program files (x86)\\",
+      "\\programdata\\", "\\$recycle.bin",
+      "\\system volume information",
+  ];
+  ```
+  1. Keine Kanonisierung — Symlinks/Junctions umgehen die Blocklist
+  2. `\\program files\\` hat Trailing-Backslash → `C:\Program Files` (ohne \\) wird nicht geblockt
+  3. Fehlende Pfade: `\\Windows\\WinSxS`, `\\Windows\\Boot`, `\\Recovery`, `\\EFI`
+- **Risiko:** Umgehung über Symlinks oder fehlende Pfade möglich. Da die App lokal läuft, ist der Angreifer aber bereits auf dem System.
+- **Empfehlung:** `std::fs::canonicalize()` vor Check. Blocklist erweitern. Alternativ: Allowlist-Ansatz.
+- **Aufwand:** Mittel
 
 ---
 
-### M-4: Docs referenzieren noch Electron
+### M-3: `commands.rs` ist monolithisch (4500+ Zeilen)
 
-**Bereich:** 1 (Migration)
-**Betroffene Dateien:**
-- `docs/issues/issue_code_audit.md` — Electron-spezifische Referenzen
-- `docs/planung/visionen.md` — Electron-Referenzen
-- `docs/issues/issue_meta_analyse.md` — Electron-Referenzen
-
-**Risiko:** Irreführend, veraltet. Kann zu falschen Entscheidungen führen wenn diese Dokumente als Referenz verwendet werden.
-
-**Empfehlung:** Dokumente aktualisieren oder als veraltet markieren.
+- **Bereich:** Architektur / Wartbarkeit
+- **Datei:** `src-tauri/src/commands.rs`
+- **Problem:** Alle ~150 Commands in einer Datei. Kategorien nur durch Kommentare getrennt.
+- **Empfehlung:** Aufteilen in Module: `commands/scan.rs`, `commands/files.rs`, `commands/network.rs`, `commands/privacy.rs`, `commands/terminal.rs`, etc.
+- **Aufwand:** Hoch (Refactoring)
 
 ---
 
-### M-5: preview.js verwendet require() (AMD-Loader)
+### M-4: `read_file_preview`/`read_file_content` ohne Pfadvalidierung
 
-**Bereich:** 1 (Migration)
-**Datei:** `renderer/js/preview.js`, Z.71
-
-```javascript
-require(['vs/editor/editor.main'], function(monaco) { ... })
-```
-
-Dies ist KEIN Node.js-require, sondern der AMD-Loader für Monaco Editor. Trotzdem ungewöhnlich in einer ES-Module-Codebase.
-
-**Risiko:** Gering — funktioniert korrekt. Aber inkonsistent mit dem ES-Modules-Pattern das sonst durchgehend verwendet wird.
-
-**Empfehlung:** Prüfen ob Monaco Editor als ES-Module geladen werden kann. Falls nicht, als bekannte Ausnahme dokumentieren.
+- **Bereich:** Security
+- **Dateien:** `src-tauri/src/commands.rs:866,873,886`
+- **Problem:** Diese Commands lesen beliebige Dateien ohne `validate_path()`. `write_file_content` (Z.879) hat korrekt `validate_path()`.
+- **Risiko:** Über die Bridge können beliebige Systemdateien gelesen werden (SAM, SSH-Keys, etc.). Da die App lokal läuft, hat der User ohnehin Zugriff — widerspricht aber dem Minimal-Prinzip.
+- **Empfehlung:** Zumindest Warnung loggen bei System-Pfaden. Vollständige Blockierung wäre zu restriktiv für Dateivorschau.
+- **Aufwand:** Klein
 
 ---
 
-### M-6: 184 innerHTML-Verwendungen in 30 JS-Dateien
+### M-5: Battery-Polling ohne Akku-Check, Interval nie gestoppt
 
-**Bereich:** 2 (Security)
-**Verbreitung:** Nahezu alle View-Dateien unter `renderer/js/`
-
-Die meisten Stellen scheinen `escapeHtml()` oder `this.esc()` für dynamische Inhalte zu verwenden. Eine vollständige manuelle Prüfung jeder einzelnen Stelle steht aus.
-
-**Risiko:** Auch bei überwiegend korrektem Escaping: Eine einzige vergessene Stelle reicht für XSS. In Kombination mit `unsafe-inline`/`unsafe-eval` in der CSP wäre ein XSS sofort ausnutzbar (inkl. PowerShell-Ausführung über IPC).
-
-**Empfehlung:** Systematisches Audit aller 184 Stellen. Jede Stelle die dynamische Daten ohne Escaping in innerHTML einsetzt, ist ein potenzieller XSS-Vektor. Langfristig: Migration auf `textContent`/`createElement` wo möglich.
-
----
-
-## 🔵 Niedrig
-
-### N-1: get_system_score setzt bedingt stub-Flag
-
-**Bereich:** 14 (Dead Code)
-**Datei:** `src-tauri/src/commands.rs`, Z.4401
-
-```rust
-result["stub"] = json!(true);
-```
-
-Wird gesetzt wenn keine echten Daten vorliegen. Das Frontend muss diesen Fall korrekt behandeln.
-
-**Empfehlung:** Prüfen ob das Frontend den stub-Fall anzeigt oder ignoriert.
+- **Bereich:** Performance
+- **Datei:** `renderer/js/app.js:262`
+- **Problem:**
+  ```javascript
+  state.batteryIntervalId = setInterval(updateBatteryUI, batteryInterval);
+  ```
+  Kein `clearInterval` in der gesamten app.js. Läuft auch auf Desktop-PCs ohne Akku alle 30s.
+- **Risiko:** Unnötige IPC-Aufrufe auf Desktops. Verstößt gegen Memory-Leak-Policy.
+- **Empfehlung:** Nur starten wenn `getBatteryStatus()` Akku findet. `clearInterval` bei Cleanup.
+- **Aufwand:** Klein
 
 ---
 
-### N-2: Capabilities-Datei hat minimale Permissions
+### M-6: `open_external` URL-Validierung ist minimal
 
-**Bereich:** 2 (Security)
-**Datei:** `src-tauri/capabilities/default.json`
-
-Nur `core:default`, `shell:allow-open`, `dialog:default`, `clipboard-manager:allow-write-text`, `global-shortcut:default` sind freigeschaltet.
-
-**Bewertung:** Gut! Die Capabilities sind minimal gehalten. Allerdings erlaubt `core:default` alle IPC-Aufrufe — die eigentliche Zugriffskontrolle liegt also auf Command-Ebene (was aktuell über `validate_path()` passiert, siehe K-2/K-3/M-2).
-
----
-
-### N-3: Cargo.toml Release-Profil ist gut konfiguriert
-
-**Bereich:** 8 (Dependencies) + 12 (Build)
-**Datei:** `src-tauri/Cargo.toml`
-
-`strip = true`, `lto = true`, `codegen-units = 1`, `opt-level = "s"` — optimale Einstellungen für kleine Binaries.
-
-**Bewertung:** Korrekt konfiguriert, keine Aktion nötig.
+- **Bereich:** Security
+- **Datei:** `src-tauri/src/commands.rs:1668-1676`
+- **Problem:** Prüft nur auf `http://`/`https://` Prefix, keine URL-Parsing-Validierung.
+- **Risiko:** Gering (öffnet nur Browser). Aber malformed URL könnte Injection versuchen.
+- **Empfehlung:** URL per `url::Url::parse()` validieren statt nur Prefix-Check
+- **Aufwand:** Klein
 
 ---
 
-### N-4: `as_array().unwrap()` auf JSON-Werte
+### M-7: `_command` Parameter in `terminal_open_external` wird ignoriert
 
-**Bereich:** 4 (Stabilität)
-**Datei:** `src-tauri/src/commands.rs`
-
-Beispiele:
-- Z.1403: `data.as_array().unwrap().clone()` — wird nur nach `data.is_array()` Check aufgerufen (sicher)
-- Z.2825: `v.as_array().unwrap().clone()` — wird nur nach `v.is_array()` Guard aufgerufen (sicher)
-
-**Bewertung:** Technisch sicher wegen vorheriger Typ-Prüfung, aber `unwrap()` nach Pattern-Match ist stilistisch fragwürdig. Kein akutes Risiko.
+- **Bereich:** Anti-Pattern (Lesson #46 — Ignorierte Parameter)
+- **Datei:** `src-tauri/src/commands.rs:2065`
+- **Problem:** `_command: Option<String>` akzeptiert aber ignoriert den Parameter. Bridge sendet ihn trotzdem.
+- **Risiko:** Frontend-Code der `command` übergibt erwartet möglicherweise Ausführung.
+- **Empfehlung:** Parameter entfernen oder implementieren
+- **Aufwand:** Klein
 
 ---
 
-## ℹ️ Hinweise
+### M-8: Docs referenzieren noch Electron in aktiven Dateien
 
-### I-1: IPC-Bridge ist konsistent und vollständig
-
-**Datei:** `renderer/js/tauri-bridge.js` (327 Zeilen)
-- Verwendet `makeInvoke()` und `makeListener()` Helper konsistent
-- CamelCase→snake_case Übersetzung funktioniert korrekt
-- Alle ~150 Commands haben Bridge-Einträge
-- Event-Listener für scan-progress, duplicate-progress, terminal-output, deep-search-*, network-scan-* etc.
-
-**Bewertung:** Saubere, konsistente Implementation. Lediglich die Bridge-Einträge für "entfernte" Features müssen mit-entfernt werden (→ K-1).
-
----
-
-### I-2: PowerShell-Execution ist robust implementiert
-
-**Datei:** `src-tauri/src/ps.rs` (117 Zeilen)
-- UTF-8 Prefix (`[Console]::OutputEncoding = [System.Text.Encoding]::UTF8`)
-- 30s Timeout via `tokio::time::timeout`
-- `CREATE_NO_WINDOW` verhindert sichtbare PowerShell-Fenster
-- Safe truncation für Logging (`script_preview`, `safe_truncate`)
-- `run_ps_json_array()` normalisiert Single-Object zu Array (PowerShell-Quirk)
-
-**Bewertung:** Gut implementiert, keine Aktion nötig.
+- **Bereich:** Migration / Dokumentation
+- **Betroffene Dateien:**
+  - `docs/issues/issue_code_audit.md` — Electron-Referenzen (Z.290, 294, 319)
+  - `docs/issues/issue_meta_analyse.md` — Electron-Vergleiche (Z.13-37)
+  - `docs/lessons-learned/lessons-learned.md` — ~20 Einträge mit Electron (historisch)
+- **Risiko:** KI-Assistenten können durch Häufigkeit von Electron-Referenzen verwirrt werden.
+- **Empfehlung:** issue_code_audit.md und issue_meta_analyse.md als "Archiv" kennzeichnen. Lessons-Learned Electron-Einträge sind als historisch bereits korrekt markiert.
+- **Aufwand:** Klein
 
 ---
 
-### I-3: Scan-Engine nutzt effiziente Datenstrukturen
+## Niedrig
 
-**Datei:** `src-tauri/src/scan.rs` (491 Zeilen)
-- Bincode-Serialisierung für Persistenz (mit JSON-Fallback)
-- `build_dir_index()` erstellt HashMap für O(1) Directory-Lookup
-- `release_scan_bulk_data()` gibt große Datenstrukturen explizit frei
+### N-1: Docs — Lessons Learned Electron-Einträge sind historisch korrekt
 
-**Bewertung:** Performance-technisch solide. Nur `#[allow(dead_code)]` sollte geprüft werden (→ M-1).
+- **Bereich:** Migration / Dokumentation
+- **Datei:** `docs/lessons-learned/lessons-learned.md`
+- **Problem:** ~20 Einträge referenzieren Electron. Alle sind korrekt als "Electron-Ära" oder "Memory-Migration" gekennzeichnet.
+- **Bewertung:** Korrekt. Historische Lessons sollen erhalten bleiben. Keine Aktion nötig.
+
+---
+
+### N-2: `preview.js` verwendet AMD `require()` für Monaco
+
+- **Bereich:** Migration
+- **Datei:** `renderer/js/preview.js:71`
+- **Problem:** `require(['vs/editor/editor.main'], ...)` ist AMD-Syntax, nicht CommonJS. Standard-Lademuster für Monaco Editor.
+- **Bewertung:** Kein Electron-Rest. Korrekt. Keine Aktion nötig.
+
+---
+
+### N-3: `scan.rs` speichert Scan-Daten komplett im RAM
+
+- **Bereich:** Performance / Stabilität
+- **Datei:** `src-tauri/src/scan.rs:29-33`
+- **Problem:** Ein Scan mit >500.000 Dateien kann mehrere GB RAM verbrauchen. `save()` räumt alte Scans auf (`s.clear()`), aber ein einzelner großer Scan bleibt im RAM.
+- **Risiko:** Gering bei normaler Nutzung. `release_scan_bulk_data()` Command existiert für explizite Freigabe.
+- **Empfehlung:** RAM-Verbrauch nach Scan loggen. Bei >1 Million Dateien warnen.
+- **Aufwand:** Klein
+
+---
+
+### N-4: `delete_network_recording` nutzt blockierendes `std::fs::remove_file`
+
+- **Bereich:** Performance
+- **Datei:** `src-tauri/src/commands.rs:3367`
+- **Problem:** Nutzt synchrones `std::fs::remove_file` statt `tokio::fs::remove_file`. Blockiert kurz den Tokio-Thread.
+- **Risiko:** Minimal (kleine Dateien).
+- **Empfehlung:** `tokio::fs::remove_file` für Konsistenz
+- **Aufwand:** Klein
+
+---
+
+### N-5: Capabilities sind minimal — Security liegt auf Command-Ebene
+
+- **Bereich:** Architektur / Security
+- **Datei:** `src-tauri/capabilities/default.json`
+- **Problem:** Nur 5 Capabilities konfiguriert. Custom Commands (Dateisystem, PowerShell, Registry) brauchen keine Capabilities in Tauri v2.
+- **Bewertung:** By-Design korrekt. Aber: Security hängt komplett an `validate_path()` und Command-Level-Checks. Eine zweite Schutzschicht fehlt.
+- **Empfehlung:** Dokumentieren dass Security komplett auf Command-Ebene liegt.
+- **Aufwand:** —
+
+---
+
+### N-6: `as_array().unwrap()` auf JSON-Werte nach Typ-Check
+
+- **Bereich:** Stabilität
+- **Datei:** `src-tauri/src/commands.rs` (Z.1403, 2825, 2832, 2974, 3735)
+- **Problem:** `v.as_array().unwrap()` wird nach `v.is_array()` Guard aufgerufen. Technisch sicher.
+- **Bewertung:** Stilistisch fragwürdig, kein akutes Risiko. Besser wäre `if let Some(arr) = v.as_array()`.
+- **Aufwand:** —
+
+---
+
+## Optimierungsmöglichkeiten
+
+### O-1: `commands.rs` in Module aufteilen
+
+- **Aktuell:** Alle ~150 Commands in einer 4500+ Zeilen Datei
+- **Vorschlag:** Module nach Feature: `commands/scan.rs`, `commands/files.rs`, `commands/network.rs`, `commands/privacy.rs`, `commands/terminal.rs`
+- **Effekt:** Bessere Übersichtlichkeit, weniger Merge-Konflikte
+
+### O-2: Custom Error Type statt `Result<Value, String>`
+
+- **Aktuell:** Alle Commands geben `Result<Value, String>` zurück mit manuellen `format!()` Strings
+- **Vorschlag:** Enum `AppError { PowerShell(String), Io(std::io::Error), Validation(String) }` mit automatischer Übersetzung ins Deutsche
+- **Effekt:** Konsistentere Fehlermeldungen, weniger Boilerplate
+
+### O-3: CSS Dead Code bereinigen
+
+- **Aktuell:** `renderer/css/style.css` hat 5000+ Zeilen. Nach Feature-Entfernungen bleiben tote CSS-Regeln.
+- **Vorschlag:** CSS-Audit mit Chrome DevTools Coverage nach K-1 Entfernung
+- **Effekt:** Kleinere Datei, schnelleres Laden
+
+### O-4: Differenzierte PowerShell-Timeouts
+
+- **Aktuell:** `ps.rs` hat fixes 30s Timeout für ALLE Befehle
+- **Vorschlag:** Quick (Services, Registry) → 10s, Medium (SMART, Audit) → 30s, Long (Scan, Updates) → 120s
+- **Effekt:** Schnelleres Feedback bei einfachen Abfragen, keine Timeouts bei Langläufern
+
+### O-5: Event-Listener zentral aufräumen bei View-Wechsel
+
+- **Aktuell:** `makeListener` verwaltet Unlisten automatisch bei Re-Registration, aber nie-deaktivierte Views behalten Listener ewig
+- **Vorschlag:** Bridge um `cleanupListeners(prefix)` erweitern, in `switchToTab()` aufrufen
+- **Effekt:** Saubereres Event-Management
+
+---
+
+## Positive Aspekte (was gut gelöst ist)
+
+### PowerShell-Escaping ist konsequent
+Alle 40+ Stellen mit `format!()` und User-Input verwenden `.replace("'", "''")`. `validate_ip()` prüft korrekt auf gültige IPv4. Enum-Parameter werden per `match` auf Whitelists geprüft (z.B. Firewall-Direction Z.2616-2619).
+
+### XSS-Prävention ist zentral gelöst
+`escapeHtml()` und `escapeAttr()` sind zentral in `utils.js` definiert (Z.64-128). Views nutzen konsistent `this.esc()` als Alias oder direkt `escapeHtml()` aus dem Import. Kein `eval()` oder `new Function()` im eigenen Code. Fehlermeldungen verwenden `escapeHtml()` in innerHTML-Kontexten.
+
+### IPC-Bridge ist sauber strukturiert
+`tauri-bridge.js` verwendet einheitliches `makeInvoke()`/`makeListener()` Pattern. Die camelCase→snake_case Übersetzung ist automatisch. Race-Conditions bei Re-Registration werden durch das Unlisten-Pattern korrekt verhindert (Z.30-57).
+
+### Dreifach-Abgleich ist konsistent
+Alle Bridge-Methoden haben entsprechende Commands in `commands.rs` und alle Commands sind in `lib.rs` registriert. Keine Geister-Einträge (außer den unter K-1 genannten zu-entfernenden Commands).
+
+### Package.json ist clean
+Keine Electron-Abhängigkeiten. Nur `@tauri-apps/api` (2.10.1), `@tauri-apps/cli` (2.10.0, devDep) und `puppeteer-core` (Dev-Tool).
+
+### Release-Profil ist optimal konfiguriert
+`lto = true`, `strip = true`, `codegen-units = 1`, `opt-level = "s"` in Cargo.toml — best practices für kleine Binaries.
+
+### Logging ist gut implementiert
+Dual-Output (Console + Datei), Log-Rotation (max 20 Dateien), Frontend-Fehler werden ans Backend geloggt (`log_frontend` Command), tracing mit Context. Log-Dateien in `docs/logs/`.
+
+### Scan-Daten werden beim neuen Scan freigegeben
+`scan.rs:save()` ruft `s.clear()` vor Insert auf. `release_scan_bulk_data()` Command für explizite Freigabe vorhanden.
+
+### PowerShell-Ausführung ist sicher implementiert
+`CREATE_NO_WINDOW` verhindert blinkende CMD-Fenster. UTF-8 per Prefix erzwungen. 30s Timeout. `-NoProfile -NonInteractive -ExecutionPolicy Bypass` Flags. Safe truncation fürs Logging.
+
+### ResizeObserver werden korrekt aufgeräumt
+`treemap.js:26` und `terminal-panel.js:77` rufen `this.resizeObserver.disconnect()` in `destroy()` auf.
 
 ---
 
@@ -380,19 +467,71 @@ Beispiele:
 
 | Prio | Finding | Aufwand | Risikoreduktion |
 |------|---------|---------|-----------------|
-| 1 | **K-1** Entfernung Network-Scanner/Firewall/Registry | Hoch | AV-Blockierung verhindern |
-| 2 | **K-2** validate_path() für Lese-Commands | Niedrig | Path Traversal schließen |
-| 3 | **K-3** validate_path() für delete_to_trash | Niedrig | Unbeabsichtigtes Löschen verhindern |
-| 4 | **H-4** CSP unsafe-eval/unsafe-inline prüfen | Mittel | XSS-Ausnutzung erschweren |
-| 5 | **H-2** destroy() für alle Views | Hoch | Memory-Leaks verhindern |
-| 6 | **H-6** unwrap() auf Mutex-Locks ersetzen | Mittel | Kaskaden-Crashes verhindern |
-| 7 | **H-1/H-7** Artefakte löschen | Niedrig | Projekt sauber halten |
-| 8 | **H-5** terminal_resize Stub beheben | Mittel | Echte Terminal-Funktion |
-| 9 | **M-6** innerHTML-Audit | Hoch | XSS-Vektoren finden |
-| 10 | **M-2** validate_path Allowlist | Mittel | Umgehung erschweren |
-| 11 | **M-3** commands.rs aufteilen | Hoch | Wartbarkeit verbessern |
-| 12 | **M-4** Docs aktualisieren | Niedrig | Irreführung vermeiden |
+| 1 | **K-1** Entfernung Scanner/Firewall/Registry | Mittel | AV-Blockierung verhindern |
+| 2 | **K-2** CSP `unsafe-eval` entfernen | Klein | XSS-Ausnutzung erschweren |
+| 3 | **K-3** validate_path() für delete_to_trash | Klein | Path Traversal schließen |
+| 4 | **H-1** restore-window.ps1 Electron-Fix | Klein | WCAG-Tools reparieren |
+| 5 | **H-3** Mutex unwrap() ersetzen | Mittel | Kaskaden-Crashes verhindern |
+| 6 | **H-4** PS-Fehlermeldungen auf Deutsch | Klein | UX verbessern |
+| 7 | **H-2** Tote Event-Listener fixen | Mittel | Fortschritts-Feedback |
+| 8 | **H-6** destroy() für alle Views | Mittel | Memory-Leak-Prävention |
+| 9 | **H-7** activate/deactivate Pattern | Mittel | Performance |
+| 10 | **M-2** validate_path erweitern | Mittel | Security |
+| 11 | **M-4** Lese-Commands Logging | Klein | Security-Audit |
+| 12 | **H-5** Terminal PTY (optional) | Groß | Terminal-Qualität |
 
 ---
 
-> **Nächster Schritt:** K-1 (Entfernung der strategisch abgelehnten Features) hat höchste Priorität, da es die AV-Kompatibilität direkt betrifft und in `issue.md` bereits als "Geplant" markiert ist.
+## Checklisten-Ergebnis (Recherche-Prompt v2.2)
+
+### 1. Migrations-Altlasten
+- [x] Kein Electron-API-Code im Frontend (renderer/js/)
+- [x] Kein CommonJS `require()` im eigenen Code (preview.js ist AMD/Monaco)
+- [x] Kein `process.env`/`process.platform` im Frontend
+- [x] package.json clean (nur Tauri-Deps)
+- [x] Kein `main/`-Ordner
+- [ ] **FAIL:** restore-window.ps1 referenziert `*electron*` (H-1)
+- [ ] **FAIL:** Strategische Entfernungen nicht umgesetzt (K-1)
+
+### 2. Security
+- [x] PowerShell-Escaping konsequent (40+ Stellen geprüft)
+- [x] IP-Validierung vorhanden (validate_ip)
+- [x] Enum-Whitelisting vorhanden (z.B. Firewall-Direction)
+- [x] `escapeHtml()` zentral in utils.js
+- [x] Kein `eval()`/`new Function()` im eigenen Code
+- [ ] **FAIL:** CSP zu permissiv (K-2)
+- [ ] **FAIL:** delete_to_trash ohne validate_path (K-3)
+
+### 3. Performance
+- [x] `tokio::task::spawn_blocking` für Dialog-Aufrufe
+- [x] Scan räumt vorherige Daten auf
+- [x] ResizeObserver in destroy() disconnected
+- [ ] **FAIL:** Battery-Polling ohne Akku-Check (M-5)
+
+### 4. Stabilität
+- [x] PowerShell-Timeout vorhanden (30s)
+- [x] PowerShell stderr wird geloggt
+- [ ] **FAIL:** Mutex unwrap() überall (H-3)
+
+### 5. Architektur
+- [x] Bridge-Commands-Registrierung konsistent
+- [x] Zentrale Validation-Helpers
+- [ ] **FAIL:** commands.rs monolithisch (M-3)
+- [ ] **FAIL:** 18 Views ohne destroy() (H-6)
+
+### 6. Events
+- [x] Scan-Events (progress/complete/error) vollständig
+- [x] Duplicate-Events (progress/complete/error) vollständig
+- [x] Terminal-Events (data/exit) vollständig
+- [x] Deep-Search-Events (result/complete/error) vollständig
+- [ ] **FAIL:** 4 tote Listener (H-2)
+
+### 7. Lokalisierung
+- [x] UI-Texte auf Deutsch
+- [x] Korrekte Umlaute (ä, ö, ü)
+- [ ] **FAIL:** PS-Fehlermeldungen auf Englisch (H-4)
+
+---
+
+*Erstellt: 19.02.2026 | Analysiert mit: Claude Opus 4.6 | Recherche-Prompt v2.2*
+*Aktualisiert: 19.02.2026 — Vollständige Neuanalyse mit erweitertem Prompt (Events, Build, Upgrade-Pfad, Dead Code)*

@@ -167,6 +167,13 @@ export class DuplicatesView {
         this.container.querySelector('#dup-delete').onclick = () => this.deleteSelected();
     }
 
+    destroy() {
+        this.container.innerHTML = '';
+        this.results = null;
+        this.scanning = false;
+        this._listenersRegistered = false;
+    }
+
     selectAllDuplicates() {
         // For each group, check all except the newest (last modified)
         for (let gi = 0; gi < this.results.groups.length; gi++) {

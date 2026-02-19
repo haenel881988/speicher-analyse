@@ -242,6 +242,13 @@ export class SecurityAuditView {
     /**
      * Gibt die letzten Audit-Checks zurück (für System-Score).
      */
+    destroy() {
+        this.container.innerHTML = '';
+        this.auditResult = null;
+        this.history = [];
+        this._loaded = false;
+    }
+
     getLastChecks() {
         if (this.auditResult?.checks) return this.auditResult.checks;
         if (this.history.length > 0) return this.history[this.history.length - 1].checks;

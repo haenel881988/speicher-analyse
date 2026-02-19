@@ -549,6 +549,12 @@ export class SettingsView {
         }
     }
 
+    destroy() {
+        this.container.innerHTML = '';
+        this.loaded = false;
+        this.prefs = {};
+    }
+
     _formatSize(bytes) {
         if (!bytes) return '0 B';
         const units = ['B', 'KB', 'MB', 'GB'];
