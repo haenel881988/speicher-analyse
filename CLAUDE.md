@@ -32,7 +32,7 @@ Annahmen sind nichts anderes als Halluzinationen die auf Basis fehlenden und fal
 
 ## Prinzip 3: Tiefenanalyse vor jeder Aktion
 
-- Vollständigen Datenfluss nachvollziehen (Frontend → tauri-bridge.js → invoke → commands.rs → ps.rs/scan.rs) BEVOR Code geändert wird
+- Vollständigen Datenfluss nachvollziehen (Frontend → tauri-bridge.js → invoke → commands/ → ps.rs/scan.rs) BEVOR Code geändert wird
 - Kein Feature als "erledigt" markieren bis Simon dies explizit bestätigt hat
 - Einmal melden reicht — Simon darf dasselbe Problem nie zweimal melden müssen
 - Issue-Tracking: `docs/issues/issue.md` — nur Simon darf Issues als erledigt markieren
@@ -142,7 +142,7 @@ cargo tauri build # Release-Build (MSI/NSIS)
 
 ### IPC-Muster (Tauri v2)
 - `renderer/js/tauri-bridge.js` → mappt `window.api.*` auf Tauri `invoke()` Aufrufe
-- `src-tauri/src/commands.rs` → alle `#[tauri::command]` Handler (zentraler Hub)
+- `src-tauri/src/commands/` → 8 Module (cmd_scan, cmd_files, cmd_network, cmd_privacy, cmd_system, cmd_terminal, cmd_misc + mod.rs)
 - `src-tauri/src/lib.rs` → App-Setup, Menüleiste, Plugin-Registrierung
 - `src-tauri/src/ps.rs` → PowerShell-Ausführung (UTF-8, CREATE_NO_WINDOW)
 - `src-tauri/src/scan.rs` → Scan-Daten im Speicher (FileEntry, ScanData, Abfrage-Funktionen)
@@ -151,7 +151,7 @@ cargo tauri build # Release-Build (MSI/NSIS)
 ### Kernmodule
 | Bereich | Dateien |
 |---------|---------|
-| Rust-Backend | `src-tauri/src/commands.rs` (alle Commands), `ps.rs` (PowerShell), `scan.rs` (Scan-Store) |
+| Rust-Backend | `src-tauri/src/commands/` (8 Module), `ps.rs` (PowerShell), `scan.rs` (Scan-Store) |
 | IPC-Bridge | `renderer/js/tauri-bridge.js` (150 API-Methoden, 21 Event-Listener) |
 | Explorer | `renderer/js/explorer.js` + `explorer-tabs.js` + `explorer-dual-panel.js` |
 | UI | `renderer/js/app.js` (Haupt-Controller), `renderer/css/style.css` (Dark/Light Theme) |
@@ -185,7 +185,7 @@ cargo tauri build # Release-Build (MSI/NSIS)
 - **PowerShell:** Immer `crate::ps::run_ps()` / `run_ps_json()` (UTF-8 Prefix, CREATE_NO_WINDOW, async)
 - **Single-Instance:** Tauri Single-Instance Plugin oder OS-Lock verwenden
 - **IPC-Konvention:** Rust-Commands in `snake_case`, Frontend ruft `camelCase` auf, Bridge übersetzt automatisch
-- **Neue Commands:** In `commands.rs` definieren, in `lib.rs` registrieren, in `tauri-bridge.js` mappen
+- **Neue Commands:** Im passenden `commands/cmd_*.rs` Modul definieren, in `commands/mod.rs` re-exportieren, in `lib.rs` registrieren, in `tauri-bridge.js` mappen
 - **VERBOTEN: Statische Listen für Erkennung/Discovery.** Die App muss in der Realität funktionieren, nicht nur in Simons Netzwerk. Statische Listen haben NICHTS mit der Realität zu tun — sie funktionieren nur für den Entwickler, nicht für andere Nutzer. IMMER dynamisch erkennen (Protokoll-Queries, Broadcast, OS-APIs), NIEMALS eine feste Liste von "bekannten" Einträgen als Erkennungsgrundlage. Feste Listen sind NUR erlaubt als Fallback-Label/Anzeige NACH einer dynamischen Erkennung — nie als Filter davor.
 - **Realitätsprinzip (ABSOLUT):** Code muss auf JEDEM Rechner in JEDEM Netzwerk funktionieren, nicht nur auf dem Entwickler-PC. Jede Annahme über die Umgebung (welche Geräte, welche Software, welche Services, welche Netzwerke existieren) ist ein Bug. NIEMALS lokale Testdaten, IP-Adressen, MAC-Adressen, Hostnamen oder Gerätenamen aus der Entwicklungsumgebung im Code verwenden. Multi-Produkt-Hersteller dürfen NICHT einem einzigen Gerätetyp zugeordnet werden. Wenn ein Gerätetyp nicht eindeutig erkannt werden kann → ehrlich "Unbekanntes Gerät" anzeigen statt raten.
 
