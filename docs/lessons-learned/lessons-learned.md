@@ -923,6 +923,26 @@ Bei der Electron→Tauri-Migration (02/2026) blieben Skills, governance.md und C
 
 ---
 
+#### #88 — Vanilla JS → React Big-Bang-Migration: Inventar + TypeScript = Drift-Prävention
+`2026-02-19`
+
+**Kontext:** 36 Vanilla-JS-Dateien (~13.720 Zeilen) in einem Rutsch zu React 19 + TypeScript + Vite 7 migriert.
+
+**Erfolgsfaktoren:**
+1. **TypeScript als Sicherheitsnetz:** Fehlende API-Calls werden zu Compile-Fehlern statt stillen Regressionen
+2. **Typisierte API-Bridge:** `tauri-api.ts` mit 155 typisierten Export-Funktionen statt IIFE mit `makeInvoke()` — fehlende Methoden fallen sofort auf
+3. **Backend unverändert:** Nur Frontend migriert, Rust-Backend blieb identisch — reduziert Risiko auf eine Schicht
+4. **Puppeteer-Verifikation:** Alle 22 Tabs nach Migration via CDP automatisch geprüft
+5. **Chart.js-Kategorie-Keys:** Backend liefert englische Keys (`images`, `documents`), Frontend hatte deutsche Labels (`Bilder`, `Dokumente`). Lösung: Kategorie-Map mit beiden Key-Sets
+
+**Probleme während Migration:**
+- Backend-Property-Namen (`name`/`detail`) vs. Frontend-Erwartung (`label`/`message`) — erst durch visuellen Test entdeckt
+- Chart.js global via `<script>` statt npm-Import wegen fehlender ESM-Kompatibilität des Treemap-Plugins
+
+**Lehre:** Big-Bang-Migration funktioniert WENN: (1) TypeScript Compile-Fehler als Checkliste dient, (2) Backend unverändert bleibt, (3) jeder Tab visuell verifiziert wird, (4) Dokumente SOFORT mitmigriert werden (Lesson #87).
+
+---
+
 <br>
 
 ## Privacy

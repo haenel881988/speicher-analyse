@@ -12,7 +12,7 @@
 |---|-------------|--------|------------------|
 | 1.1.1 | App startet und zeigt Hauptfenster | MUSS | `lib.rs: run()` |
 | 1.1.2 | Menüleiste sichtbar (Datei, Bearbeiten, Ansicht, Terminal, Hilfe) | MUSS | `lib.rs: setup()` |
-| 1.1.3 | Sidebar mit allen Gruppen sichtbar | MUSS | Frontend (index.html) |
+| 1.1.3 | Sidebar mit allen Gruppen sichtbar | MUSS | Frontend (React: Sidebar.tsx) |
 | 1.1.4 | Laufwerks-Dropdown zeigt alle Laufwerke | MUSS | `getDrives()` |
 | 1.1.5 | Systemfähigkeiten werden korrekt erkannt (Admin, Batterie, WinGet) | MUSS | `getSystemCapabilities()` |
 | 1.1.6 | Dark/Light Theme wechselbar | SOLL | Frontend (localStorage) |
@@ -241,7 +241,7 @@
 | # | Anforderung | Status | Backend-Funktion |
 |---|-------------|--------|------------------|
 | 6.6.1 | CSV-Export der Scan-Daten | SOLL | `exportCSV(scanId)` |
-| 6.6.2 | PDF-Report | KANN | Frontend (html2pdf.js) |
+| 6.6.2 | PDF-Report | KANN | Frontend (html2pdf.js via PdfEditorView) |
 
 ---
 
@@ -356,9 +356,10 @@
 
 ## 12. Implementierungs-Status (Tauri v2)
 
-> Detaillierte Auflistung aller Commands in `src-tauri/src/commands.rs`.
+> Detaillierte Auflistung aller Commands in `src-tauri/src/commands/` (8 Module: cmd_scan, cmd_files, cmd_network, cmd_privacy, cmd_system, cmd_terminal, cmd_misc + mod.rs).
 > **STUB** = Gibt Erfolg/Daten zurück ohne echte Funktion. Der User wird getäuscht.
-> Zuletzt geprüft: 2026-02-16 | Gesamtzahl Commands: ~142
+> **Hinweis:** Zeilennummern (LXX) stammen aus der alten monolithischen `commands.rs` vor dem Modul-Split und sind nur als Orientierung zu verstehen. Für exakte Positionen → im jeweiligen `cmd_*.rs` Modul suchen.
+> Zuletzt geprüft: 2026-02-19 | Gesamtzahl Commands: ~148
 
 ### 12.1 Vollständig implementiert (~83 Commands)
 
@@ -485,5 +486,7 @@
 
 ---
 
-*Letzte Aktualisierung: 2026-02-16*
+*Letzte Aktualisierung: 2026-02-19*
 *Erstellt als Referenz zur Verifikation aller App-Funktionen*
+*Frontend: React 19 + TypeScript + Vite 7 (seit v8.0)*
+*Backend: Rust/Tauri v2 — Commands aufgeteilt in 8 Module unter `src-tauri/src/commands/`*

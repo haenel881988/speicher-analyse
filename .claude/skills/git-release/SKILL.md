@@ -39,7 +39,7 @@ Version an **allen 3 Stellen** gleichzeitig aktualisieren:
 
 1. **`src-tauri/Cargo.toml`** → `[package] version = "<neue-version>"`
 2. **`src-tauri/tauri.conf.json`** → `"version": "<neue-version>"`
-3. **`renderer/index.html`** → `.toolbar-version` Text (falls vorhanden)
+3. **`src/components/Toolbar.tsx`** → `.toolbar-version` Text (falls vorhanden)
 
 **WICHTIG:** Alle 3 Stellen MÜSSEN identische Version haben.
 
@@ -89,5 +89,5 @@ git push && git push --tags
 - **Immer** prüfen dass der Working Tree sauber ist
 - **Tag-Nachricht** sollte die wichtigsten Änderungen zusammenfassen
 - **Version:** IMMER aus `src-tauri/Cargo.toml` lesen (Hauptquelle), nicht `package.json`
-- **3 Stellen:** Cargo.toml + tauri.conf.json + index.html — alle gleichzeitig aktualisieren
+- **3 Stellen:** Cargo.toml + tauri.conf.json + Toolbar.tsx — alle gleichzeitig aktualisieren
 - Falls der User keine Version angibt, schlage basierend auf den Änderungen einen Bump-Typ vor

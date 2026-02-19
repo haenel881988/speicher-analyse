@@ -40,7 +40,7 @@ pub async fn start_scan(app: tauri::AppHandle, path: String) -> Result<Value, St
         let mut total_size: u64 = 0;
         let mut errors_count: u64 = 0;
         let mut last_progress = std::time::Instant::now();
-        let mut current_path = String::new();
+        let mut current_path;
 
         for entry in walkdir::WalkDir::new(&path)
             .follow_links(false)
@@ -521,7 +521,7 @@ Get-ChildItem -Path '{p}' -Recurse -Force -ErrorAction SilentlyContinue | ForEac
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
         #[cfg(windows)]
-        { use std::os::windows::process::CommandExt; cmd.creation_flags(0x08000000); }
+        cmd.creation_flags(0x08000000);
 
         match cmd.spawn() {
             Ok(child) => {

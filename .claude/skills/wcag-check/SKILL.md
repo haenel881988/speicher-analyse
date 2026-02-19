@@ -5,7 +5,7 @@ description: WCAG-Kontrastprüfung bei CSS-Änderungen. Führt den 2-stufigen Sc
 
 # WCAG-Kontrastprüfung
 
-Du prüfst ob CSS-Änderungen die WCAG 2.2 AA Kontrast-Anforderungen einhalten. **Pflicht bei JEDER Änderung an `renderer/css/style.css`.**
+Du prüfst ob CSS-Änderungen die WCAG 2.2 AA Kontrast-Anforderungen einhalten. **Pflicht bei JEDER Änderung an `src/style.css`.**
 
 ## Argument
 

@@ -17,7 +17,7 @@ Du bindest einen neuen PowerShell-Befehl in die Speicher Analyse Tauri-App ein, 
 **Pflicht — lies diese Dateien zuerst:**
 
 1. `src-tauri/src/ps.rs` - Die `run_ps()` und `run_ps_json()` Funktionen verstehen
-2. `src-tauri/src/commands.rs` - Bestehende Commands als Referenz
+2. `src-tauri/src/commands/` - Bestehende Commands als Referenz (8 Module: cmd_scan, cmd_files, cmd_network, cmd_privacy, cmd_system, cmd_terminal, cmd_misc)
 3. `src-tauri/src/lib.rs` - Command-Registrierung
 
 ## KRITISCHE REGELN (aus Lessons Learned)
@@ -118,7 +118,7 @@ let json = crate::ps::run_ps_json(script).await?;
 ## Template für neuen Command
 
 ```rust
-// In src-tauri/src/commands.rs
+// In src-tauri/src/commands/cmd_*.rs (passendes Modul wählen)
 
 #[tauri::command]
 pub async fn befehl_name(param: String) -> Result<serde_json::Value, String> {
@@ -153,7 +153,7 @@ pub async fn befehl_name(param: String) -> Result<serde_json::Value, String> {
 
 **Danach:**
 1. In `src-tauri/src/lib.rs` → `generate_handler![]` eintragen
-2. In `renderer/js/tauri-bridge.js` → `makeInvoke()` hinzufügen
+2. In `src/api/tauri-api.ts` → typisierte Export-Funktion hinzufügen
 
 ## Häufige Fallstricke
 

@@ -1,6 +1,6 @@
 ---
 name: deep-analyze
-description: Tiefenanalyse eines Problems gemäß der OBERSTEN DIREKTIVE. Verfolgt den vollständigen Datenfluss Frontend→tauri-bridge→invoke→commands.rs→ps.rs und identifiziert die Wurzelursache. Aufruf mit /deep-analyze [problem-beschreibung oder datei-pfad].
+description: Tiefenanalyse eines Problems gemäß der OBERSTEN DIREKTIVE. Verfolgt den vollständigen Datenfluss React-View→tauri-api.ts→invoke→commands/→ps.rs und identifiziert die Wurzelursache. Aufruf mit /deep-analyze [problem-beschreibung oder datei-pfad].
 ---
 
 # Tiefenanalyse (OBERSTE DIREKTIVE)
@@ -27,26 +27,25 @@ Du darfst NIEMALS sagen:
 2. **Betroffene Dateien identifizieren:** Welche Module sind involviert?
 3. **Letzte Änderungen prüfen:** `git log --oneline -20` und `git diff` für relevante Dateien
 
-### Phase 2: Vollständiger Datenfluss-Trace (Tauri v2)
+### Phase 2: Vollständiger Datenfluss-Trace (Tauri v2 + React)
 
 Verfolge den Datenfluss **Schritt für Schritt** durch alle Schichten:
 
 ```
-1. Frontend (renderer/js/*.js)
-   → Welche Funktion löst das Problem aus?
-   → Welche window.api.*() Methode wird aufgerufen?
-   → Was wird als Argument übergeben?
+1. React-View (src/views/*.tsx)
+   → Welche Komponente / welcher useEffect löst das Problem aus?
+   → Welche API-Funktion wird aufgerufen?
+   → Welcher State wird gesetzt?
 
-2. Bridge (renderer/js/tauri-bridge.js)
-   → Ist die Methode korrekt gemappt (makeInvoke)?
-   → Stimmt der Command-Name (snake_case)?
-   → Werden Parameter korrekt weitergeleitet?
+2. API-Bridge (src/api/tauri-api.ts)
+   → Ist die Funktion korrekt typisiert und exportiert?
+   → Stimmt der invoke-Command-Name (snake_case)?
+   → Werden Parameter korrekt als Objekt übergeben?
 
-3. Tauri-Command (src-tauri/src/commands.rs)
+3. Tauri-Command (src-tauri/src/commands/cmd_*.rs)
    → Ist der #[tauri::command] korrekt definiert?
-   → Sind Parameter-Typen korrekt?
+   → Sind Parameter-Typen korrekt (camelCase → snake_case Mapping)?
    → Werden Parameter escaped (PowerShell-Injection)?
-   → Werden Pfade validiert?
    → Ist der Command in lib.rs registriert?
 
 4. PowerShell-Ausführung (src-tauri/src/ps.rs)
@@ -54,47 +53,45 @@ Verfolge den Datenfluss **Schritt für Schritt** durch alle Schichten:
    → Hat der Aufruf einen Timeout?
    → Ist das PowerShell-Script korrekt (Syntax, UTF-8)?
 
-5. Rückweg: ps.rs → commands.rs → Bridge → Frontend
+5. Rückweg: ps.rs → commands/ → tauri-api.ts → React-State → JSX-Rendering
    → Wird das Ergebnis korrekt als JSON zurückgegeben?
-   → Kommt es im Frontend an?
-   → Wird es korrekt dargestellt (escapeHtml)?
+   → Kommt es im Frontend an (Promise resolved)?
+   → Stimmen die Property-Namen? (Backend liefert z.B. `name`/`detail`, nicht `label`/`message`)
+   → Wird der React-State korrekt aktualisiert?
 ```
 
-### Phase 3: State-Management-Analyse
+### Phase 3: React State-Management-Analyse
 
-1. **_loaded Flags:** Werden sie bei Fehler korrekt zurückgesetzt?
-2. **Timer/Intervalle:** Laufen setInterval-Timer weiter wenn sie nicht sollten?
-3. **Event-Listener:** Werden sie bei jedem Aufruf neu registriert (Akkumulation)?
-4. **DOM-State:** Stimmt der DOM-Zustand mit dem Daten-State überein?
+1. **useState/useEffect:** Werden Dependencies korrekt angegeben?
+2. **Cleanup:** Haben useEffects mit Timer/Listener korrekte Cleanup-Returns?
+3. **Re-Renders:** Verursachen State-Updates unnötige Re-Renders?
+4. **Async State:** Wird State nach einem abgebrochenen/veralteten Request noch gesetzt? (Race Condition)
 
 ### Phase 4: Security-Analyse (bei sicherheitsrelevanten Problemen)
 
-1. **Command Injection:** Wird User-Input in `format!()` für PowerShell ohne `.replace("'", "''")` eingesetzt?
-2. **XSS:** Wird `innerHTML` mit unescapten Variablen verwendet?
-3. **Path Traversal:** Werden Pfade vom Frontend ohne Validierung an Dateioperationen weitergegeben?
-4. **CSP:** Ist die Content Security Policy in `tauri.conf.json` konfiguriert (nicht `null`)?
+1. **Command Injection:** `format!()` ohne `.replace("'", "''")`?
+2. **XSS:** `dangerouslySetInnerHTML` mit ungeprüften Daten?
+3. **Path Traversal:** Pfade ohne Validierung an Dateioperationen?
+4. **CSP:** Content Security Policy in `tauri.conf.json` konfiguriert?
 
 ### Phase 5: Plattform-Analyse (falls relevant)
 
 1. **Windows-spezifisch:** Registry, PowerShell, Dateipfade (Backslashes)
-2. **Tauri-spezifisch:** CSP in tauri.conf.json, Capabilities, withGlobalTauri
-3. **WebView-spezifisch:** WebView2-Einschränkungen, JavaScript-Interop
+2. **Tauri-spezifisch:** CSP, Capabilities, withGlobalTauri
+3. **WebView-spezifisch:** WebView2-Einschränkungen
 
 ### Phase 6: CSS & UI-Analyse (falls visuelles Problem)
 
-1. **CSS-Variablen:** Stimmen die Werte in `renderer/css/style.css`?
+1. **CSS-Variablen:** Stimmen die Werte in `src/style.css`?
 2. **Theme-Konflikte:** Dark/Light Theme korrekt implementiert?
 3. **WCAG-Kontrast:** Text-auf-Hintergrund mindestens 4.5:1?
-4. **Akzentfarben:** `--accent` nur für Borders/Backgrounds, nie für Content-Text?
-5. **display:none + Animationen:** Verbrauchen versteckte Animationen Ressourcen?
 
 ### Phase 7: PowerShell-Analyse (falls PS involviert)
 
 1. Wird `crate::ps::run_ps()` verwendet?
 2. Werden Parameter VOR dem `format!()` escaped?
-3. Gibt es einen Timeout (tokio::time::timeout)?
+3. Gibt es einen Timeout?
 4. Multi-Line: Werden Newlines beibehalten?
-5. Werden PS-Prozesse sequenziell aufgerufen? (nie parallel)
 
 ## Ausgabeformat
 
@@ -112,7 +109,7 @@ Die ECHTE Ursache im Code (mit Datei:Zeile)
 
 ### Betroffene Dateien
 - datei.rs:123 - Beschreibung
-- datei.js:456 - Beschreibung
+- datei.tsx:456 - Beschreibung
 
 ### Vorgeschlagener Fix
 Konkreter Code-Vorschlag

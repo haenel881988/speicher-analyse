@@ -1,6 +1,6 @@
 ---
 name: audit-code
-description: Codequalitäts-Audit für die Speicher Analyse Tauri-App. Prüft Security, Performance, WCAG-Kontrast, Tauri-Best-Practices und Projektkonventionen. Nutze diesen Skill für Code-Reviews oder wenn die Codequalität geprüft werden soll. Aufruf mit /audit-code [datei-oder-modul oder "all"].
+description: Codequalitäts-Audit für die Speicher Analyse Tauri-App (React + Vite + TypeScript Frontend). Prüft Security, Performance, WCAG-Kontrast, Tauri-Best-Practices und Projektkonventionen. Aufruf mit /audit-code [datei-oder-modul oder "all"].
 ---
 
 # Code-Audit
@@ -15,94 +15,81 @@ Du führst ein Codequalitäts-Audit für die Speicher Analyse Tauri-App durch.
 
 ### 1. Security (KRITISCH)
 
-- **Command Injection (Rust):** Werden User-Parameter in `format!()` für PowerShell ohne `.replace("'", "''")` eingesetzt?
-- **XSS:** Wird `innerHTML` mit unescapten Variablen (`${variable}`) verwendet? Wird `escapeHtml()` aus `utils.js` importiert?
-- **Path Traversal:** Werden Dateipfade vom Frontend ohne Validierung an Dateioperationen (`remove_dir_all`, `write`, `read`) weitergegeben?
-- **CSP:** Ist `"csp"` in `tauri.conf.json` korrekt konfiguriert (NICHT `null`)?
-- **withGlobalTauri:** Ist `withGlobalTauri` auf `false` gesetzt?
-- **Capabilities:** Sind Tauri-Capabilities korrekt und minimal konfiguriert?
-- **Parameter-Validierung:** Werden IPC-Parameter (Strings, Pfade, IPs) vor der Verarbeitung validiert/escaped?
-- **Escape-Duplikate:** Gibt es mehrere verschiedene escapeHtml/esc/_esc Implementierungen statt einem zentralen Import?
+- **Command Injection (Rust):** `format!()` für PowerShell ohne `.replace("'", "''")`?
+- **XSS (React):** `dangerouslySetInnerHTML` mit ungeprüften Daten? (JSX escaped automatisch)
+- **Path Traversal:** Dateipfade vom Frontend ohne Validierung an Dateioperationen?
+- **CSP:** `tauri.conf.json` → `security.csp` korrekt (NICHT `null`)?
+- **withGlobalTauri:** Ist `true` gesetzt (React-App braucht `window.__TAURI__`)?
+- **Capabilities:** Minimal-Prinzip?
+- **Parameter-Validierung:** IPC-Parameter validiert/escaped?
 
 ### 2. Performance
 
-- **Blockierende Operationen:** Gibt es `std::fs::*` (synchron) statt `tokio::fs::*` (async) in Commands?
-- **Parallele PowerShell:** Werden PS-Prozesse parallel gestartet? (müssen sequenziell sein)
-- **Timeouts:** Hat jeder `run_ps()` Aufruf einen `tokio::time::timeout()` Wrapper?
-- **Chart.js Animationen:** Ist `animation: false` gesetzt?
-- **CSS Animationen:** Gibt es `animation: infinite` die GPU/CPU verschwenden?
-- **Memory Leaks:** Werden Timer (`setInterval`), Event-Listener und Observer (`ResizeObserver`) korrekt aufgeräumt?
-- **Unnötige Re-Renders:** Wird der DOM häufiger als nötig aktualisiert?
+- **Blockierende Operationen:** `std::fs::*` statt `tokio::fs::*` in Commands?
+- **Parallele PowerShell:** PS-Prozesse parallel? (müssen sequenziell sein)
+- **Timeouts:** `run_ps()` mit `tokio::time::timeout()`?
+- **Chart.js Animationen:** `animation: false`?
+- **React Re-Renders:** Unnötige State-Updates? Fehlende `useMemo`/`useCallback`?
+- **useEffect Cleanup:** Timer, Listener, Observer korrekt in Cleanup-Return?
+- **Lazy Loading:** Views über `React.lazy()` geladen?
 
 ### 3. WCAG / Barrierefreiheit
 
 **WICHTIG: WCAG-Prüfung MUSS visuell über `/visual-verify` erfolgen.**
 
-- **Kontrastwerte:** Text-auf-Hintergrund mindestens 4.5:1 Ratio
-- **Akzentfarben:** `--accent` (#6c5ce7) NUR für Borders/Backgrounds, NICHT für Text
-- **Text-Farben:** `--text-primary` für Inhaltstext, `--accent-text` (#c4b5fd) für Labels
-- **ARIA-Attribute:** `role`, `aria-label`, `aria-expanded` für interaktive Elemente
-- **PFLICHT:** Bei WCAG-Audit IMMER `/visual-verify` für jeden View aufrufen
+- **Kontrastwerte:** Text-auf-Hintergrund mindestens 4.5:1
+- **Akzentfarben:** `--accent` NUR für Borders/Backgrounds, NICHT für Text
+- **ARIA-Attribute:** `role`, `aria-label`, `aria-expanded`
 
 ### 4. Tauri Best Practices
 
 - **Single Instance:** `tauri-plugin-single-instance` aktiv?
-- **CSP konfiguriert:** `tauri.conf.json` → `security.csp` ist NICHT `null`?
-- **withGlobalTauri:** Ist `false` gesetzt (verhindert direkten Zugriff auf `window.__TAURI__`)?
-- **Capabilities:** Minimal-Prinzip — nur benötigte APIs freigegeben?
-- **Command-Registrierung:** Alle Commands in `lib.rs` → `generate_handler![]` registriert?
-- **Stubs:** Gibt es Commands die nur `Ok(json!({"success": true}))` zurückgeben ohne echte Logik?
-- **Mutex-Handling:** Werden `Mutex`/`RwLock` korrekt verwendet? Kann Mutex-Poisoning auftreten?
+- **Command-Registrierung:** Alle Commands in `lib.rs` → `generate_handler![]`?
+- **Stubs:** Commands die nur `Ok(json!({"success": true}))` zurückgeben?
+- **Mutex-Handling:** `Mutex`/`RwLock` korrekt?
 
-### 5. Projektkonventionen
+### 5. Projektkonventionen (React + TypeScript)
 
-- **Async:** Rust-Commands sind `async`? Blockierende Ops in `spawn_blocking()`?
-- **Error-Handling:** `Result<Value, String>` Rückgabetyp? Fehler korrekt propagiert?
-- **Deutsche UI-Texte:** Korrekte Umlaute (ä, ö, ü, ß), keine ae/oe/ue?
-- **PowerShell:** Über `crate::ps::run_ps()`, nie direkt `std::process::Command::new("powershell.exe")`?
-- **_loaded Flags:** Werden sie bei Fehler zurückgesetzt?
-- **Logging:** `console.error('[<modul>]', err.message)` Format?
-- **escapeHtml:** Wird die zentrale Funktion aus `utils.js` verwendet (nicht eigene Varianten)?
-- **Lifecycle:** Hat jede View ein `destroy()` das Timer/Listener/Observer aufräumt?
+- **TypeScript:** Typen korrekt definiert? `any` vermieden?
+- **React Patterns:** Funktionale Komponenten, `export default`, hooks
+- **API-Aufrufe:** Über `import * as api from '../api/tauri-api'` (nicht direkt `invoke`)
+- **Error-Handling:** try/catch mit `showToast` aus AppContext
+- **Deutsche UI-Texte:** Korrekte Umlaute (ä, ö, ü, ß)?
+- **Kein `dangerouslySetInnerHTML`:** JSX escaped automatisch
+- **useEffect Dependencies:** Korrekt angegeben?
 
 ### 6. Stub-Erkennung
 
-- **Fake-Funktionen:** Gibt es Commands die `success: true` zurückgeben ohne echte Implementierung?
-- **Kritische Stubs:** Privacy, Preferences, Session, Export — diese MÜSSEN als Stub markiert werden
-- **Frontend-Warnung:** Erkennt das Frontend Stub-Antworten und warnt den User?
+- **Fake-Funktionen:** Commands die `success: true` oder `stub: true` zurückgeben?
+- **Frontend-Warnung:** Erkennt das Frontend Stub-Antworten?
 
 ## Audit-Ablauf
 
-### Einzelne Datei (`/audit-code src-tauri/src/commands.rs`)
+### Einzelne Datei (`/audit-code src-tauri/src/commands/cmd_scan.rs`)
 
-1. Lies die angegebene Datei vollständig
-2. Prüfe alle 6 Kategorien
-3. Erstelle den Audit-Bericht
+1. Datei vollständig lesen
+2. Alle 6 Kategorien prüfen
+3. Audit-Bericht erstellen
 
 ### Ganzes Modul (`/audit-code privacy`)
 
-1. Lies `src-tauri/src/commands.rs` — suche nach dem Modul-Bereich (z.B. `// === Privacy ===`)
-2. Lies `renderer/js/<modul>.js`
-3. Prüfe den Bridge-Eintrag in `renderer/js/tauri-bridge.js`
-4. Prüfe relevante HTML/CSS
-5. Erstelle den Audit-Bericht
+1. Lies `src-tauri/src/commands/cmd_privacy.rs`
+2. Lies `src/views/PrivacyView.tsx`
+3. Prüfe API-Funktionen in `src/api/tauri-api.ts`
+4. Prüfe relevantes CSS in `src/style.css`
+5. Audit-Bericht erstellen
 
 ### Vollständiges Audit (`/audit-code all`)
 
 **PFLICHT: ALLE Dateien vollständig lesen. NICHT nur greppen.**
 
-1. **Rust-Backend:** Lies `src-tauri/src/commands.rs`, `ps.rs`, `scan.rs`, `lib.rs` vollständig
-2. **Konfiguration:** Lies `src-tauri/tauri.conf.json` (CSP, Capabilities, withGlobalTauri)
-3. **Frontend JS:** Lies ALLE `renderer/js/*.js` Dateien vollständig
-4. **Bridge:** Lies `renderer/js/tauri-bridge.js` vollständig
-5. **HTML/CSS:** Lies `renderer/index.html` und `renderer/css/style.css`
-6. **Prüfe ALLE 6 Kategorien auf JEDE Datei**
-7. Erstelle den Gesamtbericht
-
-**VERBOTEN bei `all`:**
-- "Fokussiere auf die häufigsten Problemkategorien" — ALLE Kategorien prüfen
-- Nur greppen statt Dateien zu lesen — Grep findet keine Kontext-Probleme
-- Dateien überspringen weil sie "wahrscheinlich OK" sind
+1. **Rust-Backend:** Lies `src-tauri/src/commands/cmd_*.rs`, `ps.rs`, `scan.rs`, `lib.rs`
+2. **Konfiguration:** Lies `src-tauri/tauri.conf.json`
+3. **Frontend:** Lies ALLE `src/views/*.tsx` Dateien
+4. **API-Bridge:** Lies `src/api/tauri-api.ts`
+5. **Components:** Lies `src/components/*.tsx`
+6. **CSS:** Lies `src/style.css`
+7. **Prüfe ALLE 6 Kategorien**
 
 ## Ausgabeformat
 
@@ -115,18 +102,12 @@ Du führst ein Codequalitäts-Audit für die Speicher Analyse Tauri-App durch.
 
 ### Kritische Probleme
 | # | Kategorie | Datei:Zeile | Problem | Empfehlung |
-|---|-----------|-------------|---------|------------|
-| 1 | Security  | commands.rs:42 | format!() ohne Escaping | .replace("'", "''") |
 
 ### Hinweise
 | # | Kategorie | Datei:Zeile | Problem | Empfehlung |
-|---|-----------|-------------|---------|------------|
-| 1 | Konvention| view.js:10  | ...     | ...        |
 
 ### Stubs
 | # | Command | Zeile | Kritikalität | Empfehlung |
-|---|---------|-------|-------------|------------|
-| 1 | apply_privacy_setting | 123 | HOCH | Echte Implementierung |
 
 ### Positiv
 - Was gut umgesetzt ist
@@ -134,8 +115,7 @@ Du führst ein Codequalitäts-Audit für die Speicher Analyse Tauri-App durch.
 
 ## Wichtig
 
-- **Keine automatischen Fixes** — nur berichten, User entscheidet
-- **Konkreter sein:** Immer Datei:Zeile angeben
+- **Keine automatischen Fixes** — nur berichten
+- **Immer Datei:Zeile angeben**
 - **Priorisieren:** Security > Performance > WCAG > Tauri > Konventionen
-- **False Positives vermeiden:** Im Zweifel den Kontext der Codestelle prüfen
-- **Stubs explizit auflisten:** Jede Funktion die nichts tut aber Erfolg meldet
+- **Stubs explizit auflisten**

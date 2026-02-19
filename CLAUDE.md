@@ -32,7 +32,7 @@ Annahmen sind nichts anderes als Halluzinationen die auf Basis fehlenden und fal
 
 ## Prinzip 3: Tiefenanalyse vor jeder Aktion
 
-- Vollständigen Datenfluss nachvollziehen (Frontend → tauri-bridge.js → invoke → commands/ → ps.rs/scan.rs) BEVOR Code geändert wird
+- Vollständigen Datenfluss nachvollziehen (React-View (.tsx) → tauri-api.ts → invoke → commands/ → ps.rs/scan.rs) BEVOR Code geändert wird
 - Kein Feature als "erledigt" markieren bis Simon dies explizit bestätigt hat
 - Einmal melden reicht — Simon darf dasselbe Problem nie zweimal melden müssen
 - Issue-Tracking: `docs/issues/issue.md` — nur Simon darf Issues als erledigt markieren
@@ -127,9 +127,11 @@ Nach jeder Änderung: `git add .; git commit -m "type: Beschreibung"; git push`
 
 - **Runtime:** Tauri v2 (Rust-Backend + System-WebView)
 - **Backend:** Rust (`src-tauri/src/`) — Commands, PowerShell-Aufrufe, Scan-Engine
-- **Frontend:** Vanilla HTML/CSS/JS (ES Modules, kein Build-Step, unter `renderer/`)
-- **Charts:** Chart.js v4, **PDF:** html2pdf.js (beides lokal unter `renderer/lib/`)
-- **IPC:** Tauri `invoke()` / `#[tauri::command]` — Bridge: `renderer/js/tauri-bridge.js`
+- **Frontend:** React 19 + TypeScript + Vite 7 (unter `src/`)
+- **Build:** Vite (`npm run dev` / `npm run build`), Output nach `dist/`
+- **Charts:** Chart.js v4 (global via `<script>` in index.html), **PDF:** pdfjs-dist (npm)
+- **Terminal:** @xterm/xterm + @xterm/addon-fit (npm)
+- **IPC:** Typisierte API-Bridge `src/api/tauri-api.ts` → Tauri `invoke()` (155 Methoden, 16 Events)
 
 ## Starten
 
@@ -141,21 +143,32 @@ cargo tauri build # Release-Build (MSI/NSIS)
 ## Architektur
 
 ### IPC-Muster (Tauri v2)
-- `renderer/js/tauri-bridge.js` → mappt `window.api.*` auf Tauri `invoke()` Aufrufe
+- `src/api/tauri-api.ts` → typisiertes ES-Module mit 155 exportierten Funktionen, ruft Tauri `invoke()` direkt auf
 - `src-tauri/src/commands/` → 8 Module (cmd_scan, cmd_files, cmd_network, cmd_privacy, cmd_system, cmd_terminal, cmd_misc + mod.rs)
 - `src-tauri/src/lib.rs` → App-Setup, Menüleiste, Plugin-Registrierung
 - `src-tauri/src/ps.rs` → PowerShell-Ausführung (UTF-8, CREATE_NO_WINDOW)
 - `src-tauri/src/scan.rs` → Scan-Daten im Speicher (FileEntry, ScanData, Abfrage-Funktionen)
-- Frontend ruft `window.api.methodName()` auf → Bridge übersetzt zu `invoke('method_name', {params})`
+- Frontend importiert typisierte Funktionen: `import { getDrives } from '../api/tauri-api'`
+
+### Frontend-Architektur (React + Vite)
+- `src/main.tsx` → Entry Point, rendert `<App />` in `#root`
+- `src/App.tsx` → App Shell (Toolbar + Sidebar + TabRouter + StatusBar + Toast)
+- `src/context/AppContext.tsx` → Globaler State (scanId, drives, activeTab, showToast)
+- `src/components/` → Toolbar, Sidebar, TabRouter, StatusBar, Toast
+- `src/views/` → 23 Views als React-Komponenten (.tsx), lazy-loaded via `React.lazy()`
+- `src/hooks/` → `useTauriEvent.ts` (Event-Listener mit Auto-Cleanup), `useApi.ts`
+- `src/utils/` → format.ts, escape.ts, categories.ts, file-icons.ts, stub.ts
+- `src/style.css` → Dark/Light Theme (CSS-Variablen, unverändert aus Vanilla-Ära)
 
 ### Kernmodule
 | Bereich | Dateien |
 |---------|---------|
 | Rust-Backend | `src-tauri/src/commands/` (8 Module), `ps.rs` (PowerShell), `scan.rs` (Scan-Store) |
-| IPC-Bridge | `renderer/js/tauri-bridge.js` (150 API-Methoden, 21 Event-Listener) |
-| Explorer | `renderer/js/explorer.js` + `explorer-tabs.js` + `explorer-dual-panel.js` |
-| UI | `renderer/js/app.js` (Haupt-Controller), `renderer/css/style.css` (Dark/Light Theme) |
-| Anforderungen | `docs/issues/anforderungen.md` (vollständige API-Referenz, 150 Methoden) |
+| API-Bridge | `src/api/tauri-api.ts` (155 typisierte Methoden, 16 Event-Listener) |
+| App Shell | `src/App.tsx` (Router, State), `src/context/AppContext.tsx` (globaler Context) |
+| Views | `src/views/*.tsx` (23 Views, React.lazy Code-Splitting) |
+| Styling | `src/style.css` (Dark/Light Theme mit CSS-Variablen) |
+| Anforderungen | `docs/issues/anforderungen.md` (vollständige API-Referenz, 155 Methoden) |
 
 ## Visuelle Verifikation (ABSOLUT)
 
@@ -184,8 +197,8 @@ cargo tauri build # Release-Build (MSI/NSIS)
 - **Async:** Rust-Backend ist async (tokio) — blockierende Operationen in `spawn_blocking` wrappen
 - **PowerShell:** Immer `crate::ps::run_ps()` / `run_ps_json()` (UTF-8 Prefix, CREATE_NO_WINDOW, async)
 - **Single-Instance:** Tauri Single-Instance Plugin oder OS-Lock verwenden
-- **IPC-Konvention:** Rust-Commands in `snake_case`, Frontend ruft `camelCase` auf, Bridge übersetzt automatisch
-- **Neue Commands:** Im passenden `commands/cmd_*.rs` Modul definieren, in `commands/mod.rs` re-exportieren, in `lib.rs` registrieren, in `tauri-bridge.js` mappen
+- **IPC-Konvention:** Rust-Commands in `snake_case`, TypeScript-Funktionen in `camelCase` in `src/api/tauri-api.ts`
+- **Neue Commands:** Im passenden `commands/cmd_*.rs` Modul definieren, in `commands/mod.rs` re-exportieren, in `lib.rs` registrieren, in `src/api/tauri-api.ts` als typisierte Export-Funktion hinzufügen
 - **VERBOTEN: Statische Listen für Erkennung/Discovery.** Die App muss in der Realität funktionieren, nicht nur in Simons Netzwerk. Statische Listen haben NICHTS mit der Realität zu tun — sie funktionieren nur für den Entwickler, nicht für andere Nutzer. IMMER dynamisch erkennen (Protokoll-Queries, Broadcast, OS-APIs), NIEMALS eine feste Liste von "bekannten" Einträgen als Erkennungsgrundlage. Feste Listen sind NUR erlaubt als Fallback-Label/Anzeige NACH einer dynamischen Erkennung — nie als Filter davor.
 - **Realitätsprinzip (ABSOLUT):** Code muss auf JEDEM Rechner in JEDEM Netzwerk funktionieren, nicht nur auf dem Entwickler-PC. Jede Annahme über die Umgebung (welche Geräte, welche Software, welche Services, welche Netzwerke existieren) ist ein Bug. NIEMALS lokale Testdaten, IP-Adressen, MAC-Adressen, Hostnamen oder Gerätenamen aus der Entwicklungsumgebung im Code verwenden. Multi-Produkt-Hersteller dürfen NICHT einem einzigen Gerätetyp zugeordnet werden. Wenn ein Gerätetyp nicht eindeutig erkannt werden kann → ehrlich "Unbekanntes Gerät" anzeigen statt raten.
 
@@ -202,11 +215,11 @@ cargo tauri build # Release-Build (MSI/NSIS)
 - Pfade MÜSSEN innerhalb erlaubter Verzeichnisse liegen (z.B. innerhalb des Scan-Root)
 - **Destruktive Dateioperationen** (Löschen, Überschreiben) MÜSSEN einen Bestätigungsdialog haben — sowohl im Backend (Pfad-Check) als auch im Frontend (User-Bestätigung)
 
-### XSS-Prävention
-- **NIEMALS** `innerHTML` mit unescapten Variablen: `innerHTML = \`...\${variable}...\`` ist VERBOTEN
-- **Fehlermeldungen** MÜSSEN mit `textContent` oder `createElement` angezeigt werden, NICHT mit `innerHTML`
-- **Dynamische Inhalte** in innerHTML MÜSSEN mit `escapeHtml()` aus `renderer/js/utils.js` escaped werden
-- **Eine zentrale `escapeHtml()`-Funktion** in `utils.js` — KEINE eigenen Varianten (_esc, esc, escapeAttr) pro View erstellen
+### XSS-Prävention (React)
+- **React JSX escaped automatisch** — `{variable}` in JSX ist sicher, kein manuelles Escaping nötig
+- **`dangerouslySetInnerHTML` ist VERBOTEN** außer für vertrauenswürdige, statische HTML-Inhalte (z.B. Markdown-Rendering)
+- **Wenn `dangerouslySetInnerHTML` unvermeidbar:** Inhalte MÜSSEN mit `escapeHtml()` aus `src/utils/escape.ts` bereinigt werden
+- **Keine direkte DOM-Manipulation** (`document.getElementById`, `innerHTML`) — immer React-State und JSX verwenden
 
 ### Tauri-Sicherheitskonfiguration
 - **CSP:** `tauri.conf.json` → `security.csp` MUSS konfiguriert sein (NICHT `null`)
@@ -215,12 +228,13 @@ cargo tauri build # Release-Build (MSI/NSIS)
 
 ## Memory-Leak-Prävention (PFLICHT)
 
-- **Jeder `setInterval`** MUSS eine gespeicherte Interval-ID haben und in `destroy()` mit `clearInterval()` gestoppt werden
-- **Event-Listener** dürfen nur EINMAL registriert werden (Flag-Pattern verwenden). Bei wiederholtem Aufruf prüfen ob der Listener bereits existiert
-- **`ResizeObserver`** MUSS in `destroy()` mit `.disconnect()` beendet werden
-- **DOM-Elemente** die dynamisch erstellt werden (Overlays, Modals) MÜSSEN in `destroy()` entfernt werden
-- **Jede View** MUSS eine `destroy()`-Funktion haben die ALLE Ressourcen aufräumt
-- **`app.js`** MUSS `destroy()` auf der alten View aufrufen bevor eine neue View aktiviert wird
+- **`useEffect` Cleanup-Funktionen:** Jeder `useEffect` der Ressourcen erstellt (Timer, Listener, Observer) MUSS eine Cleanup-Funktion zurückgeben
+- **`setInterval` / `setTimeout`:** MUSS in `useEffect` mit Cleanup `return () => clearInterval(id)` verwendet werden
+- **Event-Listener:** MÜSSEN in `useEffect` registriert und im Cleanup entfernt werden — React garantiert korrekte Ausführung
+- **`ResizeObserver`:** MUSS in `useEffect`-Cleanup mit `.disconnect()` beendet werden
+- **Refs für imperative Libs** (xterm, Chart.js, pdf.js): Via `useRef` halten, in `useEffect`-Cleanup `.destroy()` / `.dispose()` aufrufen
+- **React.lazy + Suspense:** Views werden automatisch entladen wenn nicht sichtbar — kein manuelles Lifecycle-Management nötig
+- **Tauri-Events:** `useTauriEvent` Hook aus `src/hooks/useTauriEvent.ts` verwendet — Cleanup ist automatisch eingebaut
 
 ## Temporäre Dateien (Cleanup-Policy)
 

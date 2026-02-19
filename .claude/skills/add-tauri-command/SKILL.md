@@ -1,6 +1,6 @@
 ---
 name: add-tauri-command
-description: Fügt einen neuen Tauri-Command hinzu mit Einträgen in commands.rs, lib.rs und tauri-bridge.js. Stellt konsistente Benennung, Parameter-Escaping und Fehlerbehandlung sicher. Nutze diesen Skill wenn eine neue Backend-Funktion vom Frontend aus aufgerufen werden soll. Aufruf mit /add-tauri-command [command-name] [beschreibung].
+description: Fügt einen neuen Tauri-Command hinzu mit Einträgen in commands/, lib.rs und tauri-api.ts. Stellt konsistente Benennung, Parameter-Escaping und Fehlerbehandlung sicher. Nutze diesen Skill wenn eine neue Backend-Funktion vom Frontend aus aufgerufen werden soll. Aufruf mit /add-tauri-command [command-name] [beschreibung].
 ---
 
 # Tauri-Command hinzufügen
@@ -14,14 +14,17 @@ Du fügst einen neuen Tauri-Command zur Speicher Analyse App hinzu.
 
 ## Voranalyse
 
-1. Lies `src-tauri/src/commands.rs` um bestehende Commands und Patterns zu verstehen
-2. Lies `src-tauri/src/lib.rs` um die Command-Registrierung im `generate_handler![]` zu sehen
-3. Lies `renderer/js/tauri-bridge.js` um die Bridge-Konventionen (`makeInvoke`) zu verstehen
-4. Prüfe ob ein ähnlicher Command bereits existiert
+1. Lies `src-tauri/src/commands/` — das passende Modul (cmd_scan, cmd_files, cmd_network, cmd_privacy, cmd_system, cmd_terminal, cmd_misc) identifizieren
+2. Lies `src-tauri/src/commands/mod.rs` um die Re-Export-Struktur zu verstehen
+3. Lies `src-tauri/src/lib.rs` um die Command-Registrierung im `generate_handler![]` zu sehen
+4. Lies `src/api/tauri-api.ts` um die typisierte API-Bridge zu verstehen
+5. Prüfe ob ein ähnlicher Command bereits existiert
 
 ## 3 Dateien ändern
 
-### 1. `src-tauri/src/commands.rs` — Command-Funktion
+### 1. `src-tauri/src/commands/cmd_*.rs` — Command-Funktion
+
+Im passenden Modul hinzufügen:
 
 ```rust
 #[tauri::command]
@@ -40,9 +43,9 @@ pub async fn command_name(param: String) -> Result<serde_json::Value, String> {
 
 **Security-Regeln (PFLICHT bei JEDEM Command):**
 - **PowerShell-Escaping:** Alle String-Parameter die in `format!()` für PowerShell verwendet werden MÜSSEN mit `.replace("'", "''")` escaped werden
-- **Pfad-Validierung:** Pfade vom Frontend validieren (existiert der Pfad? liegt er innerhalb erlaubter Verzeichnisse?)
-- **Enum-Whitelist:** Parameter mit festen Werten (z.B. direction: "Inbound"/"Outbound") per `match` auf erlaubte Werte prüfen
-- **IP-Validierung:** IP-Adressen mit Regex validieren bevor sie in PowerShell verwendet werden
+- **Pfad-Validierung:** Pfade vom Frontend validieren (existiert? innerhalb erlaubter Verzeichnisse?)
+- **Enum-Whitelist:** Parameter mit festen Werten per `match` auf erlaubte Werte prüfen
+- **IP-Validierung:** IP-Adressen mit Regex validieren
 
 **Konventionen:**
 - `snake_case` für Funktionsnamen
@@ -53,8 +56,6 @@ pub async fn command_name(param: String) -> Result<serde_json::Value, String> {
 
 ### 2. `src-tauri/src/lib.rs` — Command registrieren
 
-Füge den Command in den `generate_handler![]` Macro-Aufruf ein:
-
 ```rust
 .invoke_handler(tauri::generate_handler![
     // ... bestehende Commands ...
@@ -62,55 +63,52 @@ Füge den Command in den `generate_handler![]` Macro-Aufruf ein:
 ])
 ```
 
-### 3. `renderer/js/tauri-bridge.js` — Frontend-Mapping
+### 3. `src/api/tauri-api.ts` — Typisierte Export-Funktion
 
-Füge die Methode mit `makeInvoke()` hinzu:
-
-```javascript
-commandName: makeInvoke('command_name', 'param'),
+```typescript
+export const commandName = (param: string) =>
+  invoke<ReturnType>('command_name', { param });
 ```
 
 **Benennungs-Konvention:**
 - Rust-Command: `snake_case` (z.B. `get_disk_health`)
-- Bridge-Methode: `camelCase` (z.B. `getDiskHealth`)
-- Frontend-Aufruf: `window.api.getDiskHealth()`
+- TypeScript-Funktion: `camelCase` (z.B. `getDiskHealth`)
+- Frontend-Import: `import { getDiskHealth } from '../api/tauri-api'`
 
 ## Frontend-Aufruf (optional)
 
-```javascript
-// In renderer/js/<modul>.js
+```typescript
+// In src/views/SomeView.tsx
+import { commandName } from '../api/tauri-api';
+import { useAppContext } from '../context/AppContext';
+
+const { showToast } = useAppContext();
 try {
-    const result = await window.api.commandName(arg);
-    if (result?.error) throw new Error(result.error);
-    // result verarbeiten...
-} catch (err) {
-    console.error('[Modul]', err);
-    // SECURITY: Fehler mit textContent anzeigen, NICHT innerHTML
-    errorEl.textContent = 'Fehler: ' + err.message;
+    const result = await commandName(arg);
+} catch (err: any) {
+    showToast('Fehler: ' + err.message, 'error');
 }
 ```
 
 ## Security-Checkliste (PFLICHT vor Commit)
 
 - [ ] Alle String-Parameter für PowerShell mit `.replace("'", "''")` escaped?
-- [ ] Pfade vom Frontend validiert (nicht beliebige Pfade akzeptieren)?
+- [ ] Pfade vom Frontend validiert?
 - [ ] Enum-Parameter per Whitelist/match geprüft?
 - [ ] IP-Adressen per Regex validiert?
 - [ ] Keine `format!()` mit unescaptem User-Input?
-- [ ] Frontend zeigt Fehler mit `textContent`, nicht `innerHTML`?
 
 ## Häufige Fehler vermeiden
 
-- Command in `commands.rs` definiert aber NICHT in `lib.rs` registriert → Frontend bekommt "unknown command"
-- `camelCase` in Rust verwendet → muss `snake_case` sein
-- Bridge-Methode mit falschem invoke-Namen → stille Fehler
+- Command in `cmd_*.rs` definiert aber NICHT in `mod.rs` re-exportiert → Compile-Fehler
+- Command NICHT in `lib.rs` registriert → "unknown command"
+- `camelCase` in Rust → muss `snake_case` sein
+- TypeScript-Funktion mit falschem invoke-Namen → stille Fehler
 - Parameter in `format!()` ohne Escaping → Command Injection
-- Serialisierbare Daten: Tauri IPC kann nur JSON-serialisierbare Typen übertragen
 
 ## Ausgabe
 
-Nach dem Hinzufügen, gib eine Zusammenfassung:
-- Rust-Command: `commands::command_name`
-- Bridge-Methode: `window.api.commandName()`
+- Rust-Command: `commands::command_name` (in welchem cmd_*.rs Modul)
+- TypeScript-Funktion: `commandName()` in `src/api/tauri-api.ts`
 - Parameter: Typen und Escaping-Status
-- Registrierung: In `lib.rs` eingetragen
+- Registrierung: In `lib.rs` + `mod.rs` eingetragen
