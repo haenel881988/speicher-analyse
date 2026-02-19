@@ -2,7 +2,7 @@
 
 > **Zweck:** Dieser Prompt wird verwendet um das gesamte Projekt systematisch auf Probleme, Schwachstellen und Optimierungsmöglichkeiten zu durchleuchten.
 > **Anwendung:** Kopiere diesen Prompt in eine neue Claude-Sitzung (oder verwende ihn als Kontext) zusammen mit dem Quellcode.
-> **Version:** 2.2 — ergänzt um Tauri Events, Build/Packaging, Daten-Upgrade-Pfad
+> **Version:** 3.0 — aktualisiert für React 19 + Vite 7 + TypeScript Frontend (Migration von Vanilla JS, Feb 2026)
 
 ---
 
@@ -10,7 +10,7 @@
 
 Du bist ein erfahrener Software-Architekt und Security-Auditor. Führe eine vollständige Tiefenanalyse der **Tauri v2 Desktop-App** "Speicher Analyse" durch. Die App ist ein Windows-Desktop-Tool zur Festplattenanalyse und Systemoptimierung (vergleichbar mit TreeSize + CCleaner in einer App).
 
-**WICHTIG:** Die App wurde kürzlich von **Electron (Node.js)** auf **Tauri v2 (Rust)** migriert. Ein zentraler Analyse-Schwerpunkt ist die Frage: **Ist die Migration vollständig und sauber abgeschlossen?** Electron-Altlasten in Code, Dokumentation, Tools und Kommentaren müssen identifiziert werden.
+**WICHTIG:** Die App durchlief zwei grosse Migrationen: **Electron → Tauri v2** (Feb 2026) und **Vanilla JS → React 19 + Vite 7 + TypeScript** (Feb 2026). Beide Migrationen sind abgeschlossen. Ein zentraler Analyse-Schwerpunkt ist die Frage: **Sind die Migrationen vollständig und sauber abgeschlossen?** Altlasten (Electron-APIs, `renderer/`-Pfade, `window.api.*`-Aufrufe, Vanilla-JS-Patterns) in Code, Dokumentation, Tools und Kommentaren müssen identifiziert werden.
 
 **Dein Ziel:** Finde ALLE potenziellen Probleme, Risiken und Verbesserungsmöglichkeiten — von kritischen Sicherheitslücken über Migrations-Altlasten bis hin zu subtilen Performance-Problemen. Sei gründlich, sei ehrlich, beschönige nichts.
 
@@ -19,98 +19,109 @@ Du bist ein erfahrener Software-Architekt und Security-Auditor. Führe eine voll
 ## Technischer Kontext
 
 - **Runtime:** Tauri v2 (Rust-Backend + System-WebView)
-- **Backend:** Rust (`src-tauri/src/`) — Commands, PowerShell-Aufrufe via `ps.rs`, Scan-Engine via `scan.rs`
-- **Frontend:** Vanilla HTML/CSS/JS (ES Modules, kein Framework, kein Build-Step, unter `renderer/`)
-- **IPC:** Tauri `invoke()` / `#[tauri::command]` — Bridge: `renderer/js/tauri-bridge.js`
-- **Charts:** Chart.js v4 (lokal unter `renderer/lib/`)
-- **PDF:** html2pdf.js (lokal unter `renderer/lib/`)
-- **Terminal:** xterm.js (Frontend) — Backend-PTY über Tauri-Commands
+- **Backend:** Rust (`src-tauri/src/`) — Commands (8 Module in `commands/`), PowerShell via `ps.rs`, Scan-Engine via `scan.rs`
+- **Frontend:** React 19 + TypeScript + Vite 7 (unter `src/`, Build-Output in `dist/`)
+- **IPC:** Tauri `invoke()` / `#[tauri::command]` — typisierte API: `src/api/tauri-api.ts` (155 Methoden)
+- **Charts:** Chart.js v4 (npm: `react-chartjs-2` oder `useRef`-Pattern)
+- **PDF:** pdfjs-dist (npm), html2pdf.js (lokal unter `src/public/lib/`)
+- **Terminal:** @xterm/xterm (npm) — Backend-PTY über Tauri-Commands
 - **Plattform:** Nur Windows (PowerShell-Befehle, Registry-Lesen, WMI-Abfragen)
-- **Vorgänger:** Electron v33 mit Node.js Backend (vollständig migriert, `main/`-Verzeichnis gelöscht)
+- **Vorgänger:** 1) Electron v33 (vollständig migriert), 2) Vanilla JS Frontend (vollständig migriert zu React)
 
 ### Dateistruktur
 
 ```
-src-tauri/                # Rust-Backend (Tauri v2)
+src/                       # Frontend (React 19 + TypeScript + Vite 7)
+  index.html               # Vite Entry-HTML
+  main.tsx                 # React Entry Point
+  App.tsx                  # App Shell (Toolbar + Sidebar + TabRouter + Terminal)
+  App.css                  # CSS Import (style.css)
+  api/
+    tauri-api.ts           # ZENTRAL: 155 typisierte API-Funktionen → Tauri invoke()
+  context/
+    AppContext.tsx          # Globaler React-State (scanId, drives, theme, activeTab)
+  hooks/
+    useTauriEvent.ts       # Tauri Event-Listener mit auto-Cleanup
+  components/
+    Toolbar.tsx            # Obere Leiste (Logo, Drive-Auswahl, Scan, Export)
+    Sidebar.tsx            # Linke Sidebar (6 Gruppen, toggle)
+    StatusBar.tsx          # Untere Leiste (Scan-Fortschritt, Status)
+    TabRouter.tsx          # Conditional Rendering der Views (Lazy Loading)
+    Toast.tsx              # Benachrichtigungen
+    ContextMenu.tsx        # Rechtsklick-Menü
+  views/
+    DashboardView.tsx      # Dashboard-Übersicht
+    ExplorerView.tsx       # Datei-Explorer mit Omnibar, Dual-Panel, Tabs
+    TreeView.tsx           # Verzeichnisbaum
+    TreemapView.tsx        # Treemap-Visualisierung
+    ChartsView.tsx         # Dateitypen-Diagramm
+    TopFilesView.tsx       # Top-100-Dateien
+    DuplicatesView.tsx     # Duplikat-Finder
+    OldFilesView.tsx       # Alte Dateien
+    CleanupView.tsx        # Bereinigung
+    AutostartView.tsx      # Autostart-Manager
+    ServicesView.tsx       # Dienste-Viewer
+    OptimizerView.tsx      # System-Optimierung
+    UpdatesView.tsx        # Update-Manager
+    PrivacyView.tsx        # Privacy-Dashboard
+    SmartView.tsx          # S.M.A.R.T. Festplatten
+    SoftwareAuditView.tsx  # Software-Audit
+    SecurityAuditView.tsx  # Sicherheits-Audit
+    NetworkView.tsx        # Netzwerk-Monitor (TCP-Verbindungen)
+    SystemProfilView.tsx   # System-Profil
+    HealthCheckView.tsx    # PC-Diagnose
+    SettingsView.tsx       # Einstellungen
+    PdfEditorView.tsx      # PDF-Editor
+    TerminalView.tsx       # Eingebettetes Terminal (xterm.js)
+  utils/
+    format.ts              # formatBytes, formatNumber, etc.
+    file-icons.tsx         # SVG File-Icons als React-Komponenten
+    categories.ts          # Kategorie-Maps und Farben
+  public/
+    css/style.css          # Alle Styles (Dark/Light Theme)
+    lib/                   # Lokale Bibliotheken (html2pdf, mammoth, etc.)
+
+src-tauri/                 # Rust-Backend (Tauri v2)
   src/
-    main.rs              # Tauri-Einstieg
-    lib.rs               # App-Setup, Menüleiste, Plugin-Registrierung, Command-Registrierung
-    commands.rs          # ALLE #[tauri::command] Handler (zentraler Hub)
-    ps.rs                # PowerShell-Ausführung (UTF-8 Prefix, CREATE_NO_WINDOW, async)
-    scan.rs              # Scan-Daten im Speicher (FileEntry, ScanData, Abfrage-Funktionen)
-    oui.rs               # OUI-Datenbank (MAC-Hersteller-Zuordnung)
-  tauri.conf.json        # App-Konfiguration, CSP, Window-Settings, Plugins
+    main.rs                # Tauri-Einstieg
+    lib.rs                 # App-Setup, Menüleiste, Plugin-Registrierung, Command-Registrierung
+    commands/              # Tauri Commands (8 Module)
+      mod.rs               # Shared Helpers, Re-Exports
+      cmd_scan.rs          # Scan, Tree, Export, Duplikate, Suche
+      cmd_files.rs         # Dateimanagement, Properties, Archiv, Explorer
+      cmd_network.rs       # Netzwerk-Monitor, Verbindungen, Bandwidth
+      cmd_privacy.rs       # Privacy Dashboard, Scheduled Tasks
+      cmd_system.rs        # Cleanup, Updates, SMART, Software Audit, Score
+      cmd_terminal.rs      # Terminal PTY (ConPTY via portable-pty)
+      cmd_misc.rs          # Admin, Platform, Preferences, Session
+    ps.rs                  # PowerShell-Ausführung (UTF-8 Prefix, CREATE_NO_WINDOW, async)
+    scan.rs                # Scan-Daten im Speicher (FileEntry, ScanData, Abfrage-Funktionen)
+    oui.rs                 # OUI-Datenbank (MAC-Hersteller-Zuordnung)
+  tauri.conf.json          # App-Konfiguration, CSP, Window-Settings, Plugins
   capabilities/
-    default.json         # Berechtigungen (welche APIs das Frontend nutzen darf)
-  Cargo.toml             # Rust-Abhängigkeiten
+    default.json           # Berechtigungen (welche APIs das Frontend nutzen darf)
+  Cargo.toml               # Rust-Abhängigkeiten
 
-renderer/                # Frontend (Vanilla JS, ~35 Module)
-  index.html             # Haupt-HTML (Single Page App)
-  css/style.css          # Alle Styles (Dark/Light Theme, ~5000+ Zeilen)
-  js/
-    tauri-bridge.js      # ZENTRAL: Mappt window.api.* auf Tauri invoke() (~150 Methoden)
-    app.js               # Haupt-Controller (View-Switching, Init)
-    explorer.js           # Datei-Explorer mit Omnibar-Suche
-    explorer-tabs.js      # Tab-Browsing für Explorer
-    explorer-dual-panel.js # Dual-Panel (Commander-Stil)
-    dashboard.js          # Dashboard-Übersicht
-    scanner.js            # Scan-Steuerung (Frontend)
-    tree.js               # Verzeichnisbaum
-    treemap.js            # Treemap-Visualisierung
-    charts.js             # Dateitypen-Diagramm
-    duplicates.js         # Duplikat-Finder UI
-    old-files.js          # Alte Dateien UI
-    cleanup.js            # Bereinigung UI
-    autostart.js          # Autostart-Manager UI
-    services.js           # Dienste-Viewer UI
-    bloatware.js          # Bloatware-Scanner UI
-    optimizer.js          # System-Optimierung UI
-    updates.js            # Update-Manager UI
-    privacy.js            # Privacy-Dashboard UI
-    smart.js              # S.M.A.R.T. UI
-    software-audit.js     # Software-Audit UI
-    network.js            # Netzwerk-Monitor UI (nur TCP-Verbindungen, kein Scanner)
-    security-audit.js     # Sicherheits-Audit UI
-    system-profil.js      # System-Profil UI
-    system-score.js       # System-Score UI
-    terminal-panel.js     # Eingebettetes Terminal UI
-    preview.js            # Dateivorschau (Monaco Editor, PDF, Bilder)
-    file-manager.js       # Dateioperationen (Cut/Copy/Paste/Delete)
-    search.js             # Dateisuche
-    export.js             # Export (CSV/PDF)
-    report-gen.js         # PDF-Bericht-Generator
-    batch-rename.js       # Batch-Umbenennung
-    settings.js           # Einstellungen
-    utils.js              # Hilfsfunktionen (escapeHtml, formatSize, etc.)
-  lib/                    # Lokale Bibliotheken (KEIN CDN)
-    chart.min.js
-    html2pdf.bundle.min.js
-    monaco/               # Monaco Editor
-    pdfjs/                # PDF.js
-    mammoth/              # Word-Dokument-Vorschau
-    xterm/                # Terminal-Emulation
+tools/                     # Entwickler-Werkzeuge (nicht Teil der App)
+  wcag/                    # WCAG-Prüftools (Puppeteer)
 
-tools/                    # Entwickler-Werkzeuge (nicht Teil der App)
-  wcag/                   # WCAG-Prüftools (Puppeteer)
-  build-oui-database.js   # OUI-Datenbank-Generator (Node.js Script)
-
-docs/                     # Dokumentation
-  issues/                 # Issue-Tracking
-  planung/                # Projektplanung
-  protokoll/              # Änderungsprotokolle
-  lessons-learned/        # Fehler-Dokumentation
+docs/                      # Dokumentation
+  issues/                  # Issue-Tracking
+  planung/                 # Projektplanung
+  protokoll/               # Änderungsprotokolle
+  lessons-learned/         # Fehler-Dokumentation
 ```
 
-### IPC-Datenfluss (Tauri v2)
+### IPC-Datenfluss (Tauri v2 + React)
 
 ```
-Frontend (renderer/js/*.js)
-  → window.api.methodName(params)
-  → tauri-bridge.js übersetzt: invoke('method_name', {params})
+React View (src/views/*.tsx)
+  → import { methodName } from '../api/tauri-api'
+  → tauri-api.ts: invoke<ReturnType>('method_name', {params})
   → Tauri IPC
-  → src-tauri/src/commands.rs: #[tauri::command] fn method_name(...)
+  → src-tauri/src/commands/cmd_*.rs: #[tauri::command] fn method_name(...)
   → ps.rs (PowerShell) oder scan.rs (Daten) oder direkte Rust-Logik
-  → Ergebnis zurück an Frontend
+  → Ergebnis zurück an React (typisiert)
 ```
 
 ---
@@ -130,12 +141,14 @@ Gehe jeden der folgenden Bereiche systematisch durch. Für jeden gefundenen Punk
 
 > **HÖCHSTE PRIORITÄT.** Die Migration von Electron auf Tauri v2 muss vollständig und sauber sein. Überreste der alten Architektur führen zu Verwirrung, falschen Annahmen und fehlerhaftem Code.
 
-#### 1.1 Code-Altlasten
-- [ ] Gibt es noch Referenzen auf Electron-APIs im aktiven Code? (`require()`, `ipcRenderer`, `ipcMain`, `contextBridge`, `BrowserWindow`, `remote`, `shell.openExternal` von Electron)
-- [ ] Gibt es Kommentare die noch Electron-Konzepte beschreiben? (z.B. "node-pty", "Main Process", "Preload")
-- [ ] Gibt es Code-Pfade die `require()` im CommonJS-Stil verwenden (ausser in Drittanbieter-Bibliotheken)?
-- [ ] Gibt es noch `process.env`, `process.platform` oder andere Node.js-Globals im Frontend?
-- [ ] Werden Electron-spezifische Events noch referenziert? (`ready`, `window-all-closed`, `activate`)
+#### 1.1 Code-Altlasten (Electron + Vanilla JS)
+- [ ] Gibt es noch Referenzen auf Electron-APIs im aktiven Code? (`require()`, `ipcRenderer`, `ipcMain`, `contextBridge`, `BrowserWindow`, `remote`)
+- [ ] Gibt es noch `window.api.*`-Aufrufe (alter Vanilla-JS-Pattern statt typisierter Imports aus `tauri-api.ts`)?
+- [ ] Gibt es noch `renderer/`-Pfad-Referenzen im aktiven Code?
+- [ ] Gibt es noch `document.addEventListener` / `CustomEvent` / `dispatchEvent` für Inter-Komponenten-Kommunikation (sollte React Context/Props sein)?
+- [ ] Gibt es noch `dangerouslySetInnerHTML` mit dynamischen Inhalten (sollte React-Komponenten sein)?
+- [ ] Gibt es noch `innerHTML`-Verwendungen ausserhalb von imperativen Bibliotheks-Integrationen?
+- [ ] Gibt es Kommentare die noch Electron-Konzepte oder Vanilla-JS-Patterns beschreiben?
 
 #### 1.2 Dokumentations-Altlasten
 - [ ] Referenziert die CLAUDE.md noch Electron-Konzepte? (preload.js, ipc-handlers.js, main.js, Worker Threads)
@@ -150,10 +163,10 @@ Gehe jeden der folgenden Bereiche systematisch durch. Für jeden gefundenen Punk
 
 #### 1.4 Architektur-Inkonsistenzen nach Migration
 - [ ] Gibt es Frontend-Code der noch Node.js-APIs erwartet die in Tauri nicht existieren?
-- [ ] Sind alle IPC-Aufrufe korrekt von `ipcRenderer.invoke()` auf `tauri.invoke()` (via Bridge) migriert?
-- [ ] Gibt es Stub-Commands in `commands.rs` die noch nicht implementiert sind? (Suche nach `json!([])`, `json!(null)`, `"stub"`, `todo!()`)
-- [ ] Stimmt die API-Surface in `tauri-bridge.js` mit den tatsächlichen Commands in `commands.rs` überein?
-- [ ] Sind alle in `lib.rs` registrierten Commands auch in `commands.rs` definiert (und umgekehrt)?
+- [ ] Gibt es Stub-Commands in `commands/cmd_*.rs` die noch nicht implementiert sind? (Suche nach `json!([])`, `json!(null)`, `"stub"`, `todo!()`)
+- [ ] Stimmt die API-Surface in `src/api/tauri-api.ts` mit den tatsächlichen Commands in `commands/` überein?
+- [ ] Sind alle in `lib.rs` registrierten Commands auch in `commands/` definiert (und umgekehrt)?
+- [ ] Gibt es React-Views die noch Vanilla-JS-Patterns verwenden (z.B. `document.getElementById`, `element.style.*` statt `useState`/`useRef`)?
 
 #### 1.5 Konfigurationsreste
 - [ ] Gibt es noch eine `electron-builder.yml` oder ähnliche Electron-Build-Konfigurationen?
@@ -167,7 +180,7 @@ Gehe jeden der folgenden Bereiche systematisch durch. Für jeden gefundenen Punk
 - [ ] **OUI-Datenbank:** `oui.rs` existiert noch — wird sie noch benötigt oder ist sie eine Altlast?
 - [ ] **Registry-Cleaner:** Sind alle Schreib-Commands entfernt? (`scan_registry`, `clean_registry`, `export_registry_backup`, `restore_registry_backup`)
 - [ ] Gibt es Frontend-Views oder Sidebar-Tabs die auf entfernte Features verweisen?
-- [ ] Gibt es Bridge-Einträge in `tauri-bridge.js` für entfernte Commands?
+- [ ] Gibt es API-Funktionen in `tauri-api.ts` für entfernte Commands?
 - [ ] Gibt es CSS-Klassen für entfernte UI-Elemente?
 
 ---
@@ -185,7 +198,7 @@ Gehe jeden der folgenden Bereiche systematisch durch. Für jeden gefundenen Punk
 
 #### 2.2 Command Injection (PowerShell)
 - [ ] Werden ALLE String-Parameter mit `.replace("'", "''")` escaped bevor sie in `format!()` für PowerShell-Befehle eingesetzt werden?
-- [ ] Gibt es `format!()` Aufrufe in `commands.rs` oder `ps.rs` mit unescaptem User-Input?
+- [ ] Gibt es `format!()` Aufrufe in `commands/cmd_*.rs` oder `ps.rs` mit unescaptem User-Input?
 - [ ] IP-Adressen: Werden sie per Regex validiert bevor sie in PowerShell verwendet werden?
 - [ ] Enum-Parameter (z.B. "Inbound"/"Outbound"): Werden sie per `match` auf Whitelist geprüft?
 - [ ] Terminal-Modul: Kann über Terminal-Eingaben das Rust-Backend manipuliert werden?
@@ -281,26 +294,26 @@ Gehe jeden der folgenden Bereiche systematisch durch. Für jeden gefundenen Punk
 ### 5. Architektur & Code-Qualität
 
 #### 5.1 Rust-Backend Architektur
-- [ ] Ist `commands.rs` zu monolithisch? (alle Commands in einer Datei)
+- [ ] Sind die 8 Command-Module (`commands/cmd_*.rs`) sinnvoll aufgeteilt?
 - [ ] Gibt es Code-Duplikation zwischen Commands?
 - [ ] Werden Typen sinnvoll definiert und wiederverwendet? (structs, enums)
 - [ ] Ist die Fehlerbehandlung konsistent? (Result-Typen, Error-Mapping)
 - [ ] Gibt es tote Commands die registriert aber nie aufgerufen werden?
 
-#### 5.2 IPC-Design (tauri-bridge.js)
-- [ ] Stimmt die API-Surface in `tauri-bridge.js` mit `commands.rs` überein?
-- [ ] Gibt es Bridge-Einträge ohne entsprechende Rust-Commands (oder umgekehrt)?
+#### 5.2 IPC-Design (tauri-api.ts)
+- [ ] Stimmt die API-Surface in `src/api/tauri-api.ts` mit den Commands in `commands/` überein?
+- [ ] Gibt es API-Funktionen ohne entsprechende Rust-Commands (oder umgekehrt)?
 - [ ] Werden Parameter korrekt von camelCase (Frontend) zu snake_case (Rust) übersetzt?
-- [ ] Werden Rückgabewerte konsistent strukturiert? (manche JSON, manche Strings, manche Arrays)
+- [ ] Werden Rückgabewerte konsistent typisiert? (TypeScript-Typen statt `any`)
 - [ ] Gibt es unnötige IPC-Roundtrips die gebündelt werden könnten?
 
-#### 5.3 Frontend-Architektur
-- [ ] Ist `app.js` zu monolithisch?
-- [ ] Gibt es globale Variablen die Konflikte verursachen könnten?
-- [ ] Werden Views korrekt aufgeräumt beim Tab-Wechsel? (destroy() Aufruf)
-- [ ] Ist die Event-Kommunikation zwischen Views sauber gelöst?
-- [ ] Gibt es Memory Leaks bei DOM-Elementen die erstellt aber nie entfernt werden?
-- [ ] Gibt es duplizierte Logik zwischen Views die in `utils.js` zentralisiert werden sollte?
+#### 5.3 Frontend-Architektur (React)
+- [ ] Werden React-Hooks korrekt verwendet? (Dependencies in useEffect, useMemo, useCallback)
+- [ ] Werden Views korrekt aufgeräumt? (useEffect Cleanup-Funktionen)
+- [ ] Ist die State-Verwaltung sauber? (AppContext vs. lokaler State pro View)
+- [ ] Gibt es Memory Leaks? (nicht-aufgeräumte Event Listener, Intervals, ResizeObserver)
+- [ ] Gibt es duplizierte Logik zwischen Views die in Custom Hooks oder Utils zentralisiert werden sollte?
+- [ ] Werden React.lazy() und Suspense korrekt für Code Splitting eingesetzt?
 
 #### 5.4 Wartbarkeit
 - [ ] Gibt es hartcodierte Werte die konfigurierbar sein sollten? (Timeouts, Pfade, Limits)
@@ -372,10 +385,11 @@ Gehe jeden der folgenden Bereiche systematisch durch. Für jeden gefundenen Punk
 - [ ] Werden `devDependencies` korrekt von `dependencies` getrennt?
 - [ ] `@tauri-apps/api` und `@tauri-apps/cli`: Sind sie aktuell?
 
-#### 8.3 Lokale Bibliotheken (renderer/lib/)
-- [ ] Sind alle lokalen Libraries aktuell? (Chart.js, html2pdf, Monaco, PDF.js, xterm.js, mammoth)
+#### 8.3 Frontend-Abhängigkeiten
+- [ ] Sind alle npm-Pakete aktuell? (react, @tauri-apps/api, @xterm/xterm, pdfjs-dist, vite)
+- [ ] Gibt es lokale Libraries in `src/public/lib/` die durch npm-Pakete ersetzt werden könnten?
 - [ ] Gibt es Libraries die nicht mehr verwendet werden und entfernt werden können?
-- [ ] Werden Libraries lokal gebündelt (keine CDN-Abhängigkeit)? ✓ Bereits so
+- [ ] Wird Tree-Shaking von Vite korrekt genutzt? (keine unnötigen Imports)
 
 ---
 
@@ -383,26 +397,26 @@ Gehe jeden der folgenden Bereiche systematisch durch. Für jeden gefundenen Punk
 
 > Dieser Bereich prüft ob die verschiedenen Schichten der App zueinander passen. Inkonsistenzen sind die häufigste Fehlerquelle nach einer Migration.
 
-#### 9.1 Dreifach-Abgleich: Bridge ↔ Commands ↔ Registrierung
+#### 9.1 Dreifach-Abgleich: API ↔ Commands ↔ Registrierung
 
 Die API besteht aus drei Schichten die synchron sein MÜSSEN:
 
 | Schicht | Datei | Was dort steht |
 |---------|-------|----------------|
-| **Frontend-Bridge** | `renderer/js/tauri-bridge.js` | `window.api.methodName = (params) => invoke('method_name', {params})` |
-| **Rust-Commands** | `src-tauri/src/commands.rs` | `#[tauri::command] fn method_name(...)` |
+| **Frontend-API** | `src/api/tauri-api.ts` | `export const methodName = (...) => invoke<Type>('method_name', {...})` |
+| **Rust-Commands** | `src-tauri/src/commands/cmd_*.rs` | `#[tauri::command] pub async fn method_name(...)` |
 | **Registrierung** | `src-tauri/src/lib.rs` | `.invoke_handler(generate_handler![..., method_name, ...])` |
 
 Prüfe:
-- [ ] **Jede** Bridge-Methode hat einen passenden Command in `commands.rs`
-- [ ] **Jeder** Command in `commands.rs` ist in `lib.rs` registriert
+- [ ] **Jede** API-Funktion in `tauri-api.ts` hat einen passenden Command in `commands/`
+- [ ] **Jeder** Command in `commands/` ist in `lib.rs` registriert
 - [ ] **Jede** Registrierung in `lib.rs` hat einen implementierten Command
 - [ ] Gibt es "Geister-Einträge" in einer der drei Schichten die nirgendwo sonst existieren?
 - [ ] Werden Parameter-Namen korrekt übersetzt? (camelCase ↔ snake_case)
 
 #### 9.2 Stub-Erkennung (unvollständige Migration)
 
-Suche gezielt nach diesen Mustern in `commands.rs`:
+Suche gezielt nach diesen Mustern in `commands/cmd_*.rs`:
 ```
 json!([])           → Leeres Array zurückgeben statt echter Daten
 json!(null)         → Null zurückgeben statt Fehler
@@ -414,16 +428,16 @@ unimplemented!()    → Rust-Platzhalter
 Ok("".to_string())  → Leerer String statt Daten
 ```
 
-Für jeden gefundenen Stub: Welche Frontend-View ruft diesen Command auf und was sieht der User?
+Für jeden gefundenen Stub: Welche React-View ruft diesen Command auf und was sieht der User?
 
 #### 9.3 Sidebar ↔ Views ↔ Commands
 
-Prüfe die Kette: HTML-Tab → JS-View → Backend-Commands
+Prüfe die Kette: Sidebar-Button → TabRouter → React-View → tauri-api.ts → Backend-Command
 
-- [ ] Hat jeder Sidebar-Tab in `index.html` eine zugehörige JS-View-Datei?
-- [ ] Ruft jede JS-View ihre Backend-Commands über `window.api.*` auf?
+- [ ] Hat jeder Sidebar-Tab in `Sidebar.tsx` einen passenden Eintrag in `TabRouter.tsx`?
+- [ ] Gibt es React-Views die keinem Sidebar-Tab zugeordnet sind?
+- [ ] Ruft jede React-View ihre Backend-Commands über `tauri-api.ts` auf (nicht direkt via `invoke`)?
 - [ ] Existieren die aufgerufenen Commands tatsächlich im Backend?
-- [ ] Gibt es JS-View-Dateien die keinem Sidebar-Tab zugeordnet sind?
 
 #### 9.4 Anforderungen vs. Implementierung
 
@@ -468,14 +482,14 @@ Das Dokument `docs/issues/anforderungen.md` definiert ~150 Backend-Funktionen mi
 - [ ] **Substring-Matching:** Gibt es `.contains()`-Prüfungen die zu breit matchen? (Lesson #24)
 - [ ] **Bug-Drift:** Wurde bei Fixes geprüft ob die Änderung Seiteneffekte in anderen Funktionen hat? (Lesson #18)
 
-#### 10.3 Memory-Leak-Muster (aus CLAUDE.md)
+#### 10.3 Memory-Leak-Muster (React)
 
-- [ ] Hat jede View eine `destroy()` Methode?
-- [ ] Wird `destroy()` in `app.js` beim View-Wechsel aufgerufen?
-- [ ] Werden alle `setInterval` in `destroy()` mit `clearInterval` gestoppt?
-- [ ] Werden Event-Listener nur einmal registriert? (Flag-Pattern oder removeEventListener)
-- [ ] Werden `ResizeObserver` in `destroy()` mit `.disconnect()` beendet?
-- [ ] Werden dynamische DOM-Elemente (Overlays, Modals, Tooltips) in `destroy()` entfernt?
+- [ ] Haben alle `useEffect` mit Subscriptions eine Cleanup-Return-Funktion?
+- [ ] Werden alle `setInterval` in useEffect-Cleanups mit `clearInterval` gestoppt?
+- [ ] Werden Tauri Event-Listener (via `listen()`) in Cleanup-Funktionen entfernt (`unlisten()`)?
+- [ ] Werden `ResizeObserver` in Cleanup-Funktionen mit `.disconnect()` beendet?
+- [ ] Gibt es `document.addEventListener` ohne korrespondierendes `removeEventListener` in Cleanup?
+- [ ] Werden Refs zu DOM-Elementen korrekt bereinigt bei Unmount?
 
 ---
 
@@ -485,7 +499,7 @@ Das Dokument `docs/issues/anforderungen.md` definiert ~150 Backend-Funktionen mi
 
 #### 11.1 Event-Konsistenz
 - [ ] Welche Events werden im Rust-Backend emittiert? (`app_handle.emit(...)` oder `window.emit(...)`)
-- [ ] Welche Events werden im Frontend gehört? (`listen()` Aufrufe in `tauri-bridge.js` oder direkt in Views)
+- [ ] Welche Events werden im Frontend gehört? (`useTauriEvent` Hook in Views oder `listen()` in `tauri-api.ts`)
 - [ ] Gibt es Events die emittiert aber nie gehört werden? (toter Event-Code)
 - [ ] Gibt es Listener für Events die nie emittiert werden? (warten auf nichts)
 - [ ] Werden Event-Listener beim View-Wechsel korrekt entfernt? (`unlisten()`)
@@ -495,15 +509,16 @@ Das Dokument `docs/issues/anforderungen.md` definiert ~150 Backend-Funktionen mi
 Der Scan-Fortschritt ist der wichtigste Event-basierte Datenfluss:
 
 ```
-Rust (scan.rs/commands.rs)
+Rust (scan.rs/commands/cmd_scan.rs)
   → emit("scan-progress", {folders, files, size, currentPath})
   → emit("scan-complete", {scanId, stats})
   → emit("scan-error", {message})
 
-Frontend (scanner.js)
-  → listen("scan-progress", callback)
-  → listen("scan-complete", callback)
-  → listen("scan-error", callback)
+React (App.tsx via useTauriEvent Hook)
+  → useTauriEvent("scan-progress", handler)
+  → useTauriEvent("scan-complete", handler)
+  → useTauriEvent("scan-error", handler)
+  → State-Updates via React Context (AppContext) an ProgressBar
 ```
 
 - [ ] Werden alle drei Events (progress/complete/error) sowohl emittiert als auch gehört?
@@ -590,61 +605,64 @@ Frontend (scanner.js)
 
 > Diese Schritte kann der Analyst direkt ausführen um schnell ein Bild der Lage zu bekommen.
 
-### Schritt 1: Electron-Altlasten finden
+### Schritt 1: Altlasten finden (Electron + Vanilla JS)
 ```bash
-# In eigenem Code (NICHT in renderer/lib/ suchen — das sind Drittanbieter)
-grep -ri "electron" renderer/js/ renderer/css/ src-tauri/ tools/ docs/ --include="*.js" --include="*.rs" --include="*.md" --include="*.ps1" --include="*.css" --exclude-dir="lib"
+# Electron-Referenzen im eigenen Code (NICHT in node_modules/ oder Drittanbieter-Libs)
+grep -ri "electron" src/ src-tauri/ tools/ docs/ --include="*.ts" --include="*.tsx" --include="*.rs" --include="*.md" --include="*.ps1" --include="*.css" --exclude-dir="node_modules"
 
-# Spezifische Electron-APIs
-grep -ri "ipcRenderer\|ipcMain\|contextBridge\|BrowserWindow\|nodeIntegration\|preload\.js" renderer/js/ src-tauri/ docs/ --include="*.js" --include="*.rs" --include="*.md"
+# Alte Vanilla-JS-Patterns im React-Code
+grep -rn "window\.api\.\|renderer/" src/ --include="*.ts" --include="*.tsx"
 
-# Node.js-Globals im Frontend
-grep -r "process\.env\|process\.platform\|require(" renderer/js/ --include="*.js"
+# Alte DOM-Manipulation statt React
+grep -rn "document\.getElementById\|document\.querySelector\|\.innerHTML" src/ --include="*.ts" --include="*.tsx"
+
+# Alte Event-Patterns statt React
+grep -rn "dispatchEvent\|CustomEvent\|document\.addEventListener" src/ --include="*.ts" --include="*.tsx"
 ```
 
 ### Schritt 2: Stubs finden
 ```bash
-# Rust-Stubs
-grep -n "json!\(\[\]\)\|json!(null)\|json!({})\|todo!()\|unimplemented!()\|\"stub\"\|\"not implemented\"" src-tauri/src/commands.rs
+# Rust-Stubs (in allen Command-Modulen)
+grep -rn "json!\(\[\]\)\|json!(null)\|json!({})\|todo!()\|unimplemented!()\|\"stub\"\|\"not implemented\"" src-tauri/src/commands/
 
 # Leere Rückgaben
-grep -n 'Ok("".to_string())\|Ok(String::new())' src-tauri/src/commands.rs
+grep -rn 'Ok("".to_string())\|Ok(String::new())' src-tauri/src/commands/
 ```
 
 ### Schritt 3: Dreifach-Abgleich
 ```bash
-# Alle Commands in commands.rs auflisten
-grep -c "#\[tauri::command\]" src-tauri/src/commands.rs
+# Alle Commands in commands/ auflisten
+grep -rc "#\[tauri::command\]" src-tauri/src/commands/
 
 # Alle registrierten Commands in lib.rs auflisten
 grep "generate_handler" src-tauri/src/lib.rs
 
-# Alle Bridge-Methoden in tauri-bridge.js auflisten
-grep -c "invoke(" renderer/js/tauri-bridge.js
+# Alle API-Funktionen in tauri-api.ts zählen
+grep -c "invoke" src/api/tauri-api.ts
 ```
 
 ### Schritt 4: Strategische Entfernungen prüfen
 ```bash
 # Netzwerk-Scanner Reste
-grep -rn "scan_local_network\|scan_network_active\|scan_device_ports\|get_smb_shares\|block_process\|unblock_process\|get_firewall" src-tauri/src/ renderer/js/ --include="*.rs" --include="*.js"
+grep -rn "scan_local_network\|scan_network_active\|scan_device_ports\|get_smb_shares\|block_process\|unblock_process\|get_firewall" src-tauri/src/ src/ --include="*.rs" --include="*.ts" --include="*.tsx"
 
 # Registry-Cleaner Reste
-grep -rn "clean_registry\|scan_registry\|export_registry_backup\|restore_registry_backup" src-tauri/src/ renderer/js/ --include="*.rs" --include="*.js"
+grep -rn "clean_registry\|scan_registry\|export_registry_backup\|restore_registry_backup" src-tauri/src/ src/ --include="*.rs" --include="*.ts" --include="*.tsx"
 ```
 
 ### Schritt 5: Bekannte Anti-Patterns
 ```bash
 # unwrap() in Commands (Crash-Risiko)
-grep -n "\.unwrap()" src-tauri/src/commands.rs
+grep -rn "\.unwrap()" src-tauri/src/commands/
 
-# innerHTML mit Variablen (XSS-Risiko)
-grep -n "innerHTML.*\$\|innerHTML.*\`" renderer/js/*.js
+# innerHTML/dangerouslySetInnerHTML mit dynamischen Inhalten (XSS-Risiko)
+grep -rn "dangerouslySetInnerHTML\|\.innerHTML" src/ --include="*.ts" --include="*.tsx"
 
 # format!() mit User-Input ohne Escaping (Injection-Risiko)
-grep -n "format!(" src-tauri/src/commands.rs | head -50
+grep -rn "format!(" src-tauri/src/commands/ | head -50
 
 # Leere catch-Blöcke (verschluckte Fehler)
-grep -A1 "catch" renderer/js/*.js | grep "{}"
+grep -rn "catch.*{}" src/ --include="*.ts" --include="*.tsx"
 ```
 
 ### Schritt 6: Event-Konsistenz
@@ -652,37 +670,42 @@ grep -A1 "catch" renderer/js/*.js | grep "{}"
 # Events die im Rust-Backend emittiert werden
 grep -rn "\.emit(" src-tauri/src/ --include="*.rs"
 
-# Events die im Frontend gehört werden
-grep -rn "listen(" renderer/js/ --include="*.js" | grep -v "addEventListener"
+# Events die im Frontend gehört werden (via useTauriEvent Hook)
+grep -rn "useTauriEvent\|listen(" src/ --include="*.ts" --include="*.tsx"
 
-# Events die im Frontend entfernt werden (unlisten)
-grep -rn "unlisten\|removeEventListener" renderer/js/ --include="*.js"
+# useEffect Cleanup-Funktionen (Rückgabe einer Funktion)
+grep -rn "return.*unlisten\|return.*=>" src/ --include="*.ts" --include="*.tsx"
 ```
 
 ### Schritt 7: Build-Check
 ```bash
-# Kompiliert die App ohne Fehler?
+# TypeScript-Kompilierung
+npx tsc --noEmit
+
+# Vite Build
+npm run build
+
+# Rust-Kompilierung
 cargo build --manifest-path src-tauri/Cargo.toml 2>&1 | grep -E "warning|error"
 
 # Binary-Grösse (Release)
 ls -lh src-tauri/target/release/*.exe 2>/dev/null
 ```
 
-### Schritt 8: Memory-Leak-Risiko
+### Schritt 8: React-spezifische Checks
 ```bash
-# Views ohne destroy()
-for f in renderer/js/*.js; do
-  if grep -q "class.*View\|class.*Panel\|class.*Manager" "$f" && ! grep -q "destroy()" "$f"; then
-    echo "KEIN destroy(): $f"
-  fi
-done
+# Views ohne useEffect Cleanup (potentieller Memory Leak)
+grep -rL "return.*=>" src/views/*.tsx | head -20
 
-# setInterval ohne clearInterval
-grep -l "setInterval" renderer/js/*.js | while read f; do
+# setInterval ohne clearInterval in useEffect
+grep -l "setInterval" src/views/*.tsx | while read f; do
   if ! grep -q "clearInterval" "$f"; then
     echo "setInterval OHNE clearInterval: $f"
   fi
 done
+
+# Fehlende Dependencies in useEffect (häufiger React-Bug)
+grep -n "useEffect.*\[\]" src/views/*.tsx
 ```
 
 ---
@@ -697,8 +720,9 @@ done
 | **Lessons Learned** | `docs/lessons-learned/lessons-learned.md` | Dokumentierte Fehler — nicht wiederholen |
 | **Governance** | `docs/planung/governance.md` | Code-Qualitätsregeln (WCAG, Security, Performance) |
 | **Migrations-Checkliste** | `docs/planung/migrations-checkliste.md` | Status der Electron→Tauri Migration |
-| **Meta-Analyse** | `docs/issues/archiv/issue_meta_analyse.md` | Migrations-Analyse (archiviert) |
-| **Code-Audit** | `docs/issues/archiv/issue_code_audit.md` | Früherer Audit (archiviert, ersetzt durch Tiefenanalyse) |
+| **Meta-Analyse** | `docs/issues/archiv/issue_meta_analyse.md` | Electron→Tauri Migrations-Analyse (archiviert) |
+| **Tiefenanalyse** | `docs/issues/archiv/issue_tiefenanalyse.md` | Vanilla-JS-Ära Tiefenanalyse (25 Issues, alle gelöst, archiviert) |
+| **Code-Audit** | `docs/issues/archiv/issue_code_audit.md` | Früherer Audit (archiviert) |
 | **Strategische Entscheidungen** | `docs/issues/issue.md` (Abschnitt) | Netzwerk-Scanner + Registry-Cleaner Entfernung |
 | **Simons Ideen** | `docs/issues/issue.md` (Abschnitt "Ideen Salat") | Geplante Features: Explorer-Kontextmenü, Datei-Icons, Terminal als Admin, etc. |
 
@@ -733,7 +757,7 @@ Erstelle eine neue Datei `docs/issues/issue_tiefenanalyse.md` mit ALLEN gefunden
 
 ### [K1] Titel
 - **Bereich:** Migration / Security / Performance / ...
-- **Datei(en):** `src-tauri/src/commands.rs:123` oder `renderer/js/xyz.js:45`
+- **Datei(en):** `src-tauri/src/commands/cmd_scan.rs:123` oder `src/views/ExplorerView.tsx:45`
 - **Problem:** Konkrete Beschreibung
 - **Risiko:** Was im schlimmsten Fall passieren kann
 - **Empfehlung:** Konkreter Lösungsvorschlag
@@ -813,4 +837,4 @@ Füge in `docs/issues/issue.md` unter "Offene Issues" einen Verweis auf die Tief
 
 ---
 
-*Letzte Aktualisierung: 19.02.2026 — v2.2 (ergänzt um Events, Build/Packaging, Daten-Upgrade-Pfad)*
+*Letzte Aktualisierung: 19.02.2026 — v3.0 (aktualisiert für React 19 + Vite 7 + TypeScript Frontend)*

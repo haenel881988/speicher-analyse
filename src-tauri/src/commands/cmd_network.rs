@@ -248,7 +248,7 @@ $result | ConvertTo-Json -Compress"#,
 }
 
 /// Combined polling endpoint: returns summary + grouped + bandwidth in one call.
-/// Matches the format expected by the frontend (network.js refresh()).
+/// Matches the format expected by the frontend (NetworkView refresh).
 #[tauri::command]
 pub async fn get_polling_data() -> Result<Value, String> {
     // Single PS call for TCP + UDP + Bandwidth
