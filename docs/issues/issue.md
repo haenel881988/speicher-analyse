@@ -155,7 +155,7 @@ Weitere Funktionen fehlen bei entsprechenden Dateitypen, bei Bildern z.B.: die A
 | 4 | #9 | Apps-Kontrollzentrum (ersetzt "Updates"-Tab) | Planung |
 | 5 | #10 | System-Profil (Hardware, Seriennummer, Hersteller-Links) | Größtenteils umgesetzt |
 | 6 | #4 | Privacy Dashboard anwenderfreundlicher | Überarbeitung — wartet auf Test |
-| 7 | #5 | PDF Vollansicht + Bearbeitung | Offen |
+| 7 | #5 | PDF Vollansicht + Bearbeitung | Größtenteils umgesetzt |
 | ~~8~~ | ~~#11~~ | ~~Netzwerk-Paketaufzeichnung~~ | ENTFALLEN (AV-Risiko) |
 | ~~9~~ | ~~#20~~ | ~~Netzwerk-Geräte falsch erkannt~~ | OBSOLET (Scanner wird entfernt) |
 | ~~10~~ | ~~#12~~ | ~~WCAG-Kontrast vollständig WCAG 2.2 konform~~ | Bestätigt 19.02.2026 |
@@ -173,7 +173,7 @@ Weitere Funktionen fehlen bei entsprechenden Dateitypen, bei Bildern z.B.: die A
 
 ## Tiefenanalyse (19.02.2026, aktualisiert)
 
-→ Vollständige Ergebnisse in [`issue_tiefenanalyse.md`](issue_tiefenanalyse.md)
+→ Vollständige Ergebnisse in [`archiv/issue_tiefenanalyse.md`](archiv/issue_tiefenanalyse.md)
 **25 Findings:** 3 Kritisch, 8 Hoch, 8 Mittel, 6 Niedrig + 5 Optimierungsmöglichkeiten
 **25/25 behoben (100%)** (Stand 19.02.2026)
 
@@ -309,12 +309,12 @@ Weitere Funktionen fehlen bei entsprechenden Dateitypen, bei Bildern z.B.: die A
 - Kein eigenes Fenster — man sollte die PDF in ein separates Fenster verschieben können
 
 **Planung:**
-1. **Tab-Ansicht:** PDF als eigenen Tab im Hauptfenster öffnen (wie ein Explorer-Tab)
-2. **Losgelöstes Fenster:** Möglichkeit, die PDF in ein eigenständiges Fenster zu verschieben
-3. **Bearbeitungsfunktionen:** Text markieren, Kommentare hinzufügen, Hervorhebungen setzen
-4. **Druck/Export:** PDF drucken oder als kommentierte Version speichern
+1. ~~**Tab-Ansicht:** PDF als eigenen Tab im Hauptfenster öffnen (wie ein Explorer-Tab)~~ → **Umgesetzt** — PDF-Editor als eigener Sidebar-Tab (Extras-Gruppe) + Einstieg über Explorer-Kontextmenü/Doppelklick/Vorschau
+2. **Losgelöstes Fenster:** Möglichkeit, die PDF in ein eigenständiges Fenster zu verschieben → Noch offen
+3. ~~**Bearbeitungsfunktionen:** Text markieren, Kommentare hinzufügen, Hervorhebungen setzen~~ → **Umgesetzt** (Changelog #114) — Markierungen (Highlight), Kommentare, Freihand-Zeichnungen + OCR-Texterkennung + Seiten-Management (Drehen, Löschen, Zusammenfügen)
+4. **Druck/Export:** PDF drucken oder als kommentierte Version speichern → Noch offen
 
-**Status:** Offen
+**Status:** Größtenteils umgesetzt — 2 von 4 Punkten erledigt (Changelog #114). Offen: Losgelöstes Fenster, Druck/Export.
 
 ---
 
@@ -731,7 +731,7 @@ Die App hat bereits einen beeindruckenden Funktionsumfang. Jetzt geht es darum, 
 |-------|-----|--------|
 | #2/#3 | Scandaten korrekt speichern und wiederherstellen | Bestätigt 19.02.2026 |
 | #4 | Privacy Dashboard verständlicher machen | Wartet auf Test |
-| #5 | PDF Vollansicht und Bearbeitung | Offen |
+| #5 | PDF Vollansicht und Bearbeitung | Größtenteils umgesetzt (Changelog #114) |
 | ~~#12~~ | ~~WCAG-Kontrast vollständig konform~~ | Bestätigt 19.02.2026 |
 | #13 | Fenster-Bereiche frei verschiebbar | Größtenteils umgesetzt |
 | #14 | Echte Terminal-Emulation | Teilweise |
