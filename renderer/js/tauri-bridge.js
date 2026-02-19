@@ -165,7 +165,6 @@
         deepSearchStart: makeInvoke('deep_search_start', 'root_path', 'query', 'use_regex'),
         deepSearchCancel: makeInvoke('deep_search_cancel'),
         onDeepSearchResult: makeListener('deep-search-result'),
-        onDeepSearchProgress: makeListener('deep-search-progress'),
         onDeepSearchComplete: makeListener('deep-search-complete'),
         onDeepSearchError: makeListener('deep-search-error'),
 
@@ -296,10 +295,6 @@
         // === Menu Actions ===
         onMenuAction: makeListener('menu-action'),
 
-        // === Tray Actions ===
-        onTrayAction: makeListener('tray-action'),
-        onOpenFolder: makeListener('open-folder'),
-
         // === Screenshot ===
         captureScreenshot: makeInvoke('capture_screenshot'),
 
@@ -307,5 +302,5 @@
         logFrontend: (level, message, context) => invoke('log_frontend', { level, message, context }),
     };
 
-    console.log('[Tauri Bridge] window.api mapped — 150 methods + 21 event listeners');
+    console.log('[Tauri Bridge] window.api mapped — 150 methods + 18 event listeners');
 })();

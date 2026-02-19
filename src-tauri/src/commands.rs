@@ -2850,7 +2850,7 @@ $tasks = @()
 foreach ($ip in $ips) {{
     $tasks += @{{ip=$ip; task=[System.Net.Dns]::GetHostEntryAsync($ip)}}
 }}
-try {{ [void][System.Threading.Tasks.Task]::WaitAll(@($tasks | ForEach-Object {{ $_.task }}), 10000) }} catch {{}}
+try {{ [void][System.Threading.Tasks.Task]::WaitAll(@($tasks | ForEach-Object {{ $_.task }}), 3000) }} catch {{}}
 $result = @{{}}
 foreach ($t in $tasks) {{
     if ($t.task.IsCompleted -and -not $t.task.IsFaulted) {{
@@ -2910,7 +2910,7 @@ $tasks = @()
 foreach ($ip in $ips) {{
     $tasks += @{{ip=$ip; task=[System.Net.Dns]::GetHostEntryAsync($ip)}}
 }}
-try {{ [void][System.Threading.Tasks.Task]::WaitAll(@($tasks | ForEach-Object {{ $_.task }}), 8000) }} catch {{}}
+try {{ [void][System.Threading.Tasks.Task]::WaitAll(@($tasks | ForEach-Object {{ $_.task }}), 3000) }} catch {{}}
 $result = @{{}}
 foreach ($t in $tasks) {{
     if ($t.task.IsCompleted -and -not $t.task.IsFaulted) {{
@@ -3652,8 +3652,10 @@ pub async fn get_system_info() -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn run_security_audit() -> Result<Value, String> {
-    tracing::debug!("Starte Sicherheitscheck");
-    let result = crate::ps::run_ps_json_array(
+    tracing::debug!("Starte Sicherheitscheck (parallelisiert)");
+
+    // Group A: Fast checks — registry reads, net commands, Secure Boot (~1-2s)
+    let group_a = crate::ps::run_ps_json_array(
         r#"$checks = @()
 
 # 1. Firewall
@@ -3663,50 +3665,6 @@ $checks += [PSCustomObject]@{ id='firewall'; name='Firewall'; status=if($fw -ge 
 # 2. UAC
 $uac = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -EA SilentlyContinue).EnableLUA
 $checks += [PSCustomObject]@{ id='uac'; name='UAC (Benutzerkontensteuerung)'; status=if($uac -eq 1){'ok'}else{'critical'}; detail=if($uac -eq 1){'Aktiviert'}else{'Deaktiviert'} }
-
-# 3. Antivirus
-$av = Get-CimInstance -Namespace root/SecurityCenter2 -ClassName AntiVirusProduct -EA SilentlyContinue
-$checks += [PSCustomObject]@{ id='antivirus'; name='Antivirus'; status=if($av){'ok'}else{'critical'}; detail=if($av){$av[0].displayName}else{'Nicht gefunden'} }
-
-# 4. Windows Defender Echtzeitschutz
-$defPref = Get-MpPreference -EA SilentlyContinue
-$rtDisabled = $defPref.DisableRealtimeMonitoring
-$checks += [PSCustomObject]@{ id='defender-realtime'; name='Echtzeitschutz'; status=if($rtDisabled -eq $false){'ok'}else{'critical'}; detail=if($rtDisabled -eq $false){'Aktiviert'}else{'Deaktiviert'} }
-
-# 5. Defender Definitionen Alter
-try {
-    $defStatus = Get-MpComputerStatus -EA Stop
-    $daysOld = ((Get-Date) - $defStatus.AntivirusSignatureLastUpdated).Days
-    $checks += [PSCustomObject]@{ id='defender-definitions'; name='Virendefinitionen'; status=if($daysOld -le 2){'ok'}elseif($daysOld -le 7){'warning'}else{'critical'}; detail="Letztes Update vor $daysOld Tagen" }
-} catch {
-    $checks += [PSCustomObject]@{ id='defender-definitions'; name='Virendefinitionen'; status='warning'; detail='Status konnte nicht abgefragt werden' }
-}
-
-# 6. Windows Update — ausstehende Updates
-try {
-    $updateSession = New-Object -ComObject Microsoft.Update.Session -EA Stop
-    $searcher = $updateSession.CreateUpdateSearcher()
-    $pending = $searcher.Search("IsInstalled=0 and Type='Software'").Updates.Count
-    $checks += [PSCustomObject]@{ id='windows-updates'; name='Windows-Updates'; status=if($pending -eq 0){'ok'}elseif($pending -le 3){'warning'}else{'critical'}; detail=if($pending -eq 0){'Alle Updates installiert'}else{"$pending Updates ausstehend"} }
-} catch {
-    $checks += [PSCustomObject]@{ id='windows-updates'; name='Windows-Updates'; status='warning'; detail='Konnte nicht geprüft werden' }
-}
-
-# 7. BitLocker / Verschlüsselung
-try {
-    $bl = Get-BitLockerVolume -MountPoint 'C:' -EA Stop
-    $checks += [PSCustomObject]@{ id='bitlocker'; name='Laufwerksverschlüsselung'; status=if($bl.ProtectionStatus -eq 'On'){'ok'}else{'warning'}; detail=if($bl.ProtectionStatus -eq 'On'){'BitLocker aktiviert'}else{'BitLocker deaktiviert'} }
-} catch {
-    $checks += [PSCustomObject]@{ id='bitlocker'; name='Laufwerksverschlüsselung'; status='warning'; detail='BitLocker nicht verfügbar' }
-}
-
-# 8. SMBv1 (veraltet, Sicherheitsrisiko)
-try {
-    $smb1 = (Get-SmbServerConfiguration -EA Stop).EnableSMB1Protocol
-    $checks += [PSCustomObject]@{ id='smb1'; name='SMBv1-Protokoll'; status=if($smb1 -eq $false){'ok'}else{'critical'}; detail=if($smb1 -eq $false){'Deaktiviert (sicher)'}else{'Aktiviert (Sicherheitsrisiko!)'} }
-} catch {
-    $checks += [PSCustomObject]@{ id='smb1'; name='SMBv1-Protokoll'; status='ok'; detail='Nicht verfügbar (sicher)' }
-}
 
 # 9. Remotedesktop
 $rdp = (Get-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -EA SilentlyContinue).fDenyTSConnections
@@ -3728,12 +3686,91 @@ try {
     $checks += [PSCustomObject]@{ id='secure-boot'; name='Secure Boot'; status='warning'; detail='Nicht verfügbar (Legacy BIOS)' }
 }
 
+$checks | ConvertTo-Json -Compress"#
+    );
+
+    // Group B: CIM/WMI + Defender checks (~3-5s)
+    let group_b = crate::ps::run_ps_json_array(
+        r#"$checks = @()
+
+# 3. Antivirus
+$av = Get-CimInstance -Namespace root/SecurityCenter2 -ClassName AntiVirusProduct -EA SilentlyContinue
+$checks += [PSCustomObject]@{ id='antivirus'; name='Antivirus'; status=if($av){'ok'}else{'critical'}; detail=if($av){$av[0].displayName}else{'Nicht gefunden'} }
+
+# 4. Windows Defender Echtzeitschutz
+$defPref = Get-MpPreference -EA SilentlyContinue
+$rtDisabled = $defPref.DisableRealtimeMonitoring
+$checks += [PSCustomObject]@{ id='defender-realtime'; name='Echtzeitschutz'; status=if($rtDisabled -eq $false){'ok'}else{'critical'}; detail=if($rtDisabled -eq $false){'Aktiviert'}else{'Deaktiviert'} }
+
+# 5. Defender Definitionen Alter
+try {
+    $defStatus = Get-MpComputerStatus -EA Stop
+    $daysOld = ((Get-Date) - $defStatus.AntivirusSignatureLastUpdated).Days
+    $checks += [PSCustomObject]@{ id='defender-definitions'; name='Virendefinitionen'; status=if($daysOld -le 2){'ok'}elseif($daysOld -le 7){'warning'}else{'critical'}; detail="Letztes Update vor $daysOld Tagen" }
+} catch {
+    $checks += [PSCustomObject]@{ id='defender-definitions'; name='Virendefinitionen'; status='warning'; detail='Status konnte nicht abgefragt werden' }
+}
+
+# 7. BitLocker / Verschlüsselung
+try {
+    $bl = Get-BitLockerVolume -MountPoint 'C:' -EA Stop
+    $checks += [PSCustomObject]@{ id='bitlocker'; name='Laufwerksverschlüsselung'; status=if($bl.ProtectionStatus -eq 'On'){'ok'}else{'warning'}; detail=if($bl.ProtectionStatus -eq 'On'){'BitLocker aktiviert'}else{'BitLocker deaktiviert'} }
+} catch {
+    $checks += [PSCustomObject]@{ id='bitlocker'; name='Laufwerksverschlüsselung'; status='warning'; detail='BitLocker nicht verfügbar' }
+}
+
+# 8. SMBv1 (veraltet, Sicherheitsrisiko)
+try {
+    $smb1 = (Get-SmbServerConfiguration -EA Stop).EnableSMB1Protocol
+    $checks += [PSCustomObject]@{ id='smb1'; name='SMBv1-Protokoll'; status=if($smb1 -eq $false){'ok'}else{'critical'}; detail=if($smb1 -eq $false){'Deaktiviert (sicher)'}else{'Aktiviert (Sicherheitsrisiko!)'} }
+} catch {
+    $checks += [PSCustomObject]@{ id='smb1'; name='SMBv1-Protokoll'; status='ok'; detail='Nicht verfügbar (sicher)' }
+}
+
 # 12. Autostart-Einträge (zu viele = Risiko)
 $asCount = @(Get-CimInstance Win32_StartupCommand -EA SilentlyContinue).Count
 $checks += [PSCustomObject]@{ id='autostart'; name='Autostart-Programme'; status=if($asCount -le 5){'ok'}elseif($asCount -le 15){'warning'}else{'critical'}; detail="$asCount Programme im Autostart" }
 
 $checks | ConvertTo-Json -Compress"#
-    ).await?;
+    );
+
+    // Group C: Windows Update — slowest check, COM object (~5-10s)
+    let group_c = crate::ps::run_ps_json_array(
+        r#"$checks = @()
+
+# 6. Windows Update — ausstehende Updates
+try {
+    $updateSession = New-Object -ComObject Microsoft.Update.Session -EA Stop
+    $searcher = $updateSession.CreateUpdateSearcher()
+    $pending = $searcher.Search("IsInstalled=0 and Type='Software'").Updates.Count
+    $checks += [PSCustomObject]@{ id='windows-updates'; name='Windows-Updates'; status=if($pending -eq 0){'ok'}elseif($pending -le 3){'warning'}else{'critical'}; detail=if($pending -eq 0){'Alle Updates installiert'}else{"$pending Updates ausstehend"} }
+} catch {
+    $checks += [PSCustomObject]@{ id='windows-updates'; name='Windows-Updates'; status='warning'; detail='Konnte nicht geprüft werden' }
+}
+
+$checks | ConvertTo-Json -Compress"#
+    );
+
+    // Run all 3 groups concurrently
+    let (res_a, res_b, res_c) = tokio::join!(group_a, group_b, group_c);
+
+    // Merge results — collect all successful checks, log failures
+    let mut all_checks: Vec<Value> = Vec::with_capacity(12);
+    let groups: [(&str, Result<Value, String>); 3] = [("A", res_a), ("B", res_b), ("C", res_c)];
+    for (name, res) in groups {
+        match res {
+            Ok(val) => {
+                if let Some(arr) = val.as_array() {
+                    all_checks.extend(arr.iter().cloned());
+                }
+            }
+            Err(e) => {
+                tracing::warn!(group = name, error = %e, "Sicherheitscheck-Gruppe fehlgeschlagen");
+            }
+        }
+    }
+
+    let result = Value::Array(all_checks);
 
     // Persist the audit result to history
     let now = std::time::SystemTime::now()

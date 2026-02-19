@@ -12,10 +12,10 @@
 | Schweregrad | Anzahl | Behoben |
 |-------------|--------|---------|
 | Kritisch | 3 | 3 (K-1, K-2, K-3) |
-| Hoch | 8 | 4 (H-1, H-3, H-4, H-6) |
+| Hoch | 8 | 5 (H-1, H-2, H-3, H-4, H-6) |
 | Mittel | 8 | 3 (M-1, M-5, M-6, M-8) |
 | Niedrig | 6 | 1 (N-4) |
-| **Gesamt** | **25** | **11 behoben** |
+| **Gesamt** | **25** | **12 behoben** |
 | Optimierungsmöglichkeiten | 5 | — |
 
 ---
@@ -102,23 +102,11 @@
 
 ---
 
-### H-2: 4 Event-Listener im Frontend ohne Backend-Emitter (tote Listener)
+### H-2: 4 Event-Listener im Frontend ohne Backend-Emitter (tote Listener) — BEHOBEN ✓
 
+- **Behoben am:** 19.02.2026 — `file-op-progress` war bereits entfernt. `deep-search-progress`, `tray-action`, `open-folder` entfernt aus `tauri-bridge.js`, `app.js` und `explorer.js`. Kein Backend-Emitter existiert für diese Events (kein Tray im Tauri-Backend, Deep-Search liefert pro Treffer via `deep-search-result`). Listener-Count von 21 auf 18 korrigiert.
 - **Bereich:** Konsistenz / Dead Code / UX
-- **Datei:** `renderer/js/tauri-bridge.js`
-- **Problem:** Folgende Events werden im Frontend registriert, aber im Backend **nie** emittiert:
-
-  | Event | Bridge-Zeile | Auswirkung |
-  |-------|-------------|------------|
-  | `file-op-progress` | 101 | Kein Fortschritts-Feedback bei Dateioperationen |
-  | `deep-search-progress` | 172 | Tiefensuche zeigt keinen Fortschritt |
-  | `tray-action` | 315 | Tray-Aktionen werden nie empfangen |
-  | `open-folder` | 316 | Ordner-Öffnen-Event wird nie empfangen |
-
-  Verifikation: `grep -rn "\.emit(" src-tauri/src/` zeigt keinen Emitter für diese 4 Events.
-- **Risiko:** Bei `file-op-progress` und `deep-search-progress` fehlt dem User Fortschritts-Feedback. Bei `tray-action` und `open-folder` könnte Tray-Funktionalität unvollständig sein.
-- **Empfehlung:** Backend-Emitter für file-op-progress und deep-search-progress implementieren. tray-action und open-folder entweder implementieren oder Listener entfernen.
-- **Aufwand:** Mittel
+- **Datei:** `renderer/js/tauri-bridge.js`, `renderer/js/app.js`, `renderer/js/explorer.js`
 
 ---
 
@@ -478,7 +466,7 @@ Dual-Output (Console + Datei), Log-Rotation (max 20 Dateien), Frontend-Fehler we
 | ~~4~~ | ~~**H-1** restore-window.ps1 Electron-Fix~~ | ~~Klein~~ | **Behoben** ✓ |
 | ~~5~~ | ~~**H-3** Mutex unwrap() ersetzen~~ | ~~Mittel~~ | **Behoben** ✓ |
 | ~~6~~ | ~~**H-4** PS-Fehlermeldungen auf Deutsch~~ | ~~Klein~~ | **Behoben** ✓ |
-| 7 | **H-2** Tote Event-Listener fixen | Mittel | Offen |
+| ~~7~~ | ~~**H-2** Tote Event-Listener fixen~~ | ~~Mittel~~ | **Behoben** ✓ |
 | ~~8~~ | ~~**H-6** destroy() für alle Views~~ | ~~Mittel~~ | **Behoben** ✓ |
 | 9 | **H-7** activate/deactivate Pattern | Mittel | Offen |
 | 10 | **M-2** validate_path erweitern | Mittel | Offen |
@@ -529,7 +517,7 @@ Dual-Output (Console + Datei), Log-Rotation (max 20 Dateien), Frontend-Fehler we
 - [x] Duplicate-Events (progress/complete/error) vollständig
 - [x] Terminal-Events (data/exit) vollständig
 - [x] Deep-Search-Events (result/complete/error) vollständig
-- [ ] **FAIL:** 4 tote Listener (H-2)
+- [x] ~~4 tote Listener~~ (H-2 — behoben: 3 Listener entfernt, 1 war bereits entfernt)
 
 ### 7. Lokalisierung
 - [x] UI-Texte auf Deutsch
@@ -539,4 +527,4 @@ Dual-Output (Console + Datei), Log-Rotation (max 20 Dateien), Frontend-Fehler we
 ---
 
 *Erstellt: 19.02.2026 | Analysiert mit: Claude Opus 4.6 | Recherche-Prompt v2.2*
-*Aktualisiert: 19.02.2026 — Status-Update: 9 Findings behoben (K-2, K-3, H-1, H-3, H-4, H-6, M-1, M-6, N-4), K-1 teilweise, M-8 erledigt (Dateien archiviert). 4 veraltete Issue-Dateien ins Archiv verschoben.*
+*Aktualisiert: 19.02.2026 — Status-Update: 12 Findings behoben (K-1, K-2, K-3, H-1, H-2, H-3, H-4, H-6, M-1, M-5, M-6, M-8, N-4). Sicherheits-Check parallelisiert (L-4), DNS-Timeout verkürzt (L-3). 4 veraltete Issue-Dateien ins Archiv verschoben.*

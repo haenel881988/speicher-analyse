@@ -652,12 +652,6 @@ export class ExplorerView {
             this.els.status.innerHTML = `<span style="color:var(--accent)">\uD83D\uDD0D ${collected.length} Treffer</span><span style="color:var(--text-muted)">Escape = beenden</span>`;
         });
 
-        window.api.onDeepSearchProgress((data) => {
-            if (!this._deepSearchRunning) return;
-            const countEl = resultsEl.querySelector('.omni-results-count');
-            if (countEl) countEl.textContent = `${data.resultCount} Treffer (${data.dirsScanned} Ordner)`;
-        });
-
         window.api.onDeepSearchComplete((data) => {
             this._deepSearchRunning = false;
             if (stopBtn) stopBtn.style.display = 'none';

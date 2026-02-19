@@ -171,13 +171,14 @@ Weitere Funktionen fehlen bei entsprechenden Dateitypen, bei Bildern z.B.: die A
 
 → Vollständige Ergebnisse in [`issue_tiefenanalyse.md`](issue_tiefenanalyse.md)
 **25 Findings:** 3 Kritisch, 8 Hoch, 8 Mittel, 6 Niedrig + 5 Optimierungsmöglichkeiten
-**11 behoben, 14 offen** (Stand 19.02.2026)
+**12 behoben, 13 offen** (Stand 19.02.2026)
 
 **Bereits behoben:**
 - ~~K-1: Scanner/Firewall/Registry-Cleaner~~ → nie ins Tauri portiert (Frontend entfernt)
 - ~~K-2: CSP `unsafe-eval`~~ → entfernt
 - ~~K-3: `delete_to_trash` ohne Pfadprüfung~~ → `validate_path()` hinzugefügt
 - ~~H-1: `restore-window.ps1` suchte nach Electron~~ → auf Tauri aktualisiert
+- ~~H-2: Tote Event-Listener~~ → 3 Listener entfernt (tray-action, open-folder, deep-search-progress)
 - ~~H-3: Mutex `.unwrap()` Absturzgefahr~~ → `unwrap_or_else` + Hilfsfunktion
 - ~~H-4: PowerShell-Fehler auf Englisch~~ → deutsche Meldungen
 - ~~H-6: 18 Views ohne `destroy()`~~ → `destroy()` für alle Views hinzugefügt
@@ -188,7 +189,6 @@ Weitere Funktionen fehlen bei entsprechenden Dateitypen, bei Bildern z.B.: die A
 - ~~N-4: blockierendes `std::fs::remove_file`~~ → auf `tokio::fs` umgestellt
 
 **Noch offen:**
-- H-2: 4 tote Event-Listener (kein Backend-Emitter)
 - H-5: Terminal PTY (großer Umbau)
 - H-7: `activate()`/`deactivate()` Pattern für Views
 - H-8: `system_score` Stub-Anzeige
@@ -209,19 +209,19 @@ Weitere Funktionen fehlen bei entsprechenden Dateitypen, bei Bildern z.B.: die A
 **Problem:** Dieselben Ordner (Desktop, Dokumente, Downloads) werden 10x in 12 Minuten abgefragt, weil jeder Tab-Wechsel einen neuen `list_directory`-Aufruf auslöst.
 **Lösung:** Kurzzeit-Cache (5-10 Sekunden) für `list_directory`-Ergebnisse.
 
-### Finding L-3: IP-Auflösung dauert 12+ Sekunden (Mittel)
+### ~~Finding L-3: IP-Auflösung dauert 12+ Sekunden~~ — Behoben ✓
 **Problem:** `resolve_ips` braucht konstant 12.2-12.3 Sekunden (DNS-Reverse-Lookup-Timeout). Die Firma-Namen erscheinen deshalb erst nach einem zweiten Refresh.
-**Lösung:** DNS-Timeout verkürzen oder parallele Auflösung mit schnellerem Timeout pro IP.
+**Lösung:** DNS-WaitAll-Timeout von 10s/8s auf 3s verkürzt. Auflösbare IPs sind in <1s fertig, unerreichbare blockieren nicht mehr.
 
-### Finding L-4: Sicherheits-Check dauert 16-17 Sekunden (Mittel)
+### ~~Finding L-4: Sicherheits-Check dauert 16-17 Sekunden~~ — Behoben ✓
 **Problem:** `run_security_audit` ist der langsamste Befehl — 12 Prüfungen in einem einzigen PowerShell-Aufruf (Get-NetFirewallProfile, Get-MpComputerStatus, Get-BitLockerVolume, etc.).
-**Lösung:** Die 12 Prüfungen in 3-4 parallele Blöcke aufteilen (Ziel: unter 8 Sekunden).
+**Lösung:** 12 Checks in 3 parallele Gruppen aufgeteilt (schnelle Registry-Reads, CIM/Defender, Windows Update) via `tokio::join!`. Laufzeit ~max(langsamste Gruppe) statt Summe aller Gruppen.
 
 ### ~~Finding L-5: Doppelte Laufwerk-Abfrage beim Start~~ — Behoben ✓
 **Problem:** `Win32_LogicalDisk` wird beim App-Start zweimal innerhalb von 300ms aufgerufen — derselbe Datensatz wird doppelt abgefragt.
 **Lösung:** `loadDrives()` verwendet jetzt die bereits vom Explorer geladenen Daten wieder.
 
-**Status:** L-1 und L-5 behoben. L-2, L-3, L-4 noch offen.
+**Status:** L-1, L-3, L-4, L-5 behoben. L-2 (Verzeichnis-Cache) noch offen.
 
 ---
 

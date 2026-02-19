@@ -376,28 +376,6 @@ async function init() {
         }
     }
 
-    // Listen for tray actions
-    window.api.onTrayAction((action) => {
-        switch (action) {
-            case 'quick-scan': {
-                const selectedPath = els.toolbarDriveSelect.value;
-                if (selectedPath && !state.scanning) {
-                    startScan(selectedPath, state, els, loadAllViews, setStatus);
-                }
-                break;
-            }
-            case 'check-duplicates':
-                switchToTab('duplicates');
-                break;
-        }
-    });
-
-    // Listen for open-folder from shell integration
-    window.api.onOpenFolder((folderPath) => {
-        switchToTab('explorer');
-        dualPanel.getActiveExplorer()?.navigateTo(folderPath);
-    });
-
     // Cross-view navigation (z.B. Privacy → Netzwerk)
     document.addEventListener('navigate-to-tab', (e) => {
         if (e.detail?.tab) switchToTab(e.detail.tab);
