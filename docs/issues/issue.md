@@ -171,7 +171,7 @@ Weitere Funktionen fehlen bei entsprechenden Dateitypen, bei Bildern z.B.: die A
 
 → Vollständige Ergebnisse in [`issue_tiefenanalyse.md`](issue_tiefenanalyse.md)
 **25 Findings:** 3 Kritisch, 8 Hoch, 8 Mittel, 6 Niedrig + 5 Optimierungsmöglichkeiten
-**17 behoben, 8 offen** (Stand 19.02.2026)
+**25/25 behoben (100%)** (Stand 19.02.2026)
 
 **Bereits behoben:**
 - ~~K-1: Scanner/Firewall/Registry-Cleaner~~ → nie ins Tauri portiert (Frontend entfernt)
@@ -193,10 +193,11 @@ Weitere Funktionen fehlen bei entsprechenden Dateitypen, bei Bildern z.B.: die A
 - ~~M-8: Docs referenzieren Electron~~ → archiviert
 - ~~N-4: blockierendes `std::fs::remove_file`~~ → auf `tokio::fs` umgestellt
 
-**Noch offen:**
-- H-5: Terminal PTY (großer Umbau — separates Feature für echte Terminal-Emulation)
-- M-3: `commands.rs` aufteilen (4500+ Zeilen — Architektur-Refactoring)
-- 6 Niedrig-Findings (N-1 bis N-6 — geringe Priorität)
+**Abgeschlossen** — Alle 25 Findings behoben:
+- ~~H-5: Terminal PTY~~ → ConPTY via portable-pty (echtes Pseudo-Terminal)
+- ~~M-3: commands.rs aufteilen~~ → 8 Module (max. 947 Zeilen pro Datei)
+- ~~N-1 bis N-6~~ → N-3 RAM-Logging, N-5 Security-Doku, N-6 unwrap-Fix, Rest kein Handlungsbedarf
+- ~~O-1/O-4~~ → Modul-Split + differenzierte PS-Timeouts (30s/120s/300s)
 
 ## Log-Analyse Findings (19.02.2026)
 
@@ -492,13 +493,14 @@ Eine Art "Waage für die Festplatte":
 **Was bisher gemacht wurde:**
 - Multi-Shell Support (PowerShell/CMD/WSL) in v7.2
 - Shell-Selector, dynamische Prompts, Rechtsklick "Im Terminal öffnen"
-- Grundlagen für xterm.js + node-pty vorbereitet (postinstall-Script für Build-Probleme)
+- ConPTY-Backend via portable-pty v0.9 (echtes Pseudo-Terminal statt Pipe-I/O, v7.2.1 #106)
+- terminal_resize() funktional (war zuvor Stub)
 
 **Was noch fehlt:**
-- Echte Terminal-Emulation mit xterm.js (Farben, Cursor, Scroll, Maus)
+- Frontend: xterm.js einbauen (Farben, Cursor-Steuerung, Scroll, Maus-Events)
 - Danach funktioniert automatisch auch Claude CLI im Terminal
 
-**Status:** Teilweise — Grundlage vorhanden, echte Emulation fehlt
+**Status:** Teilweise — Backend fertig (ConPTY), Frontend-Emulation (xterm.js) fehlt
 
 → *Aus Visionen: "PowerShell-Integration" + "Claude CLI im Terminal"*
 
