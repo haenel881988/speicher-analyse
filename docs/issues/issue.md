@@ -171,7 +171,7 @@ Weitere Funktionen fehlen bei entsprechenden Dateitypen, bei Bildern z.B.: die A
 
 → Vollständige Ergebnisse in [`issue_tiefenanalyse.md`](issue_tiefenanalyse.md)
 **25 Findings:** 3 Kritisch, 8 Hoch, 8 Mittel, 6 Niedrig + 5 Optimierungsmöglichkeiten
-**12 behoben, 13 offen** (Stand 19.02.2026)
+**17 behoben, 8 offen** (Stand 19.02.2026)
 
 **Bereits behoben:**
 - ~~K-1: Scanner/Firewall/Registry-Cleaner~~ → nie ins Tauri portiert (Frontend entfernt)
@@ -182,20 +182,21 @@ Weitere Funktionen fehlen bei entsprechenden Dateitypen, bei Bildern z.B.: die A
 - ~~H-3: Mutex `.unwrap()` Absturzgefahr~~ → `unwrap_or_else` + Hilfsfunktion
 - ~~H-4: PowerShell-Fehler auf Englisch~~ → deutsche Meldungen
 - ~~H-6: 18 Views ohne `destroy()`~~ → `destroy()` für alle Views hinzugefügt
+- ~~H-7: activate/deactivate Pattern~~ → kein Handlungsbedarf (nur NetworkView braucht es, hat es)
+- ~~H-8: system_score Stub-Anzeige~~ → Hinweis-Banner wenn keine Analysedaten
 - ~~M-1: `#[allow(dead_code)]` auf ScanData~~ → entfernt
+- ~~M-2: validate_path() Blocklist~~ → canonicalize + erweiterte Blocklist + Trailing-Backslash-Fix
+- ~~M-4: Lese-Commands ohne Logging~~ → tracing::warn bei Systempfad-Zugriff
 - ~~M-5: Battery-Polling ohne Akku-Check~~ → stoppt bei `hasBattery=false`
 - ~~M-6: `open_external` URL-Validierung~~ → korrigiert
+- ~~M-7: Ignorierter `_command` Parameter~~ → entfernt aus Backend + Bridge
 - ~~M-8: Docs referenzieren Electron~~ → archiviert
 - ~~N-4: blockierendes `std::fs::remove_file`~~ → auf `tokio::fs` umgestellt
 
 **Noch offen:**
-- H-5: Terminal PTY (großer Umbau)
-- H-7: `activate()`/`deactivate()` Pattern für Views
-- H-8: `system_score` Stub-Anzeige
-- M-2: `validate_path()` Blocklist erweitern + kanonisieren
-- M-3: `commands.rs` aufteilen (4500+ Zeilen)
-- M-4: Lese-Commands ohne Pfadvalidierung
-- M-7: `terminal_resize` ignorierter Parameter
+- H-5: Terminal PTY (großer Umbau — separates Feature für echte Terminal-Emulation)
+- M-3: `commands.rs` aufteilen (4500+ Zeilen — Architektur-Refactoring)
+- 6 Niedrig-Findings (N-1 bis N-6 — geringe Priorität)
 
 ## Log-Analyse Findings (19.02.2026)
 

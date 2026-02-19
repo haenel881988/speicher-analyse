@@ -27,10 +27,12 @@ export class SystemScoreView {
         }
 
         const { score, grade, categories, riskLevel } = this.scoreData;
+        const isStub = this.scoreData.stub === true;
         const scoreClass = riskLevel === 'safe' ? 'score-good' : riskLevel === 'moderate' ? 'score-warn' : 'score-bad';
 
         this.container.innerHTML = `
             <div class="score-page">
+                ${isStub ? '<div class="score-stub-notice" style="background:var(--bg-warn,#fff3cd);color:var(--text-warn,#856404);padding:10px 16px;border-radius:6px;margin-bottom:16px;font-size:13px;">Noch keine Analysedaten vorhanden — Score basiert auf Standardwerten. Bitte zuerst einen Scan durchf\u00fchren.</div>' : ''}
                 <div class="score-header">
                     <div class="score-ring-large ${scoreClass}">
                         <span class="score-number">${score}</span>
@@ -38,7 +40,7 @@ export class SystemScoreView {
                     </div>
                     <div class="score-header-info">
                         <h2>System-Gesundheit</h2>
-                        <p class="score-summary">${this._getSummary(score)}</p>
+                        <p class="score-summary">${isStub ? 'Führe einen Scan durch für genaue Ergebnisse.' : this._getSummary(score)}</p>
                     </div>
                 </div>
                 <div class="score-categories">

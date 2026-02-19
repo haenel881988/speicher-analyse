@@ -213,7 +213,7 @@
         terminalWrite: makeInvoke('terminal_write', 'id', 'data'),
         terminalResize: makeInvoke('terminal_resize', 'id', 'cols', 'rows'),
         terminalDestroy: makeInvoke('terminal_destroy', 'id'),
-        terminalOpenExternal: makeInvoke('terminal_open_external', 'cwd', 'command'),
+        terminalOpenExternal: makeInvoke('terminal_open_external', 'cwd'),
         onTerminalData: makeListener('terminal-data'),
         onTerminalExit: makeListener('terminal-exit'),
         onOpenEmbeddedTerminal: makeListener('open-embedded-terminal'),

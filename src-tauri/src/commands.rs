@@ -44,21 +44,35 @@ fn validate_ip(ip: &str) -> Result<(), String> {
 }
 
 fn validate_path(p: &str) -> Result<(), String> {
-    let p_lower = p.to_lowercase().replace('/', "\\");
+    // Canonicalize to resolve symlinks/junctions that could bypass the blocklist
+    let canonical = std::fs::canonicalize(p)
+        .unwrap_or_else(|_| std::path::PathBuf::from(p));
+    let p_lower = canonical.to_string_lossy().to_lowercase().replace('/', "\\");
+
+    // Block drive root (e.g. "C:\") — too dangerous for delete/write
+    if p_lower.len() <= 3 {
+        return Err(format!("Zugriff auf Laufwerkswurzel verweigert: {}", p));
+    }
+
     let blocked = [
-        "\\windows\\system32", "\\windows\\syswow64",
+        "\\windows\\",
         "\\program files\\", "\\program files (x86)\\",
-        "\\programdata\\", "\\$recycle.bin",
+        "\\program files", "\\program files (x86)",
+        "\\programdata\\", "\\programdata",
+        "\\$recycle.bin",
         "\\system volume information",
+        "\\recovery", "\\efi",
     ];
     for b in &blocked {
         if p_lower.contains(b) {
             return Err(format!("Zugriff auf Systempfad verweigert: {}", p));
         }
     }
-    // Block drive root (e.g. "C:\") — too dangerous for delete/write
-    if p_lower.len() <= 3 {
-        return Err(format!("Zugriff auf Laufwerkswurzel verweigert: {}", p));
+    // Also block if the path IS exactly "Program Files" etc. (without trailing content)
+    let path_end = p_lower.rsplit('\\').next().unwrap_or("");
+    let blocked_dirs = ["windows", "program files", "program files (x86)", "programdata", "recovery", "efi"];
+    if blocked_dirs.contains(&path_end) {
+        return Err(format!("Zugriff auf Systempfad verweigert: {}", p));
     }
     Ok(())
 }
@@ -1163,6 +1177,9 @@ pub async fn clean_category(_category_id: String, paths: Vec<String>) -> Result<
 
 #[tauri::command]
 pub async fn read_file_preview(file_path: String, max_lines: Option<u32>) -> Result<Value, String> {
+    if validate_path(&file_path).is_err() {
+        tracing::warn!(path = %file_path, "Lese-Zugriff auf Systempfad");
+    }
     let content = tokio::fs::read_to_string(&file_path).await.map_err(|e| e.to_string())?;
     let lines: Vec<&str> = content.lines().take(max_lines.unwrap_or(100) as usize).collect();
     Ok(json!({ "content": lines.join("\n"), "totalLines": content.lines().count(), "truncated": content.lines().count() > max_lines.unwrap_or(100) as usize }))
@@ -1170,6 +1187,9 @@ pub async fn read_file_preview(file_path: String, max_lines: Option<u32>) -> Res
 
 #[tauri::command]
 pub async fn read_file_content(file_path: String) -> Result<Value, String> {
+    if validate_path(&file_path).is_err() {
+        tracing::warn!(path = %file_path, "Lese-Zugriff auf Systempfad");
+    }
     let content = tokio::fs::read_to_string(&file_path).await.map_err(|e| e.to_string())?;
     Ok(json!({ "content": content }))
 }
@@ -1183,6 +1203,9 @@ pub async fn write_file_content(file_path: String, content: String) -> Result<Va
 
 #[tauri::command]
 pub async fn read_file_binary(file_path: String) -> Result<Value, String> {
+    if validate_path(&file_path).is_err() {
+        tracing::warn!(path = %file_path, "Binär-Lese-Zugriff auf Systempfad");
+    }
     let bytes = tokio::fs::read(&file_path).await.map_err(|e| e.to_string())?;
     use base64::Engine;
     let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
@@ -2253,7 +2276,7 @@ pub async fn terminal_destroy(id: String) -> Result<Value, String> {
 }
 
 #[tauri::command]
-pub async fn terminal_open_external(cwd: Option<String>, _command: Option<String>) -> Result<Value, String> {
+pub async fn terminal_open_external(cwd: Option<String>) -> Result<Value, String> {
     let dir = cwd.unwrap_or_else(|| std::env::var("USERPROFILE").unwrap_or_default());
     let dir_escaped = dir.replace("'", "''");
     // Try Windows Terminal first, fall back to cmd.exe

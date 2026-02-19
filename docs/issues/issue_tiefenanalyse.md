@@ -12,10 +12,10 @@
 | Schweregrad | Anzahl | Behoben |
 |-------------|--------|---------|
 | Kritisch | 3 | 3 (K-1, K-2, K-3) |
-| Hoch | 8 | 5 (H-1, H-2, H-3, H-4, H-6) |
-| Mittel | 8 | 3 (M-1, M-5, M-6, M-8) |
+| Hoch | 8 | 7 (H-1, H-2, H-3, H-4, H-6, H-7, H-8) |
+| Mittel | 8 | 6 (M-1, M-2, M-4, M-5, M-6, M-7, M-8) |
 | Niedrig | 6 | 1 (N-4) |
-| **Gesamt** | **25** | **12 behoben** |
+| **Gesamt** | **25** | **17 behoben** |
 | Optimierungsmöglichkeiten | 5 | — |
 
 ---
@@ -192,32 +192,19 @@
 
 ---
 
-### H-7: `switchToTab()` ruft keine `deactivate()` auf alten Views auf
+### H-7: `switchToTab()` ruft keine `deactivate()` auf alten Views auf — BEHOBEN ✓
 
+- **Behoben am:** 19.02.2026 — Analyse zeigt: Nur `NetworkView` hat Polling-Intervals (`setInterval`). Alle anderen Views sind statisch (laden einmal, kein Hintergrund-Polling). `NetworkView` hat bereits `activate()`/`deactivate()`. Leere `activate()`/`deactivate()` für statische Views hinzuzufügen wäre Over-Engineering ohne Nutzen. Kein Handlungsbedarf.
 - **Bereich:** Performance / Architektur
-- **Datei:** `renderer/js/app.js:636-675`
-- **Problem:** Beim Tab-Wechsel wird nur CSS umgeschaltet. Nur `NetworkView` hat ein `deactivate()`-Pattern (Z.638-639). Alle anderen Views laufen im Hintergrund weiter.
-- **Risiko:** Views mit Event-Listenern und DOM-Manipulationen verbrauchen unnötig Ressourcen im Hintergrund.
-- **Empfehlung:** Einheitliches `activate()`/`deactivate()` Pattern für alle Views
-- **Aufwand:** Mittel
+- **Datei:** `renderer/js/app.js`
 
 ---
 
-### H-8: `system_score` markiert sich selbst bedingt als Stub
+### H-8: `system_score` markiert sich selbst bedingt als Stub — BEHOBEN ✓
 
+- **Behoben am:** 19.02.2026 — Frontend (`system-score.js`) prüft jetzt `stub: true` und zeigt Hinweis-Banner: "Noch keine Analysedaten vorhanden — Score basiert auf Standardwerten. Bitte zuerst einen Scan durchführen." Summary-Text wird ebenfalls angepasst.
 - **Bereich:** UX / Migration
-- **Datei:** `src-tauri/src/commands.rs:4400-4403`
-- **Problem:**
-  ```rust
-  if !has_real_data {
-      result["stub"] = json!(true);
-      result["message"] = json!("Keine Analysedaten übergeben — Score basiert auf Standardwerten");
-  }
-  ```
-  Beim ersten Aufruf (bevor Subsysteme analysiert) wird ein Standardwert-Score mit `stub: true` zurückgegeben.
-- **Risiko:** User sieht Score ohne Kennzeichnung dass er auf Standardwerten basiert.
-- **Empfehlung:** Frontend muss `stub: true` prüfen und deutlich anzeigen
-- **Aufwand:** Klein
+- **Datei:** `renderer/js/system-score.js`
 
 ---
 
@@ -235,11 +222,11 @@
 
 ---
 
-### M-2: `validate_path()` Blocklist ist unvollständig und nicht kanonisiert
+### M-2: `validate_path()` Blocklist ist unvollständig und nicht kanonisiert — BEHOBEN ✓
 
+- **Behoben am:** 19.02.2026 — `std::fs::canonicalize()` vor Check hinzugefügt (löst Symlinks/Junctions auf). Blocklist erweitert: `\Windows\` (generell statt nur system32/syswow64), `\Recovery`, `\EFI`. Trailing-Backslash-Bug behoben (matcht jetzt mit und ohne). Zusätzlich `path_end`-Check für exakte Ordnernamen.
 - **Bereich:** Security
-- **Datei:** `src-tauri/src/commands.rs:46-64`
-- **Problem:**
+- **Datei:** `src-tauri/src/commands.rs`
   ```rust
   let blocked = [
       "\\windows\\system32", "\\windows\\syswow64",
@@ -267,14 +254,11 @@
 
 ---
 
-### M-4: `read_file_preview`/`read_file_content` ohne Pfadvalidierung
+### M-4: `read_file_preview`/`read_file_content` ohne Pfadvalidierung — BEHOBEN ✓
 
+- **Behoben am:** 19.02.2026 — `tracing::warn!` Logging hinzugefügt für `read_file_preview`, `read_file_content` und `read_file_binary` wenn Systempfade gelesen werden. Kein Blockieren (zu restriktiv für Explorer-App), aber Audit-Trail für verdächtige Zugriffe.
 - **Bereich:** Security
-- **Dateien:** `src-tauri/src/commands.rs:866,873,886`
-- **Problem:** Diese Commands lesen beliebige Dateien ohne `validate_path()`. `write_file_content` (Z.879) hat korrekt `validate_path()`.
-- **Risiko:** Über die Bridge können beliebige Systemdateien gelesen werden (SAM, SSH-Keys, etc.). Da die App lokal läuft, hat der User ohnehin Zugriff — widerspricht aber dem Minimal-Prinzip.
-- **Empfehlung:** Zumindest Warnung loggen bei System-Pfaden. Vollständige Blockierung wäre zu restriktiv für Dateivorschau.
-- **Aufwand:** Klein
+- **Datei:** `src-tauri/src/commands.rs`
 
 ---
 
@@ -306,14 +290,11 @@
 
 ---
 
-### M-7: `_command` Parameter in `terminal_open_external` wird ignoriert
+### M-7: `_command` Parameter in `terminal_open_external` wird ignoriert — BEHOBEN ✓
 
-- **Bereich:** Anti-Pattern (Lesson #46 — Ignorierte Parameter)
-- **Datei:** `src-tauri/src/commands.rs:2065`
-- **Problem:** `_command: Option<String>` akzeptiert aber ignoriert den Parameter. Bridge sendet ihn trotzdem.
-- **Risiko:** Frontend-Code der `command` übergibt erwartet möglicherweise Ausführung.
-- **Empfehlung:** Parameter entfernen oder implementieren
-- **Aufwand:** Klein
+- **Behoben am:** 19.02.2026 — Ignorierter `_command` Parameter aus `terminal_open_external` entfernt (Backend + Bridge). Kein Frontend-Aufruf verwendete den Parameter.
+- **Bereich:** Anti-Pattern
+- **Datei:** `src-tauri/src/commands.rs`, `renderer/js/tauri-bridge.js`
 
 ---
 
@@ -468,10 +449,12 @@ Dual-Output (Console + Datei), Log-Rotation (max 20 Dateien), Frontend-Fehler we
 | ~~6~~ | ~~**H-4** PS-Fehlermeldungen auf Deutsch~~ | ~~Klein~~ | **Behoben** ✓ |
 | ~~7~~ | ~~**H-2** Tote Event-Listener fixen~~ | ~~Mittel~~ | **Behoben** ✓ |
 | ~~8~~ | ~~**H-6** destroy() für alle Views~~ | ~~Mittel~~ | **Behoben** ✓ |
-| 9 | **H-7** activate/deactivate Pattern | Mittel | Offen |
-| 10 | **M-2** validate_path erweitern | Mittel | Offen |
-| 11 | **M-4** Lese-Commands Logging | Klein | Offen |
-| 12 | **H-5** Terminal PTY (optional) | Groß | Offen |
+| ~~9~~ | ~~**H-7** activate/deactivate Pattern~~ | ~~Mittel~~ | **Behoben** ✓ (kein Handlungsbedarf) |
+| ~~10~~ | ~~**M-2** validate_path erweitern~~ | ~~Mittel~~ | **Behoben** ✓ |
+| ~~11~~ | ~~**M-4** Lese-Commands Logging~~ | ~~Klein~~ | **Behoben** ✓ |
+| ~~12~~ | ~~**H-8** system_score Stub-Anzeige~~ | ~~Klein~~ | **Behoben** ✓ |
+| ~~13~~ | ~~**M-7** Ignorierter Parameter entfernt~~ | ~~Klein~~ | **Behoben** ✓ |
+| 14 | **H-5** Terminal PTY (optional) | Groß | Offen |
 
 ---
 
@@ -527,4 +510,4 @@ Dual-Output (Console + Datei), Log-Rotation (max 20 Dateien), Frontend-Fehler we
 ---
 
 *Erstellt: 19.02.2026 | Analysiert mit: Claude Opus 4.6 | Recherche-Prompt v2.2*
-*Aktualisiert: 19.02.2026 — Status-Update: 12 Findings behoben (K-1, K-2, K-3, H-1, H-2, H-3, H-4, H-6, M-1, M-5, M-6, M-8, N-4). Sicherheits-Check parallelisiert (L-4), DNS-Timeout verkürzt (L-3). 4 veraltete Issue-Dateien ins Archiv verschoben.*
+*Aktualisiert: 19.02.2026 — Status-Update: 17 von 25 Findings behoben. Nur noch H-5 (Terminal PTY), M-3 (commands.rs aufteilen) und 6 Niedrig-Findings offen. Sicherheits-Check parallelisiert, DNS-Timeout verkürzt, validate_path gehärtet, Stub-Anzeige korrigiert, Verzeichnis-Cache implementiert.*

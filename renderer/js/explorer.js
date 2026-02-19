@@ -160,6 +160,9 @@ export class ExplorerView {
         this._folderSizes = null;
         this._parentFolderSize = 0;
         this._showSizeColors = false;
+        // Directory listing cache (5s TTL, avoids duplicate queries on tab-switch)
+        this._dirCache = new Map();
+        this._dirCacheTTL = 5000;
     }
 
     async init() {
@@ -269,7 +272,21 @@ export class ExplorerView {
 
         this.els.fileList.innerHTML = '<div class="explorer-loading"><div class="loading-spinner"></div></div>';
 
-        const result = await window.api.listDirectory(dirPath);
+        // Use cached result if same path requested within TTL
+        const cached = this._dirCache.get(dirPath);
+        const now = Date.now();
+        let result;
+        if (cached && (now - cached.time) < this._dirCacheTTL) {
+            result = cached.data;
+        } else {
+            result = await window.api.listDirectory(dirPath);
+            this._dirCache.set(dirPath, { data: result, time: now });
+            // Evict old entries (keep max 10)
+            if (this._dirCache.size > 10) {
+                const oldest = this._dirCache.keys().next().value;
+                this._dirCache.delete(oldest);
+            }
+        }
 
         if (result.error) {
             this.els.fileList.innerHTML = `<div class="explorer-error">${this.esc(result.error)}</div>`;
@@ -341,7 +358,10 @@ export class ExplorerView {
     }
 
     refresh() {
-        if (this.currentPath) this.navigateTo(this.currentPath, false);
+        if (this.currentPath) {
+            this._dirCache.delete(this.currentPath); // Force fresh data
+            this.navigateTo(this.currentPath, false);
+        }
     }
 
     getParentPath(p) {
