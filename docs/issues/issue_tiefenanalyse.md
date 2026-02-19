@@ -11,20 +11,20 @@
 
 | Schweregrad | Anzahl | Behoben |
 |-------------|--------|---------|
-| Kritisch | 3 | 2 (K-2, K-3) + K-1 teilweise |
+| Kritisch | 3 | 3 (K-1, K-2, K-3) |
 | Hoch | 8 | 4 (H-1, H-3, H-4, H-6) |
-| Mittel | 8 | 2 (M-1, M-6) |
+| Mittel | 8 | 3 (M-1, M-5, M-6, M-8) |
 | Niedrig | 6 | 1 (N-4) |
-| **Gesamt** | **25** | **9 behoben, 1 teilweise** |
+| **Gesamt** | **25** | **11 behoben** |
 | Optimierungsmöglichkeiten | 5 | — |
 
 ---
 
 ## Kritisch
 
-### K-1: Strategisch "entfernte" Features noch vollständig im Code — TEILWEISE BEHOBEN
+### K-1: Strategisch "entfernte" Features noch vollständig im Code — BEHOBEN ✓
 
-- **Status:** Frontend-Scanner entfernt (470 Zeilen JS + 105 Zeilen CSS). Backend-Commands (Scanner, Firewall, Registry-Cleaner) + Bridge-Einträge + oui.rs noch vorhanden.
+- **Status:** Frontend-Scanner entfernt (470 Zeilen JS + 105 Zeilen CSS). Backend-Verifikation (19.02.2026): Scanner/Firewall/Registry-Cleaner Commands wurden **nie ins Tauri-Backend portiert** — sie existieren nicht in `commands.rs`, `lib.rs` oder `tauri-bridge.js`. `registry.js` existiert nicht. `oui.rs` bleibt (wird vom Verbindungs-Monitor für Firmen-Erkennung und Tracker-Identifikation benötigt — kein Scanner-Code).
 - **Bereich:** Migration / Security / AV-Kompatibilität
 - **Dateien:**
   - `src-tauri/src/commands.rs` — 11 Commands noch vorhanden:
@@ -290,8 +290,9 @@
 
 ---
 
-### M-5: Battery-Polling ohne Akku-Check, Interval nie gestoppt
+### M-5: Battery-Polling ohne Akku-Check, Interval nie gestoppt — BEHOBEN ✓
 
+- **Behoben am:** 19.02.2026 — Bei `hasBattery=false` wird Polling per `clearInterval` gestoppt. Auch im catch-Block wird Polling beendet.
 - **Bereich:** Performance
 - **Datei:** `renderer/js/app.js:262`
 - **Problem:**
@@ -471,7 +472,7 @@ Dual-Output (Console + Datei), Log-Rotation (max 20 Dateien), Frontend-Fehler we
 
 | Prio | Finding | Aufwand | Status |
 |------|---------|---------|--------|
-| 1 | **K-1** Entfernung Scanner/Firewall/Registry (Backend) | Mittel | **Teilweise** — Frontend entfernt, Backend offen |
+| ~~1~~ | ~~**K-1** Entfernung Scanner/Firewall/Registry~~ | ~~Mittel~~ | **Behoben** ✓ (nie ins Tauri portiert) |
 | ~~2~~ | ~~**K-2** CSP `unsafe-eval` entfernen~~ | ~~Klein~~ | **Behoben** ✓ |
 | ~~3~~ | ~~**K-3** validate_path() für delete_to_trash~~ | ~~Klein~~ | **Behoben** ✓ |
 | ~~4~~ | ~~**H-1** restore-window.ps1 Electron-Fix~~ | ~~Klein~~ | **Behoben** ✓ |
@@ -495,7 +496,7 @@ Dual-Output (Console + Datei), Log-Rotation (max 20 Dateien), Frontend-Fehler we
 - [x] package.json clean (nur Tauri-Deps)
 - [x] Kein `main/`-Ordner
 - [x] ~~restore-window.ps1 referenziert `*electron*`~~ (H-1 — behoben)
-- [ ] **TEILWEISE:** Strategische Entfernungen: Frontend entfernt, Backend noch offen (K-1)
+- [x] ~~Strategische Entfernungen~~ (K-1 — behoben: nie ins Tauri portiert)
 
 ### 2. Security
 - [x] PowerShell-Escaping konsequent (40+ Stellen geprüft)
@@ -510,7 +511,7 @@ Dual-Output (Console + Datei), Log-Rotation (max 20 Dateien), Frontend-Fehler we
 - [x] `tokio::task::spawn_blocking` für Dialog-Aufrufe
 - [x] Scan räumt vorherige Daten auf
 - [x] ResizeObserver in destroy() disconnected
-- [ ] **FAIL:** Battery-Polling ohne Akku-Check (M-5)
+- [x] ~~Battery-Polling ohne Akku-Check~~ (M-5 — behoben)
 
 ### 4. Stabilität
 - [x] PowerShell-Timeout vorhanden (30s)

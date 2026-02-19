@@ -467,7 +467,13 @@ function setupToolbar() {
 // ===== Drives =====
 async function loadDrives() {
     try {
-        state.drives = await fetchDrives();
+        // Reuse drives from Explorer if already loaded (avoid duplicate Win32_LogicalDisk query)
+        const explorer = dualPanel?.getActiveExplorer?.();
+        if (explorer?.drives?.length > 0) {
+            state.drives = explorer.drives;
+        } else {
+            state.drives = await fetchDrives();
+        }
         renderDrives();
     } catch (e) {
         els.toolbarDriveSelect.innerHTML = '<option value="">Fehler beim Laden</option>';
@@ -1382,6 +1388,19 @@ let lowBatteryWarningShown = false;
 async function updateBatteryUI() {
     try {
         const backendStatus = await window.api.getBatteryStatus();
+
+        // Desktop-PC without battery: stop polling permanently (L-1/M-5)
+        if (backendStatus.hasBattery === false) {
+            if (state.batteryIntervalId) {
+                clearInterval(state.batteryIntervalId);
+                state.batteryIntervalId = null;
+            }
+            state.batteryInfo = { onBattery: false, percentage: null, isCharging: false };
+            const badge = document.getElementById('battery-badge');
+            if (badge) badge.style.display = 'none';
+            return;
+        }
+
         let percentage = null;
         let isCharging = false;
 
@@ -1416,7 +1435,11 @@ async function updateBatteryUI() {
             badge.style.display = 'none';
         }
     } catch {
-        // Battery API not available (e.g. desktop PC) - hide badge
+        // Battery API not available - stop polling and hide badge
+        if (state.batteryIntervalId) {
+            clearInterval(state.batteryIntervalId);
+            state.batteryIntervalId = null;
+        }
         const badge = document.getElementById('battery-badge');
         if (badge) badge.style.display = 'none';
     }

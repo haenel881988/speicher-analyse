@@ -171,8 +171,10 @@ Weitere Funktionen fehlen bei entsprechenden Dateitypen, bei Bildern z.B.: die A
 
 → Vollständige Ergebnisse in [`issue_tiefenanalyse.md`](issue_tiefenanalyse.md)
 **25 Findings:** 3 Kritisch, 8 Hoch, 8 Mittel, 6 Niedrig + 5 Optimierungsmöglichkeiten
+**11 behoben, 14 offen** (Stand 19.02.2026)
 
-**Bereits behoben (19.02.2026):**
+**Bereits behoben:**
+- ~~K-1: Scanner/Firewall/Registry-Cleaner~~ → nie ins Tauri portiert (Frontend entfernt)
 - ~~K-2: CSP `unsafe-eval`~~ → entfernt
 - ~~K-3: `delete_to_trash` ohne Pfadprüfung~~ → `validate_path()` hinzugefügt
 - ~~H-1: `restore-window.ps1` suchte nach Electron~~ → auf Tauri aktualisiert
@@ -180,12 +182,12 @@ Weitere Funktionen fehlen bei entsprechenden Dateitypen, bei Bildern z.B.: die A
 - ~~H-4: PowerShell-Fehler auf Englisch~~ → deutsche Meldungen
 - ~~H-6: 18 Views ohne `destroy()`~~ → `destroy()` für alle Views hinzugefügt
 - ~~M-1: `#[allow(dead_code)]` auf ScanData~~ → entfernt
+- ~~M-5: Battery-Polling ohne Akku-Check~~ → stoppt bei `hasBattery=false`
 - ~~M-6: `open_external` URL-Validierung~~ → korrigiert
+- ~~M-8: Docs referenzieren Electron~~ → archiviert
 - ~~N-4: blockierendes `std::fs::remove_file`~~ → auf `tokio::fs` umgestellt
-- K-1 (Scanner-Entfernung): **Teilweise** — Frontend-Scanner entfernt, Backend-Scanner/Firewall/Registry-Cleaner Commands noch im Code
 
 **Noch offen:**
-- K-1: Registry-Cleaner + Firewall Commands aus Backend entfernen
 - H-2: 4 tote Event-Listener (kein Backend-Emitter)
 - H-5: Terminal PTY (großer Umbau)
 - H-7: `activate()`/`deactivate()` Pattern für Views
@@ -193,17 +195,15 @@ Weitere Funktionen fehlen bei entsprechenden Dateitypen, bei Bildern z.B.: die A
 - M-2: `validate_path()` Blocklist erweitern + kanonisieren
 - M-3: `commands.rs` aufteilen (4500+ Zeilen)
 - M-4: Lese-Commands ohne Pfadvalidierung
-- M-5: Battery-Polling ohne Akku-Check
 - M-7: `terminal_resize` ignorierter Parameter
-- M-8: Docs referenzieren noch Electron
 
 ## Log-Analyse Findings (19.02.2026)
 
 > Analyse von 20 Log-Dateien (17.-19.02.2026, ~870 KB). **0 Fehler** in allen Logs — die App läuft stabil.
 
-### Finding L-1: Akku-Abfrage auf Desktop-PCs (Niedrig)
+### ~~Finding L-1: Akku-Abfrage auf Desktop-PCs~~ — Behoben ✓
 **Problem:** `get_battery_status` wird alle 30 Sekunden aufgerufen und gibt immer `hasBattery=false` zurück. Auf einem Desktop-PC ohne Akku: 54 unnötige PowerShell-Aufrufe in 12 Minuten.
-**Lösung:** Nach dem ersten `hasBattery=false` das Polling stoppen und den Wert cachen.
+**Lösung:** Bei `hasBattery=false` wird Polling per `clearInterval` sofort gestoppt.
 
 ### Finding L-2: Doppelte Verzeichnis-Abfragen (Niedrig)
 **Problem:** Dieselben Ordner (Desktop, Dokumente, Downloads) werden 10x in 12 Minuten abgefragt, weil jeder Tab-Wechsel einen neuen `list_directory`-Aufruf auslöst.
@@ -217,11 +217,11 @@ Weitere Funktionen fehlen bei entsprechenden Dateitypen, bei Bildern z.B.: die A
 **Problem:** `run_security_audit` ist der langsamste Befehl — 12 Prüfungen in einem einzigen PowerShell-Aufruf (Get-NetFirewallProfile, Get-MpComputerStatus, Get-BitLockerVolume, etc.).
 **Lösung:** Die 12 Prüfungen in 3-4 parallele Blöcke aufteilen (Ziel: unter 8 Sekunden).
 
-### Finding L-5: Doppelte Laufwerk-Abfrage beim Start (Niedrig)
+### ~~Finding L-5: Doppelte Laufwerk-Abfrage beim Start~~ — Behoben ✓
 **Problem:** `Win32_LogicalDisk` wird beim App-Start zweimal innerhalb von 300ms aufgerufen — derselbe Datensatz wird doppelt abgefragt.
-**Lösung:** Zweiten Aufruf entfernen oder Ergebnis des ersten wiederverwenden.
+**Lösung:** `loadDrives()` verwendet jetzt die bereits vom Explorer geladenen Daten wieder.
 
-**Status:** Dokumentiert — Umsetzung bei nächster Optimierungsrunde
+**Status:** L-1 und L-5 behoben. L-2, L-3, L-4 noch offen.
 
 ---
 
