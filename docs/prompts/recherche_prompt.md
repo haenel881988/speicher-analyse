@@ -697,8 +697,8 @@ done
 | **Lessons Learned** | `docs/lessons-learned/lessons-learned.md` | Dokumentierte Fehler — nicht wiederholen |
 | **Governance** | `docs/planung/governance.md` | Code-Qualitätsregeln (WCAG, Security, Performance) |
 | **Migrations-Checkliste** | `docs/planung/migrations-checkliste.md` | Status der Electron→Tauri Migration |
-| **Meta-Analyse** | `docs/issues/issue_meta_analyse.md` | Migrations-Analyse (Vorarbeit) |
-| **Code-Audit** | `docs/issues/issue_code_audit.md` | Früherer Audit (Vergleichsbasis) |
+| **Meta-Analyse** | `docs/issues/archiv/issue_meta_analyse.md` | Migrations-Analyse (archiviert) |
+| **Code-Audit** | `docs/issues/archiv/issue_code_audit.md` | Früherer Audit (archiviert, ersetzt durch Tiefenanalyse) |
 | **Strategische Entscheidungen** | `docs/issues/issue.md` (Abschnitt) | Netzwerk-Scanner + Registry-Cleaner Entfernung |
 | **Simons Ideen** | `docs/issues/issue.md` (Abschnitt "Ideen Salat") | Geplante Features: Explorer-Kontextmenü, Datei-Icons, Terminal als Admin, etc. |
 

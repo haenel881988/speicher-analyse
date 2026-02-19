@@ -4,7 +4,7 @@
 > Visionen werden durch die KI geprüft, validiert und in die Projektplanung übertragen.
 > Simon bittet die KI, diese Datei zu sortieren und aktuell zu halten (was umgesetzt wurde, was nicht).
 >
-> **Zuletzt aktualisiert:** 12.02.2026
+> **Zuletzt aktualisiert:** 19.02.2026
 > **Offene Scopes sind konsolidiert in:** [`docs/issues/issue.md`](../issues/issue.md)
 
 ---
@@ -23,11 +23,11 @@
 
 ## 1. Customizing & UI
 
-### 1.1 WCAG Kontrast — Teilweise (v7.2)
+### 1.1 WCAG Kontrast — Teilweise (v7.2.1)
 
 WCAG / Kontrastverhältnis stimmt noch immer nicht überein. Das muss vertieft werden. Der Kontrast muss zwingend WCAG 2.2 Konform sein.
 
-**Status:** 6 Kontrastverletzungen in v7.2 behoben. Governance-Datei mit WCAG 2.2 AA Pflicht erstellt. User meldet: Kontrast muss weiter vertieft werden.
+**Status:** 6+11 Kontrastverletzungen behoben. Grundfarben strukturell verstärkt (alle 66 Stellen). Automatischer Prüfer testet 1495 Elemente in 13 Views — 0 Verletzungen. Wartet auf Simons visuelle Bestätigung.
 
 **→ Issue-Datei:** Issue #12 in [`docs/issues/issue.md`](../issues/issue.md)
 
@@ -155,9 +155,11 @@ Statt alles fest in die main.js und renderer.js zu hämmern → Architektur modu
 **→ Issue-Datei:** Issue #18 in [`docs/issues/issue.md`](../issues/issue.md)
 
 
-### 5.4 MCP-Server — KI-Direktzugriff auf die App — Geplant
+### 5.4 MCP-Server — KI-Direktzugriff auf die App — Teilweise (v1.0)
 
 Simons Idee: Ein MCP-Server in der App, damit KI-Assistenten (Claude, etc.) direkt auf Scan-Ergebnisse, Netzwerkdaten und System-Informationen zugreifen können. Sicherheit: Nur lokal, kein Internet, abschaltbar. Damit könnte eine KI direkt sagen: "Du hast 15 GB Duplikate — soll ich aufräumen?"
+
+**Status:** Erste Version implementiert (10 Werkzeuge, Lese-Zugriff). Server-Code wurde bei Tauri-Migration entfernt und muss bei Bedarf neu aufgebaut werden.
 
 **→ Issue-Datei:** Issue #19 in [`docs/issues/issue.md`](../issues/issue.md)
 

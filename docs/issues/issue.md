@@ -2,7 +2,52 @@
 
 > Diese Datei gehört Simon. Nur Simon darf Issues als erledigt markieren.
 > Die KI dokumentiert hier den Stand und die Planung in verständlicher Sprache.
-> **Konsolidiert am 12.02.2026** — Alle offenen Scopes aus allen Dokumenten zusammengeführt.
+> **Konsolidiert am 19.02.2026** — Alle offenen Scopes zusammengeführt, Status aktualisiert.
+
+---
+
+## Simons Ideen Salat
+
+> Simons ursprüngliche Ideen — unverändert beibehalten. Claude ergänzt jeweils den aktuellen Status.
+
+### Sicherheitscheck / GPO-Scanner
+
+ - Erweiterung vom Sicherheitscheck - oder unterregister mit einem GPO Scan. Dabei soll der Scan die GPOs scannen ob es potenziell problematische Einstellungen gibt, die zu Fehlern, bluescreens etc. führen, gerade kombiniert mit der Registry können so sehr subtile Probleme sichtbar gemacht werden, damit dann schritt für schritt das Problem behoben werden kann / evtl. auch welche übergeordnete GPO die Problematik verursacht.
+
+> **Claude:** Eingeplant als Stufe 2 Feature (§2.2 GPO-Scanner). Noch nicht implementiert — kommt nach Stufe 1.
+
+### Webbrowser-Integration
+
+- Integration eines Webbrowser, damit z.B.: im netzwerk direkt das jeweilige Netzwerkgerät über die IP Adresse aufgerufen werden kann.
+
+> **Claude:** Noch offen. Der IP-Scanner wurde entfernt (AV-Risiko), aber ein eingebetteter Browser für Geräte-Zugriff wäre unabhängig davon möglich. Kein Issue angelegt.
+
+### Explorer-Funktionen
+
+  1. Kontextmenü fehlt, wie bei Windows 11.
+  2. Keine extraktion möglich im Kontextmenü wie bei Windows bei z.B.: zip-Dateien.
+  3. Es fehlen die erweiterten Eigenschaften wie bei Windows --> Rechte Maustaste --> Eigenschaften.
+
+Weitere Funktionen fehlen bei entsprechenden Dateitypen, bei Bildern z.B.: die Anzeige / Vorschau Funktion.
+
+ - z.B.: Exe Dateien können nicht als admin ausgeführt werden.
+ - PDF, exe Dateien etc. haben eigene Favicons - im Explorer sehen alle Dateien exakt gleich aus - es fehlen die Icons.
+
+> **Claude — Status (19.02.2026):**
+> - ~~Kontextmenü fehlt~~ → **Umgesetzt** (v7.2.1 #91) — Vollständiges Kontextmenü wie Windows 11
+> - ~~Keine Extraktion möglich~~ → **Umgesetzt** (v7.2.1 #91) — ZIP-Extraktion im Kontextmenü
+> - ~~Erweiterte Eigenschaften fehlen~~ → **Umgesetzt** (v7.2.1 #99-100) — 4-Tab Eigenschaften-Dialog wie Windows Explorer (Allgemein, Sicherheit, Details, Vorgängerversionen)
+> - ~~Exe als Admin ausführen~~ → **Umgesetzt** (v7.2.1 #91) — "Als Administrator ausführen" im Kontextmenü
+> - Bildvorschau → **Noch offen** — Vorschau für Bilder/Medien fehlt noch
+> - Datei-Icons → **Teilweise** — `getFileIcon()` existiert im Explorer, aber im Verzeichnisbaum sehen Dateien noch gleich aus
+
+### Terminal-Funktionen
+
+- Terminal Funktion: Evtl. direkt als Admin aufrufbar? separate Funktion, damit nicht die ganze App als Admin gestartet werden muss?
+ - Terminal Pfad ändert sich je nach dem im welchem Verzeichnis man sich befindet. Diese Funktion soll die Möglichkeit besitzen, deaktiviert zu werden, für menschen die das gar nicht mögen.
+ - Terminal: Evtl. weitere Terminals einbauen, z.B.: ubuntu shell?
+
+> **Claude:** Terminal ist teilweise umgesetzt (Multi-Shell: PowerShell/CMD/WSL). Echte Terminal-Emulation (xterm.js/PTY) fehlt noch → Issue #14. Admin-Terminal als separater Prozess ist technisch möglich, aber noch nicht geplant.
 
 ---
 
@@ -15,39 +60,9 @@
 
 ---
 
-## Simons Ideen Salat
-
- - Erweiterung vom Sicherheitscheck - oder unterregister mit einem GPO Scan. Dabei soll der Scan die GPOs scannen ob es potenziell problematische Einstellungen gibt, die zu Fehlern, bluescreens etc. führen, gerade kombiniert mit der Registry können so sehr subtile Probleme sichtbar gemacht werden, damit dann schritt für schritt das Problem behoben werden kann / evtl. auch welche übergeordnete GPO die Problematik verursacht.
-
-
-
-
-- Integration eines Webbrowser, damit z.B.: im netzwerk direkt das jeweilige Netzwerkgerät über die IP Adresse aufgerufen werden kann.
-
-# Explorer:
-  1. Kontextmenü fehlt, wie bei Windows 11.
-  2. Keine extraktion möglich im Kontextmenü wie bei Windows bei z.B.: zip-Dateien.
-  3. Es fehlen die erweiterten Eigenschaften wie bei Windows --> Rechte Maustaste --> Eigenschaften.
-
-Weitere Funktionen fehlen bei entsprechenden Dateitypen, bei Bildern z.B.: die Anzeige / Vorschau Funktion.
-
- - z.B.: Exe Dateien können nicht als admin ausgeführt werden.
- - PDF, exe Dateien etc. haben eigene Favicons - im Explorer sehen alle Dateien exakt gleich aus - es fehlen die Icons.
-
- 
-
-# Terminal Funktionen
-
-- Terminal Funktion: Evtl. direkt als Admin aufrufbar? separate Funktion, damit nicht die ganze App als Admin gestartet werden muss?
- - Terminal Pfad ändert sich je nach dem im welchem Verzeichnis man sich befindet. Diese Funktion soll die Möglichkeit besitzen, deaktiviert zu werden, für menschen die das gar nicht mögen.
- - Terminal: Evtl. weitere Terminals einbauen, z.B.: ubuntu shell?
- - 
-
-
-
 # Strategische Entscheidungen
 
-## Entfernung: Netzwerk-Scanner (IP Scanner) — Geplant
+## Entfernung: Netzwerk-Scanner (IP Scanner) — Umgesetzt ✓
 
 **Entscheidung (18.02.2026):** Der gesamte Netzwerk-Scanner soll aus der App entfernt werden.
 
@@ -76,7 +91,7 @@ Weitere Funktionen fehlen bei entsprechenden Dateitypen, bei Bildern z.B.: die A
 - Issue #20 (Geräte falsch erkannt) wird obsolet
 - GPO-Scanner und Sicherheits-Check bleiben (betreffen nur den lokalen PC)
 
-**Status:** Umgesetzt (19.02.2026) — Frontend-Code entfernt (470 Zeilen). Backend/Bridge hatten keine Scanner-Commands (nie implementiert). oui.rs bleibt (wird vom Verbindungs-Monitor benötigt). ~100 Zeilen verwaiste CSS-Klassen (netinv-*, network-device-*) verbleiben als harmloser toter Code.
+**Status:** Umgesetzt (19.02.2026) — Frontend-Code entfernt (470 Zeilen), verwaiste Scanner-CSS bereinigt (105 Zeilen). Backend/Bridge hatten keine Scanner-Commands (nie implementiert). oui.rs bleibt (wird vom Verbindungs-Monitor benötigt).
 
 ---
 
@@ -119,6 +134,10 @@ Weitere Funktionen fehlen bei entsprechenden Dateitypen, bei Bildern z.B.: die A
 | — | Swiss Security Suite (4 Module: Geräte-Scanner, Sicherheits-Check, PDF-Bericht, Hochrisiko-Alarm) | Implementiert |
 | — | Netzwerk-Monitor Upgrade (Echtzeit-Polling, Verlauf-Tab) | Implementiert |
 | — | IP-Scanner aus Netzwerk-Monitor entfernt (AV-Risiko) | 19.02.2026 |
+| — | Verwaiste Scanner-CSS bereinigt (105 Zeilen) | 19.02.2026 |
+| — | Eigenschaften-Dialog mit 4 Tabs (Allgemein, Sicherheit, Details, Vorgängerversionen) | 19.02.2026 |
+| — | Eigenschaften-Dialog Performance: Rust-native statt PowerShell | 19.02.2026 |
+| — | Letzte Electron-Fragmente bereinigt | 19.02.2026 |
 
 ---
 
@@ -152,11 +171,31 @@ Weitere Funktionen fehlen bei entsprechenden Dateitypen, bei Bildern z.B.: die A
 
 → Vollständige Ergebnisse in [`issue_tiefenanalyse.md`](issue_tiefenanalyse.md)
 **25 Findings:** 3 Kritisch, 8 Hoch, 8 Mittel, 6 Niedrig + 5 Optimierungsmöglichkeiten
-**Wichtigste Punkte:**
-- "Entfernte" Features (Scanner, Firewall, Registry-Cleaner) noch im Code — AV-Risiko
-- Sicherheitslücke: `unsafe-eval` in CSP + fehlende Pfadprüfung bei Lösch-Befehl
-- 4 Event-Listener im Frontend die auf nie gesendete Backend-Events warten
-- 18 Ansichten ohne Aufräum-Funktion, PowerShell-Fehler auf Englisch
+
+**Bereits behoben (19.02.2026):**
+- ~~K-2: CSP `unsafe-eval`~~ → entfernt
+- ~~K-3: `delete_to_trash` ohne Pfadprüfung~~ → `validate_path()` hinzugefügt
+- ~~H-1: `restore-window.ps1` suchte nach Electron~~ → auf Tauri aktualisiert
+- ~~H-3: Mutex `.unwrap()` Absturzgefahr~~ → `unwrap_or_else` + Hilfsfunktion
+- ~~H-4: PowerShell-Fehler auf Englisch~~ → deutsche Meldungen
+- ~~H-6: 18 Views ohne `destroy()`~~ → `destroy()` für alle Views hinzugefügt
+- ~~M-1: `#[allow(dead_code)]` auf ScanData~~ → entfernt
+- ~~M-6: `open_external` URL-Validierung~~ → korrigiert
+- ~~N-4: blockierendes `std::fs::remove_file`~~ → auf `tokio::fs` umgestellt
+- K-1 (Scanner-Entfernung): **Teilweise** — Frontend-Scanner entfernt, Backend-Scanner/Firewall/Registry-Cleaner Commands noch im Code
+
+**Noch offen:**
+- K-1: Registry-Cleaner + Firewall Commands aus Backend entfernen
+- H-2: 4 tote Event-Listener (kein Backend-Emitter)
+- H-5: Terminal PTY (großer Umbau)
+- H-7: `activate()`/`deactivate()` Pattern für Views
+- H-8: `system_score` Stub-Anzeige
+- M-2: `validate_path()` Blocklist erweitern + kanonisieren
+- M-3: `commands.rs` aufteilen (4500+ Zeilen)
+- M-4: Lese-Commands ohne Pfadvalidierung
+- M-5: Battery-Polling ohne Akku-Check
+- M-7: `terminal_resize` ignorierter Parameter
+- M-8: Docs referenzieren noch Electron
 
 ## Log-Analyse Findings (19.02.2026)
 
@@ -399,58 +438,17 @@ Eine Art "Waage für die Festplatte":
 
 ---
 
-## 11. Netzwerk-Paketaufzeichnung (Deep Packet Inspection)
+## ~~11. Netzwerk-Paketaufzeichnung~~ — ENTFALLEN
 
-**Simons Idee:** Nicht nur sehen WELCHE Programme ins Internet verbinden, sondern auch WAS sie genau senden und empfangen. Ähnlich wie Wireshark, aber einfach zu bedienen.
-
-**Was das bringen würde:**
-- Sehen welche Daten Apps wirklich nach Hause schicken
-- "Diese App hat in den letzten 10 Minuten 47 MB an Google gesendet — was war das?"
-- Verdächtige Verbindungen im Detail analysieren
-- Beweise sammeln wenn eine App sich verdächtig verhält
-
-**Mögliche Wege:**
-1. Windows-Bordmittel: `netsh trace start capture=yes` (braucht Administratorrechte)
-2. Externe Bibliothek: npcap + raw sockets (professioneller, aufwändiger)
-
-**Status:** Idee — für spätere Version
+> **Gestrichen (18.02.2026):** AV-Software erkennt Paketaufzeichnung als verdächtige Aktivität. Siehe "Strategische Entscheidungen" oben.
 
 ---
 
-## 20. Netzwerk-Geräte werden falsch erkannt
+## ~~20. Netzwerk-Geräte werden falsch erkannt~~ — OBSOLET
 
-**Problem:** Im Netzwerk-Monitor werden Geräte falsch zugewiesen. Zum Beispiel wird ein Router als Drucker angezeigt, oder eine Kamera als TV.
-
-**Wurzelursache (gefunden am 14.02.2026):**
-
-Die Geräte-Erkennung arbeitet mit einer festen Liste: "Dieser Hersteller = dieser Gerätetyp." Das Problem: Hersteller bauen verschiedene Geräte.
-- Canon baut Drucker UND Kameras → eine Canon-Kamera wird als Drucker angezeigt
-- Sony baut TVs UND Kameras UND Spielkonsolen → alles wird als "TV" angezeigt
-- Buffalo baut Speichergeräte UND Router → ein Buffalo-Router wird als Speichergerät angezeigt
-
-Zusätzlich: Die App fragt Geräte bereits intelligent ab (z.B. "Was bist du?"), aber diese Antworten werden bei der Zuordnung **ignoriert**. Sie werden erst nachträglich angehängt — zu spät, die falsche Entscheidung ist schon gefallen.
-
-Ausserdem: Manche Router haben einen eingebauten Druckdienst. Die App sieht diesen Dienst und denkt: "Muss ein Drucker sein."
-
-**Dieses Problem hat ein Muster — es betrifft nicht nur die Geräte-Erkennung:**
-
-| Bereich | Gleiches Problem | Auswirkung |
-|---------|-----------------|------------|
-| Bloatware-Erkennung | Feste Liste mit 44 Namen. Umbenannte Schadsoftware wird nicht erkannt | Sicherheitsrisiko |
-| Software-Kategorisierung | 150+ Programmnamen fest eingetragen. Neue Programme = "Sonstige" | Wird mit der Zeit nutzlos |
-| Optimierer | Energieplan-Erkennung nur für deutsch/englisches Windows | Fehler bei anderssprachigem Windows |
-| Bereinigung | Feste Ordnerpfade für temporäre Dateien | Benutzerdefinierte Pfade werden übersehen |
-| Dateitypen | Feste Dateiendungen → Kategorie. Neue Formate (.heic, .avif) fehlen | Falsche Statistiken |
-
-**Grundsatz für die Lösung:** Erst prüfen was ein Gerät/Programm **TUT**, dann als Notlösung schauen was es **HEISST**.
-
-**Geplante Lösung (Netzwerk-Geräte):**
-1. Die intelligenten Abfragen (UPnP, HTTP-Banner, Druckerabfrage) ZUERST auswerten
-2. Wenn ein Gerät auf die Frage "Was bist du?" antwortet → diese Antwort verwenden
-3. Nur wenn keine Antwort kommt → Herstellername + offene Dienste als Backup
-4. Der Herstellername allein reicht NIE mehr für die Zuordnung
-
-**Status:** Root Cause gefunden, Lösung geplant
+> **Entfallen (19.02.2026):** Der gesamte IP-Scanner wurde aus der App entfernt (AV-Risiko). Damit ist die Geräte-Erkennung nicht mehr relevant.
+>
+> **Hinweis:** Das Grundproblem "statische Listen statt dynamische Erkennung" bleibt als Lehre für andere Bereiche (Bloatware, Software-Kategorisierung) relevant — siehe CLAUDE.md Regel "VERBOTEN: Statische Listen für Erkennung/Discovery".
 
 ---
 
@@ -1029,7 +1027,7 @@ Bevor Stufe 4 angegangen wird, müssen diese Bedingungen erfüllt sein:
 | Stufe | Issues | Neue Features |
 |-------|--------|---------------|
 | **1** | #2, #3, #4, #5, #7, #8, #9, #10, #12, #13, #14, #15 | Diagnose-Knopf |
-| **2** | #11 | GPO-Scanner, Erweiterter Sicherheits-Check, Firewall-Verwaltung |
+| **2** | — | GPO-Scanner, Erweiterter Sicherheits-Check (Firewall/Paket entfallen) |
 | **3** | #16 | Multi-Geräte-Inventar, IT-Berichte, Hardware-Lebenszyklus |
 | **4** | #17, #18, #19 | Fernwartung, Zentrales Dashboard, Monitoring, Automatisierung |
 

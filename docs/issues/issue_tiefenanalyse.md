@@ -1,6 +1,6 @@
 # Tiefenanalyse-Ergebnisse — Speicher Analyse v7.2.1
 
-**Datum:** 19.02.2026
+**Datum:** 19.02.2026 | **Aktualisiert:** 19.02.2026
 **Analysiert von:** Claude Opus 4.6 (Tiefenanalyse-Prompt v2.2)
 **Analysierte Bereiche:** 14 (Migration, Security, Performance, Stabilität, Architektur, UX, Windows, Dependencies, Konsistenz, Anti-Patterns, Events, Build, Upgrade-Pfad, Dead Code)
 **Methode:** Manuelle Datei-für-Datei-Analyse aller Kern-Dateien (kein Agent, kein Skript)
@@ -9,21 +9,22 @@
 
 ## Zusammenfassung
 
-| Schweregrad | Anzahl |
-|-------------|--------|
-| Kritisch | 3 |
-| Hoch | 8 |
-| Mittel | 8 |
-| Niedrig | 6 |
-| **Gesamt** | **25** |
-| Optimierungsmöglichkeiten | 5 |
+| Schweregrad | Anzahl | Behoben |
+|-------------|--------|---------|
+| Kritisch | 3 | 2 (K-2, K-3) + K-1 teilweise |
+| Hoch | 8 | 4 (H-1, H-3, H-4, H-6) |
+| Mittel | 8 | 2 (M-1, M-6) |
+| Niedrig | 6 | 1 (N-4) |
+| **Gesamt** | **25** | **9 behoben, 1 teilweise** |
+| Optimierungsmöglichkeiten | 5 | — |
 
 ---
 
 ## Kritisch
 
-### K-1: Strategisch "entfernte" Features noch vollständig im Code
+### K-1: Strategisch "entfernte" Features noch vollständig im Code — TEILWEISE BEHOBEN
 
+- **Status:** Frontend-Scanner entfernt (470 Zeilen JS + 105 Zeilen CSS). Backend-Commands (Scanner, Firewall, Registry-Cleaner) + Bridge-Einträge + oui.rs noch vorhanden.
 - **Bereich:** Migration / Security / AV-Kompatibilität
 - **Dateien:**
   - `src-tauri/src/commands.rs` — 11 Commands noch vorhanden:
@@ -45,8 +46,9 @@
 
 ---
 
-### K-2: CSP erlaubt `unsafe-inline` UND `unsafe-eval` gleichzeitig
+### K-2: CSP erlaubt `unsafe-inline` UND `unsafe-eval` gleichzeitig — BEHOBEN ✓
 
+- **Behoben am:** 19.02.2026 (Tiefenanalyse #95) — `unsafe-eval` aus CSP entfernt
 - **Bereich:** Security
 - **Datei:** `src-tauri/tauri.conf.json:26`
 - **Problem:** Die Content Security Policy enthält:
@@ -63,8 +65,9 @@
 
 ---
 
-### K-3: `delete_to_trash` ohne Pfadvalidierung
+### K-3: `delete_to_trash` ohne Pfadvalidierung — BEHOBEN ✓
 
+- **Behoben am:** 19.02.2026 (Tiefenanalyse #95) — `validate_path()` hinzugefügt
 - **Bereich:** Security / Path Traversal
 - **Datei:** `src-tauri/src/commands.rs:358-374`
 - **Problem:** `delete_to_trash` akzeptiert `Vec<String>` und schickt Pfade direkt an PowerShell. **Kein** `validate_path()` Aufruf. Im Gegensatz dazu hat `delete_permanent` (Z.377) korrekt `validate_path()`.
@@ -81,8 +84,9 @@
 
 ## Hoch
 
-### H-1: Electron-Altlast in `tools/wcag/restore-window.ps1`
+### H-1: Electron-Altlast in `tools/wcag/restore-window.ps1` — BEHOBEN ✓
 
+- **Behoben am:** 19.02.2026 (Tiefenanalyse #95) — `*electron*` durch `*speicher*` ersetzt
 - **Bereich:** Migration
 - **Datei:** `tools/wcag/restore-window.ps1:12,23`
 - **Problem:**
@@ -118,8 +122,9 @@
 
 ---
 
-### H-3: ~30 `lock().unwrap()` auf Mutex — Poisoned Mutex = App-Crash
+### H-3: ~30 `lock().unwrap()` auf Mutex — Poisoned Mutex = App-Crash — BEHOBEN ✓
 
+- **Behoben am:** 19.02.2026 (Tiefenanalyse #95) — `unwrap_or_else(|e| e.into_inner())` + Hilfsfunktion
 - **Bereich:** Stabilität
 - **Dateien:**
   - `src-tauri/src/commands.rs` (Z.1964, 2012, 2023, 2048, 2577-2578, 2732, 2825-2838, 2944, 2974, 2979-2980, 3013, 3038, 3087, 3169, 3184, 3211, 3233, 3255, 4088, 4099, 4108)
@@ -131,8 +136,9 @@
 
 ---
 
-### H-4: PowerShell-Fehlermeldungen auf Englisch ans Frontend durchgereicht
+### H-4: PowerShell-Fehlermeldungen auf Englisch ans Frontend durchgereicht — BEHOBEN ✓
 
+- **Behoben am:** 19.02.2026 (Tiefenanalyse #95) — Deutsche Meldungen implementiert
 - **Bereich:** Lokalisierung / UX
 - **Datei:** `src-tauri/src/ps.rs:66,89`
 - **Problem:**
@@ -164,8 +170,9 @@
 
 ---
 
-### H-6: 18 View-Klassen ohne `destroy()` Methode
+### H-6: 18 View-Klassen ohne `destroy()` Methode — BEHOBEN ✓
 
+- **Behoben am:** 19.02.2026 (Tiefenanalyse #95) — `destroy()` für alle 18 Views hinzugefügt
 - **Bereich:** Architektur / Memory-Leak-Prävention
 - **Betroffene Dateien:**
 
@@ -228,8 +235,9 @@
 
 ## Mittel
 
-### M-1: `#[allow(dead_code)]` auf ScanData-Struct
+### M-1: `#[allow(dead_code)]` auf ScanData-Struct — BEHOBEN ✓
 
+- **Behoben am:** 19.02.2026 (Tiefenanalyse #95) — Attribut entfernt
 - **Bereich:** Wartbarkeit / Dead Code
 - **Datei:** `src-tauri/src/scan.rs:14`
 - **Problem:** `#[allow(dead_code)]` auf der gesamten Struct verdeckt Compiler-Warnungen über ungenutzte Felder.
@@ -297,8 +305,9 @@
 
 ---
 
-### M-6: `open_external` URL-Validierung ist minimal
+### M-6: `open_external` URL-Validierung ist minimal — BEHOBEN ✓
 
+- **Behoben am:** 19.02.2026 (Tiefenanalyse #95) — URL-Parsing-Validierung hinzugefügt
 - **Bereich:** Security
 - **Datei:** `src-tauri/src/commands.rs:1668-1676`
 - **Problem:** Prüft nur auf `http://`/`https://` Prefix, keine URL-Parsing-Validierung.
@@ -319,16 +328,10 @@
 
 ---
 
-### M-8: Docs referenzieren noch Electron in aktiven Dateien
+### M-8: Docs referenzieren noch Electron in aktiven Dateien — BEHOBEN ✓
 
+- **Behoben am:** 19.02.2026 — `issue_code_audit.md` und `issue_meta_analyse.md` ins Archiv verschoben (`docs/issues/archiv/`). Lessons-Learned Electron-Einträge sind als historisch korrekt markiert.
 - **Bereich:** Migration / Dokumentation
-- **Betroffene Dateien:**
-  - `docs/issues/issue_code_audit.md` — Electron-Referenzen (Z.290, 294, 319)
-  - `docs/issues/issue_meta_analyse.md` — Electron-Vergleiche (Z.13-37)
-  - `docs/lessons-learned/lessons-learned.md` — ~20 Einträge mit Electron (historisch)
-- **Risiko:** KI-Assistenten können durch Häufigkeit von Electron-Referenzen verwirrt werden.
-- **Empfehlung:** issue_code_audit.md und issue_meta_analyse.md als "Archiv" kennzeichnen. Lessons-Learned Electron-Einträge sind als historisch bereits korrekt markiert.
-- **Aufwand:** Klein
 
 ---
 
@@ -363,8 +366,9 @@
 
 ---
 
-### N-4: `delete_network_recording` nutzt blockierendes `std::fs::remove_file`
+### N-4: `delete_network_recording` nutzt blockierendes `std::fs::remove_file` — BEHOBEN ✓
 
+- **Behoben am:** 19.02.2026 (Tiefenanalyse #95) — auf `tokio::fs::remove_file` umgestellt
 - **Bereich:** Performance
 - **Datei:** `src-tauri/src/commands.rs:3367`
 - **Problem:** Nutzt synchrones `std::fs::remove_file` statt `tokio::fs::remove_file`. Blockiert kurz den Tokio-Thread.
@@ -465,20 +469,20 @@ Dual-Output (Console + Datei), Log-Rotation (max 20 Dateien), Frontend-Fehler we
 
 ## Priorisierte Maßnahmen-Liste
 
-| Prio | Finding | Aufwand | Risikoreduktion |
-|------|---------|---------|-----------------|
-| 1 | **K-1** Entfernung Scanner/Firewall/Registry | Mittel | AV-Blockierung verhindern |
-| 2 | **K-2** CSP `unsafe-eval` entfernen | Klein | XSS-Ausnutzung erschweren |
-| 3 | **K-3** validate_path() für delete_to_trash | Klein | Path Traversal schließen |
-| 4 | **H-1** restore-window.ps1 Electron-Fix | Klein | WCAG-Tools reparieren |
-| 5 | **H-3** Mutex unwrap() ersetzen | Mittel | Kaskaden-Crashes verhindern |
-| 6 | **H-4** PS-Fehlermeldungen auf Deutsch | Klein | UX verbessern |
-| 7 | **H-2** Tote Event-Listener fixen | Mittel | Fortschritts-Feedback |
-| 8 | **H-6** destroy() für alle Views | Mittel | Memory-Leak-Prävention |
-| 9 | **H-7** activate/deactivate Pattern | Mittel | Performance |
-| 10 | **M-2** validate_path erweitern | Mittel | Security |
-| 11 | **M-4** Lese-Commands Logging | Klein | Security-Audit |
-| 12 | **H-5** Terminal PTY (optional) | Groß | Terminal-Qualität |
+| Prio | Finding | Aufwand | Status |
+|------|---------|---------|--------|
+| 1 | **K-1** Entfernung Scanner/Firewall/Registry (Backend) | Mittel | **Teilweise** — Frontend entfernt, Backend offen |
+| ~~2~~ | ~~**K-2** CSP `unsafe-eval` entfernen~~ | ~~Klein~~ | **Behoben** ✓ |
+| ~~3~~ | ~~**K-3** validate_path() für delete_to_trash~~ | ~~Klein~~ | **Behoben** ✓ |
+| ~~4~~ | ~~**H-1** restore-window.ps1 Electron-Fix~~ | ~~Klein~~ | **Behoben** ✓ |
+| ~~5~~ | ~~**H-3** Mutex unwrap() ersetzen~~ | ~~Mittel~~ | **Behoben** ✓ |
+| ~~6~~ | ~~**H-4** PS-Fehlermeldungen auf Deutsch~~ | ~~Klein~~ | **Behoben** ✓ |
+| 7 | **H-2** Tote Event-Listener fixen | Mittel | Offen |
+| ~~8~~ | ~~**H-6** destroy() für alle Views~~ | ~~Mittel~~ | **Behoben** ✓ |
+| 9 | **H-7** activate/deactivate Pattern | Mittel | Offen |
+| 10 | **M-2** validate_path erweitern | Mittel | Offen |
+| 11 | **M-4** Lese-Commands Logging | Klein | Offen |
+| 12 | **H-5** Terminal PTY (optional) | Groß | Offen |
 
 ---
 
@@ -490,8 +494,8 @@ Dual-Output (Console + Datei), Log-Rotation (max 20 Dateien), Frontend-Fehler we
 - [x] Kein `process.env`/`process.platform` im Frontend
 - [x] package.json clean (nur Tauri-Deps)
 - [x] Kein `main/`-Ordner
-- [ ] **FAIL:** restore-window.ps1 referenziert `*electron*` (H-1)
-- [ ] **FAIL:** Strategische Entfernungen nicht umgesetzt (K-1)
+- [x] ~~restore-window.ps1 referenziert `*electron*`~~ (H-1 — behoben)
+- [ ] **TEILWEISE:** Strategische Entfernungen: Frontend entfernt, Backend noch offen (K-1)
 
 ### 2. Security
 - [x] PowerShell-Escaping konsequent (40+ Stellen geprüft)
@@ -499,8 +503,8 @@ Dual-Output (Console + Datei), Log-Rotation (max 20 Dateien), Frontend-Fehler we
 - [x] Enum-Whitelisting vorhanden (z.B. Firewall-Direction)
 - [x] `escapeHtml()` zentral in utils.js
 - [x] Kein `eval()`/`new Function()` im eigenen Code
-- [ ] **FAIL:** CSP zu permissiv (K-2)
-- [ ] **FAIL:** delete_to_trash ohne validate_path (K-3)
+- [x] ~~CSP zu permissiv~~ (K-2 — behoben)
+- [x] ~~delete_to_trash ohne validate_path~~ (K-3 — behoben)
 
 ### 3. Performance
 - [x] `tokio::task::spawn_blocking` für Dialog-Aufrufe
@@ -511,13 +515,13 @@ Dual-Output (Console + Datei), Log-Rotation (max 20 Dateien), Frontend-Fehler we
 ### 4. Stabilität
 - [x] PowerShell-Timeout vorhanden (30s)
 - [x] PowerShell stderr wird geloggt
-- [ ] **FAIL:** Mutex unwrap() überall (H-3)
+- [x] ~~Mutex unwrap() überall~~ (H-3 — behoben)
 
 ### 5. Architektur
 - [x] Bridge-Commands-Registrierung konsistent
 - [x] Zentrale Validation-Helpers
 - [ ] **FAIL:** commands.rs monolithisch (M-3)
-- [ ] **FAIL:** 18 Views ohne destroy() (H-6)
+- [x] ~~18 Views ohne destroy()~~ (H-6 — behoben)
 
 ### 6. Events
 - [x] Scan-Events (progress/complete/error) vollständig
@@ -529,9 +533,9 @@ Dual-Output (Console + Datei), Log-Rotation (max 20 Dateien), Frontend-Fehler we
 ### 7. Lokalisierung
 - [x] UI-Texte auf Deutsch
 - [x] Korrekte Umlaute (ä, ö, ü)
-- [ ] **FAIL:** PS-Fehlermeldungen auf Englisch (H-4)
+- [x] ~~PS-Fehlermeldungen auf Englisch~~ (H-4 — behoben)
 
 ---
 
 *Erstellt: 19.02.2026 | Analysiert mit: Claude Opus 4.6 | Recherche-Prompt v2.2*
-*Aktualisiert: 19.02.2026 — Vollständige Neuanalyse mit erweitertem Prompt (Events, Build, Upgrade-Pfad, Dead Code)*
+*Aktualisiert: 19.02.2026 — Status-Update: 9 Findings behoben (K-2, K-3, H-1, H-3, H-4, H-6, M-1, M-6, N-4), K-1 teilweise, M-8 erledigt (Dateien archiviert). 4 veraltete Issue-Dateien ins Archiv verschoben.*
