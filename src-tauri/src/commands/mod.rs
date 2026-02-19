@@ -33,6 +33,7 @@ mod cmd_privacy;
 mod cmd_system;
 mod cmd_terminal;
 mod cmd_misc;
+mod cmd_pdf;
 
 // --- Re-export all commands for lib.rs ---
 pub use cmd_scan::*;
@@ -42,6 +43,7 @@ pub use cmd_privacy::*;
 pub use cmd_system::*;
 pub use cmd_terminal::*;
 pub use cmd_misc::*;
+pub use cmd_pdf::*;
 
 // === Shared imports (used by submodules via super::) ===
 

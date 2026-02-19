@@ -370,6 +370,15 @@ pub fn run() {
             commands::capture_screenshot,
             // Frontend Logging
             commands::log_frontend,
+            // PDF Editor
+            commands::pdf_get_info,
+            commands::pdf_get_annotations,
+            commands::pdf_save_annotations,
+            commands::pdf_ocr_page,
+            commands::pdf_add_text_layer,
+            commands::pdf_rotate_page,
+            commands::pdf_delete_pages,
+            commands::pdf_merge,
         ])
         .run(tauri::generate_context!())
         .expect("Fehler beim Starten der Anwendung");

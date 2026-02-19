@@ -68,6 +68,7 @@ const ALL_VIEWS = [
     ['services', '#view-services'],
     ['updates', '#view-updates'],
     ['cleanup', '#view-cleanup'],
+    ['pdf-editor', '#view-pdf-editor'],
 ];
 
 const viewsToCheck = requestedViews

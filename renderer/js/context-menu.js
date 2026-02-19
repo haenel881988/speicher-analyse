@@ -122,6 +122,9 @@ function buildMenuItems(type, context, options) {
     if (type === 'file') {
         items.push({ label: 'Öffnen', action: 'open-file', shortcut: 'Enter' });
         items.push({ label: 'Öffnen mit...', action: 'open-with' });
+        if (ext === '.pdf') {
+            items.push({ label: 'PDF bearbeiten', action: 'edit-pdf' });
+        }
         if (isExe) {
             items.push({ label: 'Als Administrator ausführen', action: 'run-as-admin' });
         }

@@ -341,7 +341,7 @@ Eine Art "Waage für die Festplatte":
 - Wenn Änderungen erkannt werden: dezenter Hinweis "3 neue Programme erkannt — Nachscan empfohlen"
 
 ### 7d. Scandaten übergreifend nutzen
-- Die Speichergrössen-Daten sollen auch vom Bloatware-Scanner, Software-Audit und der Bereinigung verwendet werden
+- Die Speichergrössen-Daten sollen auch vom Software-Audit und der Bereinigung verwendet werden
 
 **Status:** Planung (Umsetzung nach Issue #2/#3)
 
@@ -472,10 +472,10 @@ Eine Art "Waage für die Festplatte":
 - Terminal-Panel: Per Drag am oberen Rand skalierbar (120px–70% Fensterhöhe)
 
 **Was noch fehlt:**
-- Breiten/Höhen über Neustarts hinweg speichern (Preferences)
-- Panels frei umplatzieren (z.B. Terminal nach rechts verschieben)
+- ~~Breiten/Höhen über Neustarts hinweg speichern (Preferences)~~ → Umgesetzt (#111)
+- Panels frei umplatzieren (z.B. Terminal nach rechts verschieben) — Langfristig, niedrige Priorität
 
-**Status:** Größtenteils umgesetzt — alle 3 Bereiche skalierbar
+**Status:** Größtenteils umgesetzt — alle 3 Bereiche skalierbar + Größen werden über Neustarts gespeichert
 
 → *Aus Visionen: "Resizable Panels / Fenster-Individualisierung"*
 
@@ -491,11 +491,15 @@ Eine Art "Waage für die Festplatte":
 - ConPTY-Backend via portable-pty v0.9 (echtes Pseudo-Terminal statt Pipe-I/O, v7.2.1 #106)
 - terminal_resize() funktional (war zuvor Stub)
 
-**Was noch fehlt:**
-- Frontend: xterm.js einbauen (Farben, Cursor-Steuerung, Scroll, Maus-Events)
-- Danach funktioniert automatisch auch Claude CLI im Terminal
+**Was bereits umgesetzt ist (19.02.2026):**
+- xterm.js v5 integriert (Farben, Cursor-Steuerung, Scroll, Maus-Events)
+- FitAddon für automatische Größenanpassung
+- Theme-Support (Dark/Light, 16 Farben + Bright-Varianten)
+- Bidirektionaler Datenfluss (xterm.onData → Backend, Backend → xterm.write)
+- PTY-Resize (xterm.onResize → Backend terminalResize)
+- Interaktive Programme (claude, ssh, vim, python) funktionieren nativ
 
-**Status:** Teilweise — Backend fertig (ConPTY), Frontend-Emulation (xterm.js) fehlt
+**Status:** Umgesetzt — wartet auf Simons Test
 
 → *Aus Visionen: "PowerShell-Integration" + "Claude CLI im Terminal"*
 

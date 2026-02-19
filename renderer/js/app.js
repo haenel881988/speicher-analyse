@@ -29,6 +29,7 @@ import { SecurityAuditView } from './security-audit.js';
 import { SystemProfilView } from './system-profil.js';
 import { HealthCheckView } from './health-check.js';
 import { TerminalPanel } from './terminal-panel.js';
+import { PdfEditorView } from './pdf-editor.js';
 import { showContextMenu, closeContextMenu } from './context-menu.js';
 
 // ===== Global Error Handlers (Dev-Logging) =====
@@ -134,6 +135,7 @@ const networkView = new NetworkView(document.getElementById('view-network'));
 const securityAuditView = new SecurityAuditView(document.getElementById('view-security-audit'));
 const systemProfilView = new SystemProfilView(document.getElementById('view-system-profil'));
 const healthCheckView = new HealthCheckView(document.getElementById('view-health-check'));
+const pdfEditorView = new PdfEditorView(document.getElementById('view-pdf-editor'));
 // Global Terminal Panel (VS Code style, accessible from any tab via Ctrl+`)
 const globalTerminal = new TerminalPanel(document.getElementById('terminal-global'));
 
@@ -145,6 +147,19 @@ document.addEventListener('batch-rename-complete', () => {
 // Wire toast events from EditorPanel
 document.addEventListener('show-toast', (e) => {
     showToast(e.detail.message, e.detail.type);
+});
+
+// PDF-Editor: Öffnen via Event (von Preview, Kontextmenü, Doppelklick)
+document.addEventListener('open-pdf-editor', async (e) => {
+    const filePath = e.detail?.filePath;
+    if (!filePath) return;
+    switchTab('pdf-editor');
+    await pdfEditorView.open(filePath);
+});
+
+// PDF-Editor: Zurück-Button → zum Explorer
+document.addEventListener('pdf-editor-close', () => {
+    switchTab('explorer');
 });
 
 // Wire embedded terminal events from main process (opens global terminal)
@@ -742,6 +757,9 @@ async function autoLoadTab(tabName) {
                 tabLoaded['health-check'] = true;
                 setStatus('Bereit');
                 break;
+            case 'pdf-editor':
+                // PDF-Editor wird separat über open() gesteuert
+                break;
         }
     } catch (e) {
         console.error(`Tab '${tabName}' laden fehlgeschlagen:`, e);
@@ -888,7 +906,12 @@ function renderTopFiles(files) {
             handleContextMenu('file', { path: row.dataset.path, name: row.dataset.name }, e);
         };
         row.ondblclick = () => {
-            window.api.openFile(row.dataset.path);
+            const p = row.dataset.path;
+            if (p && p.toLowerCase().endsWith('.pdf')) {
+                document.dispatchEvent(new CustomEvent('open-pdf-editor', { detail: { filePath: p } }));
+            } else {
+                window.api.openFile(p);
+            }
         };
         row.onclick = () => {
             if (editorPanel.isVisible()) {
@@ -942,6 +965,9 @@ function executeContextAction(action) {
                 break;
             case 'open-file':
                 window.api.openFile(path);
+                break;
+            case 'edit-pdf':
+                document.dispatchEvent(new CustomEvent('open-pdf-editor', { detail: { filePath: path } }));
                 break;
             case 'create-folder':
                 createNewFolder(path || (state.activeTab === 'explorer' ? (dualPanel.getActiveExplorer()?.currentPath || state.currentPath) : state.currentPath), refresh);

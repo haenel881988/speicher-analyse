@@ -1,0 +1,598 @@
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
+use std::path::Path;
+
+use pdfium_render::prelude::*;
+
+use super::validate_path;
+
+// === PDFium Factory ===
+// Pdfium ist nicht Send+Sync (C-Bibliothek), daher kein Singleton.
+// Stattdessen wird in jedem spawn_blocking ein neues Pdfium erstellt.
+// Die DLL wird vom OS gecacht — Overhead ist minimal.
+
+fn create_pdfium() -> Result<Pdfium, String> {
+    // In prod: pdfium.dll liegt neben der .exe (Tauri bundled als resource)
+    let exe_dir = std::env::current_exe()
+        .map(|p| p.parent().unwrap_or(Path::new(".")).to_path_buf())
+        .unwrap_or_else(|_| std::path::PathBuf::from("."));
+
+    let bindings = Pdfium::bind_to_library(
+        Pdfium::pdfium_platform_library_name_at_path(&exe_dir)
+    ).or_else(|_| {
+        // Fallback: aktuelles Verzeichnis (cargo tauri dev)
+        Pdfium::bind_to_library(
+            Pdfium::pdfium_platform_library_name_at_path("./")
+        )
+    }).map_err(|e| format!("PDFium laden fehlgeschlagen: {e}"))?;
+
+    Ok(Pdfium::new(bindings))
+}
+
+// === Data Types ===
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct AnnotationData {
+    #[serde(rename = "type")]
+    pub anno_type: String,   // "highlight", "text", "freetext", "ink"
+    pub page: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rect: Option<RectData>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub paths: Option<Vec<Vec<PointData>>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub width: Option<f32>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct RectData {
+    pub x1: f32,
+    pub y1: f32,
+    pub x2: f32,
+    pub y2: f32,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct PointData {
+    pub x: f32,
+    pub y: f32,
+}
+
+// === Commands ===
+
+/// PDF-Infos lesen: Seitenzahl, Metadaten, OCR-Bedarf
+#[tauri::command]
+pub async fn pdf_get_info(file_path: String) -> Result<Value, String> {
+    let fp = file_path.clone();
+    tokio::task::spawn_blocking(move || {
+        let pdfium = create_pdfium()?;
+        let doc = pdfium.load_pdf_from_file(&fp, None)
+            .map_err(|e| format!("PDF öffnen fehlgeschlagen: {e}"))?;
+
+        let page_count = doc.pages().len();
+
+        // Prüfe ob Text extrahierbar ist (= ob OCR nötig)
+        let is_text_searchable = if page_count > 0 {
+            if let Ok(page) = doc.pages().get(0) {
+                if let Ok(text) = page.text() {
+                    let all_text: String = text.all();
+                    !all_text.trim().is_empty()
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+
+        // Metadaten via get(TagType)
+        let metadata = doc.metadata();
+        let title = metadata.get(PdfDocumentMetadataTagType::Title)
+            .map(|t| t.value().to_string()).unwrap_or_default();
+        let author = metadata.get(PdfDocumentMetadataTagType::Author)
+            .map(|t| t.value().to_string()).unwrap_or_default();
+        let creator = metadata.get(PdfDocumentMetadataTagType::Creator)
+            .map(|t| t.value().to_string()).unwrap_or_default();
+        let creation_date = metadata.get(PdfDocumentMetadataTagType::CreationDate)
+            .map(|t| t.value().to_string()).unwrap_or_default();
+
+        Ok(json!({
+            "pageCount": page_count,
+            "title": title,
+            "author": author,
+            "creator": creator,
+            "creationDate": creation_date,
+            "isTextSearchable": is_text_searchable,
+        }))
+    }).await.map_err(|e| format!("Task fehlgeschlagen: {e}"))?
+}
+
+/// Annotationen einer PDF-Seite auslesen
+#[tauri::command]
+pub async fn pdf_get_annotations(file_path: String, page_num: u32) -> Result<Value, String> {
+    let fp = file_path.clone();
+    tokio::task::spawn_blocking(move || {
+        let pdfium = create_pdfium()?;
+        let doc = pdfium.load_pdf_from_file(&fp, None)
+            .map_err(|e| format!("PDF öffnen fehlgeschlagen: {e}"))?;
+
+        let page = doc.pages().get(page_num as u16)
+            .map_err(|e| format!("Seite {page_num} nicht gefunden: {e}"))?;
+
+        let mut annotations = Vec::new();
+
+        for annotation in page.annotations().iter() {
+            let anno_type = match annotation.annotation_type() {
+                PdfPageAnnotationType::Highlight => "highlight",
+                PdfPageAnnotationType::Text => "text",
+                PdfPageAnnotationType::FreeText => "freetext",
+                PdfPageAnnotationType::Ink => "ink",
+                PdfPageAnnotationType::Underline => "underline",
+                PdfPageAnnotationType::Strikeout => "strikeout",
+                PdfPageAnnotationType::Square => "square",
+                PdfPageAnnotationType::Circle => "circle",
+                PdfPageAnnotationType::Line => "line",
+                _ => "unknown",
+            };
+
+            let bounds = annotation.bounds()
+                .map(|b| json!({
+                    "x1": b.left().value,
+                    "y1": b.bottom().value,
+                    "x2": b.right().value,
+                    "y2": b.top().value,
+                }))
+                .unwrap_or(json!(null));
+
+            let contents = annotation.contents().unwrap_or_default();
+
+            annotations.push(json!({
+                "type": anno_type,
+                "rect": bounds,
+                "text": contents,
+            }));
+        }
+
+        Ok(json!(annotations))
+    }).await.map_err(|e| format!("Task fehlgeschlagen: {e}"))?
+}
+
+/// Annotationen in PDF speichern
+#[tauri::command]
+pub async fn pdf_save_annotations(
+    file_path: String,
+    output_path: String,
+    annotations: Vec<AnnotationData>,
+) -> Result<Value, String> {
+    validate_path(&output_path)?;
+    let fp = file_path.clone();
+    let op = output_path.clone();
+
+    tokio::task::spawn_blocking(move || {
+        let pdfium = create_pdfium()?;
+        let doc = pdfium.load_pdf_from_file(&fp, None)
+            .map_err(|e| format!("PDF öffnen fehlgeschlagen: {e}"))?;
+
+        for anno in &annotations {
+            let page_index = anno.page as u16;
+            let mut page = doc.pages().get(page_index)
+                .map_err(|e| format!("Seite {} nicht gefunden: {e}", anno.page))?;
+
+            let anno_text = anno.text.as_deref().unwrap_or("");
+
+            match anno.anno_type.as_str() {
+                "highlight" => {
+                    if let Some(ref rect) = anno.rect {
+                        let mut new_anno = page.annotations_mut()
+                            .create_highlight_annotation()
+                            .map_err(|e| format!("Highlight erstellen: {e}"))?;
+
+                        new_anno.set_bounds(PdfRect::new_from_values(
+                            rect.y1, rect.x1, rect.y2, rect.x2
+                        )).map_err(|e| format!("Bounds setzen: {e}"))?;
+
+                        if let Some(ref color) = anno.color {
+                            if let Some(c) = parse_hex_color(color) {
+                                let _ = new_anno.set_stroke_color(c);
+                                let _ = new_anno.set_fill_color(c.with_alpha(80));
+                            }
+                        }
+                    }
+                }
+                "text" => {
+                    if let Some(ref rect) = anno.rect {
+                        let mut new_anno = page.annotations_mut()
+                            .create_text_annotation(anno_text)
+                            .map_err(|e| format!("Text-Annotation erstellen: {e}"))?;
+
+                        new_anno.set_bounds(PdfRect::new_from_values(
+                            rect.y1, rect.x1, rect.y2, rect.x2
+                        )).map_err(|e| format!("Bounds setzen: {e}"))?;
+
+                        if let Some(ref color) = anno.color {
+                            if let Some(c) = parse_hex_color(color) {
+                                let _ = new_anno.set_stroke_color(c);
+                            }
+                        }
+                    }
+                }
+                "freetext" => {
+                    if let Some(ref rect) = anno.rect {
+                        let mut new_anno = page.annotations_mut()
+                            .create_free_text_annotation(anno_text)
+                            .map_err(|e| format!("FreeText-Annotation erstellen: {e}"))?;
+
+                        new_anno.set_bounds(PdfRect::new_from_values(
+                            rect.y1, rect.x1, rect.y2, rect.x2
+                        )).map_err(|e| format!("Bounds setzen: {e}"))?;
+
+                        if let Some(ref color) = anno.color {
+                            if let Some(c) = parse_hex_color(color) {
+                                let _ = new_anno.set_stroke_color(c);
+                            }
+                        }
+                    }
+                }
+                "ink" => {
+                    if let Some(ref rect) = anno.rect {
+                        let mut new_anno = page.annotations_mut()
+                            .create_ink_annotation()
+                            .map_err(|e| format!("Ink-Annotation erstellen: {e}"))?;
+
+                        new_anno.set_bounds(PdfRect::new_from_values(
+                            rect.y1, rect.x1, rect.y2, rect.x2
+                        )).map_err(|e| format!("Bounds setzen: {e}"))?;
+
+                        if let Some(ref color) = anno.color {
+                            if let Some(c) = parse_hex_color(color) {
+                                let _ = new_anno.set_stroke_color(c);
+                            }
+                        }
+                    }
+                }
+                _ => {
+                    tracing::warn!(anno_type = %anno.anno_type, "Unbekannter Annotationstyp ignoriert");
+                }
+            }
+        }
+
+        doc.save_to_file(&op)
+            .map_err(|e| format!("PDF speichern fehlgeschlagen: {e}"))?;
+
+        Ok(json!({ "success": true, "path": op }))
+    }).await.map_err(|e| format!("Task fehlgeschlagen: {e}"))?
+}
+
+/// OCR einer einzelnen Seite via Windows.Media.Ocr
+#[tauri::command]
+pub async fn pdf_ocr_page(image_base64: String, language: String) -> Result<Value, String> {
+    // Sprache validieren (Whitelist)
+    let lang = match language.as_str() {
+        "de" | "de-DE" => "de",
+        "en" | "en-US" | "en-GB" => "en",
+        "fr" | "fr-FR" => "fr",
+        "es" | "es-ES" => "es",
+        "it" | "it-IT" => "it",
+        "pt" | "pt-BR" => "pt",
+        "nl" | "nl-NL" => "nl",
+        "pl" | "pl-PL" => "pl",
+        "ru" | "ru-RU" => "ru",
+        "zh" | "zh-CN" | "zh-Hans" => "zh-Hans",
+        "ja" | "ja-JP" => "ja",
+        "ko" | "ko-KR" => "ko",
+        _ => return Err(format!("Nicht unterstützte Sprache: {language}")),
+    };
+
+    // Base64 in Temp-Datei schreiben (vermeidet Command Injection)
+    let temp_dir = std::env::temp_dir();
+    let temp_img = temp_dir.join(format!("speicher_ocr_{}.png", std::process::id()));
+    let temp_img_path = temp_img.to_string_lossy().to_string();
+
+    // Data-URL-Prefix entfernen falls vorhanden
+    let clean_b64 = if let Some(pos) = image_base64.find(',') {
+        &image_base64[pos + 1..]
+    } else {
+        &image_base64
+    };
+
+    let decoded = base64::Engine::decode(
+        &base64::engine::general_purpose::STANDARD,
+        clean_b64,
+    ).map_err(|e| format!("Base64 dekodieren fehlgeschlagen: {e}"))?;
+
+    tokio::fs::write(&temp_img, &decoded).await
+        .map_err(|e| format!("Temp-Datei schreiben fehlgeschlagen: {e}"))?;
+
+    let script = format!(
+        r#"
+$ErrorActionPreference = 'Stop'
+try {{
+    Add-Type -AssemblyName 'System.Runtime.WindowsRuntime'
+
+    # Async-Hilfsfunktion
+    $asTaskGeneric = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object {{
+        $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1'
+    }})[0]
+    function Await($WinRtTask, $ResultType) {{
+        $asTask = $asTaskGeneric.MakeGenericMethod($ResultType)
+        $netTask = $asTask.Invoke($null, @($WinRtTask))
+        $netTask.Wait(-1) | Out-Null
+        $netTask.Result
+    }}
+
+    # OCR-Engine erstellen
+    $ocrLang = [Windows.Globalization.Language, Windows.Globalization, ContentType=WindowsRuntime]::new('{lang}')
+    $ocrEngine = [Windows.Media.Ocr.OcrEngine, Windows.Foundation, ContentType=WindowsRuntime]::TryCreateFromLanguage($ocrLang)
+    if (-not $ocrEngine) {{ throw "OCR-Engine für Sprache '{lang}' nicht verfügbar" }}
+
+    # Bild laden
+    $imgPath = '{img_path}'
+    $stream = [System.IO.File]::OpenRead($imgPath)
+    $decoder = Await ([Windows.Graphics.Imaging.BitmapDecoder, Windows.Foundation, ContentType=WindowsRuntime]::CreateAsync([Windows.Storage.Streams.IRandomAccessStream, Windows.Storage.Streams.ContentType=WindowsRuntime]$stream.AsRandomAccessStream())) ([Windows.Graphics.Imaging.BitmapDecoder])
+    $bitmap = Await ($decoder.GetSoftwareBitmapAsync()) ([Windows.Graphics.Imaging.SoftwareBitmap])
+
+    # OCR ausführen
+    $result = Await ($ocrEngine.RecognizeAsync($bitmap)) ([Windows.Media.Ocr.OcrResult])
+
+    # Ergebnis als JSON
+    $words = @()
+    foreach ($line in $result.Lines) {{
+        foreach ($word in $line.Words) {{
+            $rect = $word.BoundingRect
+            $words += @{{
+                text = $word.Text
+                x = [math]::Round($rect.X, 1)
+                y = [math]::Round($rect.Y, 1)
+                width = [math]::Round($rect.Width, 1)
+                height = [math]::Round($rect.Height, 1)
+            }}
+        }}
+    }}
+
+    @{{
+        fullText = $result.Text
+        words = $words
+    }} | ConvertTo-Json -Depth 3 -Compress
+
+    $stream.Close()
+}} catch {{
+    Write-Error $_.Exception.Message
+}}
+"#,
+        lang = lang,
+        img_path = temp_img_path.replace('\'', "''"),
+    );
+
+    let result = crate::ps::run_ps_with_timeout(&script, 60).await;
+
+    // Temp-Datei aufräumen
+    let _ = tokio::fs::remove_file(&temp_img).await;
+
+    let output = result?;
+    let parsed: Value = serde_json::from_str(&output)
+        .map_err(|e| format!("OCR-Ausgabe parsen fehlgeschlagen: {e}"))?;
+
+    Ok(parsed)
+}
+
+/// Unsichtbaren Textlayer in PDF einfügen (für Durchsuchbarkeit nach OCR)
+#[tauri::command]
+pub async fn pdf_add_text_layer(
+    file_path: String,
+    output_path: String,
+    ocr_results: Vec<Value>,
+) -> Result<Value, String> {
+    validate_path(&output_path)?;
+    let fp = file_path.clone();
+    let op = output_path.clone();
+
+    tokio::task::spawn_blocking(move || {
+        let pdfium = create_pdfium()?;
+        let doc = pdfium.load_pdf_from_file(&fp, None)
+            .map_err(|e| format!("PDF öffnen fehlgeschlagen: {e}"))?;
+
+        for (page_idx, ocr_data) in ocr_results.iter().enumerate() {
+            let words = ocr_data.get("words").and_then(|w| w.as_array());
+            if words.is_none() { continue; }
+
+            let mut page = match doc.pages().get(page_idx as u16) {
+                Ok(p) => p,
+                Err(_) => continue,
+            };
+
+            let page_height = page.height().value;
+
+            if let Some(words) = words {
+                for word in words {
+                    let text = word.get("text").and_then(|t| t.as_str()).unwrap_or("");
+                    let x = word.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
+                    let y = word.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
+                    let w = word.get("width").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
+                    let h = word.get("height").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
+
+                    if text.is_empty() || w < 1.0 || h < 1.0 { continue; }
+
+                    // PDF-Koordinaten: Ursprung unten-links, OCR: oben-links
+                    let pdf_y = page_height - y - h;
+
+                    let result = page.annotations_mut()
+                        .create_free_text_annotation(text);
+
+                    if let Ok(mut anno) = result {
+                        let _ = anno.set_bounds(PdfRect::new_from_values(
+                            pdf_y, x, pdf_y + h, x + w
+                        ));
+                        // Unsichtbar: Transparente Farbe, kein Rahmen
+                        let _ = anno.set_fill_color(PdfColor::new(0, 0, 0, 0));
+                        let _ = anno.set_stroke_color(PdfColor::new(0, 0, 0, 0));
+                    }
+                }
+            }
+        }
+
+        doc.save_to_file(&op)
+            .map_err(|e| format!("PDF speichern fehlgeschlagen: {e}"))?;
+
+        Ok(json!({ "success": true, "path": op }))
+    }).await.map_err(|e| format!("Task fehlgeschlagen: {e}"))?
+}
+
+/// Seite drehen (0, 90, 180, 270 Grad)
+#[tauri::command]
+pub async fn pdf_rotate_page(
+    file_path: String,
+    output_path: String,
+    page_num: u32,
+    rotation: i32,
+) -> Result<Value, String> {
+    validate_path(&output_path)?;
+
+    // Rotation validieren
+    if !matches!(rotation, 0 | 90 | 180 | 270) {
+        return Err(format!("Ungültige Rotation: {rotation}. Erlaubt: 0, 90, 180, 270"));
+    }
+
+    let fp = file_path.clone();
+    let op = output_path.clone();
+
+    tokio::task::spawn_blocking(move || {
+        let pdfium = create_pdfium()?;
+        let doc = pdfium.load_pdf_from_file(&fp, None)
+            .map_err(|e| format!("PDF öffnen fehlgeschlagen: {e}"))?;
+
+        let mut page = doc.pages().get(page_num as u16)
+            .map_err(|e| format!("Seite {page_num} nicht gefunden: {e}"))?;
+
+        // Aktuelle Rotation lesen und neue berechnen
+        let current = page.rotation().unwrap_or(PdfPageRenderRotation::None);
+        let current_deg: i32 = match current {
+            PdfPageRenderRotation::None => 0,
+            PdfPageRenderRotation::Degrees90 => 90,
+            PdfPageRenderRotation::Degrees180 => 180,
+            PdfPageRenderRotation::Degrees270 => 270,
+        };
+        let new_deg = (current_deg + rotation) % 360;
+
+        let new_rot = match new_deg {
+            90 => PdfPageRenderRotation::Degrees90,
+            180 => PdfPageRenderRotation::Degrees180,
+            270 => PdfPageRenderRotation::Degrees270,
+            _ => PdfPageRenderRotation::None,
+        };
+
+        page.set_rotation(new_rot);
+
+        doc.save_to_file(&op)
+            .map_err(|e| format!("PDF speichern fehlgeschlagen: {e}"))?;
+
+        Ok(json!({ "success": true, "rotation": new_deg }))
+    }).await.map_err(|e| format!("Task fehlgeschlagen: {e}"))?
+}
+
+/// Seiten aus PDF löschen
+#[tauri::command]
+pub async fn pdf_delete_pages(
+    file_path: String,
+    output_path: String,
+    page_nums: Vec<u32>,
+) -> Result<Value, String> {
+    validate_path(&output_path)?;
+    let fp = file_path.clone();
+    let op = output_path.clone();
+
+    tokio::task::spawn_blocking(move || {
+        let pdfium = create_pdfium()?;
+        let doc = pdfium.load_pdf_from_file(&fp, None)
+            .map_err(|e| format!("PDF öffnen fehlgeschlagen: {e}"))?;
+
+        let total = doc.pages().len();
+        if page_nums.len() >= total as usize {
+            return Err("Mindestens eine Seite muss übrig bleiben".to_string());
+        }
+
+        // Von hinten nach vorne löschen (damit Indices nicht verschieben)
+        let mut sorted: Vec<u32> = page_nums.clone();
+        sorted.sort_unstable();
+        sorted.dedup();
+        sorted.reverse();
+
+        for &num in &sorted {
+            if num < total as u32 {
+                let page = doc.pages().get(num as u16)
+                    .map_err(|e| format!("Seite {num} nicht gefunden: {e}"))?;
+                page.delete()
+                    .map_err(|e| format!("Seite {num} löschen fehlgeschlagen: {e}"))?;
+            }
+        }
+
+        doc.save_to_file(&op)
+            .map_err(|e| format!("PDF speichern fehlgeschlagen: {e}"))?;
+
+        let remaining = total as usize - sorted.len();
+        Ok(json!({ "success": true, "remainingPages": remaining }))
+    }).await.map_err(|e| format!("Task fehlgeschlagen: {e}"))?
+}
+
+/// Mehrere PDFs zusammenfügen
+#[tauri::command]
+pub async fn pdf_merge(
+    file_paths: Vec<String>,
+    output_path: String,
+) -> Result<Value, String> {
+    validate_path(&output_path)?;
+    if file_paths.len() < 2 {
+        return Err("Mindestens 2 PDFs zum Zusammenfügen nötig".to_string());
+    }
+
+    let op = output_path.clone();
+
+    tokio::task::spawn_blocking(move || {
+        let pdfium = create_pdfium()?;
+
+        // Erstes Dokument als Basis laden
+        let mut base_doc = pdfium.load_pdf_from_file(&file_paths[0], None)
+            .map_err(|e| format!("PDF 1 öffnen fehlgeschlagen: {e}"))?;
+
+        // Weitere Dokumente anhängen
+        for (i, path) in file_paths.iter().enumerate().skip(1) {
+            let source_doc = pdfium.load_pdf_from_file(path, None)
+                .map_err(|e| format!("PDF {} öffnen fehlgeschlagen: {e}", i + 1))?;
+
+            base_doc.pages_mut().append(&source_doc)
+                .map_err(|e| format!("PDF {} anhängen fehlgeschlagen: {e}", i + 1))?;
+        }
+
+        let total_pages = base_doc.pages().len();
+
+        base_doc.save_to_file(&op)
+            .map_err(|e| format!("PDF speichern fehlgeschlagen: {e}"))?;
+
+        Ok(json!({ "success": true, "totalPages": total_pages, "path": op }))
+    }).await.map_err(|e| format!("Task fehlgeschlagen: {e}"))?
+}
+
+// === Helpers ===
+
+/// Hex-Farbstring (#RRGGBB oder #RRGGBBAA) zu PdfColor parsen
+fn parse_hex_color(hex: &str) -> Option<PdfColor> {
+    let hex = hex.trim_start_matches('#');
+    if hex.len() >= 6 {
+        let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
+        let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
+        let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
+        let a = if hex.len() >= 8 {
+            u8::from_str_radix(&hex[6..8], 16).ok()?
+        } else {
+            255
+        };
+        Some(PdfColor::new(r, g, b, a))
+    } else {
+        None
+    }
+}

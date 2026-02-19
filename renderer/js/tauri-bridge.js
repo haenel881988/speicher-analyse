@@ -295,6 +295,16 @@
         // === Screenshot ===
         captureScreenshot: makeInvoke('capture_screenshot'),
 
+        // === PDF Editor ===
+        pdfGetInfo: makeInvoke('pdf_get_info', 'file_path'),
+        pdfGetAnnotations: makeInvoke('pdf_get_annotations', 'file_path', 'page_num'),
+        pdfSaveAnnotations: makeInvoke('pdf_save_annotations', 'file_path', 'output_path', 'annotations'),
+        pdfOcrPage: makeInvoke('pdf_ocr_page', 'image_base64', 'language'),
+        pdfAddTextLayer: makeInvoke('pdf_add_text_layer', 'file_path', 'output_path', 'ocr_results'),
+        pdfRotatePage: makeInvoke('pdf_rotate_page', 'file_path', 'output_path', 'page_num', 'rotation'),
+        pdfDeletePages: makeInvoke('pdf_delete_pages', 'file_path', 'output_path', 'page_nums'),
+        pdfMerge: makeInvoke('pdf_merge', 'file_paths', 'output_path'),
+
         // === Frontend Logging ===
         logFrontend: (level, message, context) => invoke('log_frontend', { level, message, context }),
     };

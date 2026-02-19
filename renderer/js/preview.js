@@ -302,6 +302,7 @@ if(!Uint8Array.fromHex){Uint8Array.fromHex=function(s){const b=new Uint8Array(s.
                 <span class="pdf-zoom-info">100%</span>
                 <button class="pdf-btn pdf-zoom-in" title="Vergrößern">+</button>
                 <button class="pdf-btn pdf-open-ext" title="Extern öffnen">\u2197</button>
+                <button class="pdf-btn pdf-edit" title="Im PDF-Editor bearbeiten">\u270E Bearbeiten</button>
             `;
             this.container.appendChild(toolbar);
 
@@ -352,6 +353,9 @@ if(!Uint8Array.fromHex){Uint8Array.fromHex=function(s){const b=new Uint8Array(s.
             };
             toolbar.querySelector('.pdf-open-ext').onclick = () => {
                 window.api.openFile(filePath);
+            };
+            toolbar.querySelector('.pdf-edit').onclick = () => {
+                document.dispatchEvent(new CustomEvent('open-pdf-editor', { detail: { filePath } }));
             };
         } catch (err) {
             this.container.innerHTML = `<div class="preview-error">PDF-Fehler: ${escapeHtml(err.message)}</div>`;
