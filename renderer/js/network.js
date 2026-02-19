@@ -18,18 +18,9 @@ export class NetworkView {
         this._lastRefreshTime = null;
         this._loaded = false;
         this._errorCount = 0;
-        this.localDevices = [];
-        this._devicesLoading = false;
         this._isRefreshing = false;
         this._historyData = [];
         this._historyLoaded = false;
-        this._activeScanResult = null;
-        this._activeScanProgress = null;
-        this._activeScanRunning = false;
-        this._expandedDevices = new Set();
-        this._deviceFilter = '';
-        this._groupByType = true;          // Default: gruppierte Ansicht
-        this._collapsedGroups = new Set();  // Eingeklappte Gerätetyp-Gruppen
         this._feedEvents = [];              // Live-Feed: Rolling-Buffer (max 500)
         this._feedPollInterval = null;      // Separates Polling für Connection-Diff
         this._feedPaused = false;           // Auto-Scroll pausiert wenn User scrollt
@@ -46,7 +37,6 @@ export class NetworkView {
         this._wifiInfo = null;              // WiFi-Infos
         this._detailLevel = 'normal';        // Zwei-Stufen: normal | experte
         this._loadDetailLevel();
-        this._setupScanProgressListener();
     }
 
     async _loadDetailLevel() {
@@ -64,35 +54,10 @@ export class NetworkView {
         } catch { /* Default beibehalten */ }
     }
 
-    _setupScanProgressListener() {
-        if (window.api?.onNetworkScanProgress) {
-            window.api.onNetworkScanProgress((progress) => {
-                this._activeScanProgress = progress;
-                if (this.activeSubTab === 'devices' && this._activeScanRunning) {
-                    const progressEl = this.container.querySelector('#network-scan-progress-bar');
-                    if (progressEl) {
-                        progressEl.innerHTML = this._renderScanProgress();
-                    }
-                }
-            });
-        }
-    }
-
     async init() {
         this.container.innerHTML = '<div class="loading-state">Netzwerk wird analysiert...</div>';
         this._errorCount = 0;
         this.stopPolling();
-
-        // Letztes Scan-Ergebnis aus dem Backend wiederherstellen (überlebt Page-Reloads)
-        if (!this._activeScanResult && window.api.getLastNetworkScan) {
-            try {
-                const lastScan = await window.api.getLastNetworkScan();
-                if (lastScan && lastScan.devices && lastScan.devices.length > 0) {
-                    this._activeScanResult = lastScan;
-                    this.activeSubTab = 'devices';
-                }
-            } catch { /* ignorieren */ }
-        }
 
         await this.refresh();
 
@@ -223,7 +188,6 @@ export class NetworkView {
     render() {
         const s = this.summary || {};
         const timeStr = this._lastRefreshTime ? this._lastRefreshTime.toLocaleTimeString('de-DE') : '';
-        const devCount = this._activeScanResult?.devices?.length || this.localDevices.length;
 
         // Suchfeld im Verbindungen- und Live-Feed-Tab anzeigen
         const showToolbar = this.activeSubTab === 'connections' || this.activeSubTab === 'livefeed';
@@ -245,7 +209,6 @@ export class NetworkView {
                 <div class="network-tabs">
                     <button class="network-tab ${this.activeSubTab === 'connections' ? 'active' : ''}" data-subtab="connections">Verbindungen <span class="network-tab-count">${s.totalConnections || 0}</span></button>
                     <button class="network-tab ${this.activeSubTab === 'livefeed' ? 'active' : ''}" data-subtab="livefeed">Live-Feed</button>
-                    <button class="network-tab ${this.activeSubTab === 'devices' ? 'active' : ''}" data-subtab="devices">Lokale Geräte${devCount > 0 ? ` <span class="network-tab-count">${devCount}</span>` : ''}</button>
                 </div>
                 ${showToolbar ? `<div class="network-toolbar">
                     <input type="text" class="network-search" placeholder="Filtern nach Prozess oder IP..." value="${escapeHtml(this.filter)}">
@@ -263,7 +226,6 @@ export class NetworkView {
         switch (this.activeSubTab) {
             case 'connections': return this._renderMergedTab();
             case 'livefeed': return this._renderLiveFeed();
-            case 'devices': return this._renderLocalDevices();
             default: return '';
         }
     }
@@ -406,7 +368,6 @@ export class NetworkView {
                             }).join('')}
                         </span>
                         ${ghostWarning ? '<span class="network-ghost-warning">Hintergrund-Aktivität!</span>' : ''}
-                        ${g.processPath ? `<button class="network-btn-small" data-block="${escapeHtml(g.processName)}" data-path="${escapeHtml(g.processPath)}" data-tier="experte">Blockieren</button>` : ''}
                     </div>
                     ${expanded ? this._renderGroupDetail(g) : ''}
                 </div>`;
@@ -487,238 +448,6 @@ export class NetworkView {
         const cc = countryCode.toUpperCase();
         const offset = 127397;
         return String.fromCodePoint(cc.charCodeAt(0) + offset, cc.charCodeAt(1) + offset);
-    }
-
-    _renderScanProgress() {
-        const p = this._activeScanProgress;
-        const spinner = '<span class="network-scan-spinner"></span>';
-        if (!p) return `${spinner}<span>Scan wird vorbereitet...</span><div class="network-progress-bar network-progress-indeterminate"><div class="network-progress-fill"></div></div>`;
-        const phaseLabels = { init: 'Vorbereitung', ping: 'Ping Sweep', arp: 'MAC-Adressen', ports: 'Port-Scan', shares: 'SMB-Freigaben', snmp: 'SNMP-Erkennung', vendor: 'Hersteller-Erkennung (IEEE)', identify: 'Gerätemodell-Erkennung', mdns: 'mDNS-Erkennung', done: 'Abgeschlossen' };
-        const label = phaseLabels[p.phase] || p.phase;
-        if (p.total > 0) {
-            const pct = Math.round((p.current / p.total) * 100);
-            return `${spinner}<span>${label} (${p.current}/${p.total})</span>
-                <div class="network-progress-bar"><div class="network-progress-fill" style="width:${pct}%"></div></div>
-                <span class="network-progress-msg">${escapeHtml(p.message || '')}</span>`;
-        }
-        return `${spinner}<span>${label}</span>
-            <div class="network-progress-bar network-progress-indeterminate"><div class="network-progress-fill"></div></div>
-            <span class="network-progress-msg">${escapeHtml(p.message || '')}</span>`;
-    }
-
-    _renderLocalDevices() {
-        const hasActiveScan = this._activeScanResult && this._activeScanResult.devices;
-        const devices = hasActiveScan ? this._activeScanResult.devices : this.localDevices;
-        const isActive = hasActiveScan;
-
-        const toolbar = `<div class="network-devices-toolbar">
-            <button class="network-btn" id="network-scan-active" ${this._activeScanRunning ? 'disabled' : ''}>${this._activeScanRunning ? 'Scan läuft...' : 'Netzwerk scannen'}</button>
-            <button class="network-btn network-btn-secondary" id="network-scan-passive" ${this._activeScanRunning ? 'disabled' : ''} title="Schneller passiver Scan (nur ARP-Tabelle)">Schnellscan</button>
-            ${devices.length > 0 ? `<input type="text" class="network-device-search" id="network-device-filter" placeholder="Filtern..." value="${escapeHtml(this._deviceFilter || '')}" style="max-width:180px">` : ''}
-            ${hasActiveScan ? `<span class="network-timestamp">Subnetz: ${escapeHtml(this._activeScanResult.subnet)} | Eigene IP: ${escapeHtml(this._activeScanResult.localIP)}</span>` : ''}
-            ${hasActiveScan ? `<button class="network-btn network-btn-secondary" id="network-export-devices">Export CSV</button>` : ''}
-        </div>`;
-
-        const progressBar = this._activeScanRunning
-            ? `<div class="network-scan-progress" id="network-scan-progress-bar">${this._renderScanProgress()}</div>`
-            : '';
-
-        if (devices.length === 0 && !this._activeScanRunning) {
-            return `<div class="network-devices-section">
-                ${toolbar}
-                ${progressBar}
-                <div class="network-empty">
-                    <p style="font-size:14px;margin-bottom:8px">Welche Geräte sind in deinem Netzwerk?</p>
-                    <p style="color:var(--text-muted);font-size:12px;margin:0">
-                        <strong>Netzwerk scannen</strong> — Findet alle Geräte mit Hersteller, offenen Ports und Betriebssystem (ca. 30-60 Sek.)<br>
-                        <strong>Schnellscan</strong> — Nur die ARP-Tabelle (sofort, aber weniger Details)
-                    </p>
-                </div>
-            </div>`;
-        }
-
-        let filtered = devices;
-        const filterQuery = this._deviceFilter || '';
-        if (filterQuery) {
-            const q = filterQuery.toLowerCase();
-            filtered = filtered.filter(d =>
-                (d.ip || '').includes(q) || (d.mac || '').toLowerCase().includes(q) ||
-                (d.hostname || '').toLowerCase().includes(q) || (d.vendor || '').toLowerCase().includes(q) ||
-                (d.os || '').toLowerCase().includes(q) || (d.deviceLabel || '').toLowerCase().includes(q) ||
-                (d.modelName || '').toLowerCase().includes(q)
-            );
-        }
-
-        if (isActive) {
-            // Inventar-Zusammenfassung
-            const typeCounts = {};
-            for (const d of filtered) {
-                const t = d.deviceLabel || 'Unbekanntes Gerät';
-                typeCounts[t] = (typeCounts[t] || 0) + 1;
-            }
-            const sortedTypes = Object.entries(typeCounts).sort((a, b) => b[1] - a[1]);
-            const summaryBadges = sortedTypes
-                .map(([label, count]) => `<span class="netinv-type-badge netinv-type-badge-clickable" data-scroll-group="${escapeHtml(label)}">${count}x ${escapeHtml(label)}</span>`)
-                .join('');
-
-            const toggleLabel = this._groupByType ? 'Liste' : 'Gruppiert';
-            const toggleIcon = this._groupByType ? '\u2630' : '\u25A4';
-            const groupToggle = filtered.length > 0 ? `<button class="network-btn network-btn-secondary" id="network-group-toggle" title="Zwischen gruppierter und flacher Ansicht wechseln">${toggleIcon} ${toggleLabel}</button>` : '';
-
-            const summary = `<div class="netinv-summary">
-                <div class="netinv-summary-count">${filtered.length} Gerät${filtered.length !== 1 ? 'e' : ''} im Netzwerk ${groupToggle}</div>
-                <div class="netinv-summary-types">${summaryBadges}</div>
-            </div>`;
-
-            // Tabellen-Inhalt: gruppiert oder flach
-            let tableContent = '';
-            if (this._groupByType && filtered.length > 0) {
-                // Gruppiert nach Gerätetyp
-                const groups = new Map();
-                for (const d of filtered) {
-                    const key = d.deviceLabel || 'Unbekanntes Gerät';
-                    if (!groups.has(key)) groups.set(key, []);
-                    groups.get(key).push(d);
-                }
-                // Sortieren: Meiste zuerst, "Unbekannt" zuletzt
-                const sortedGroups = [...groups.entries()].sort((a, b) => {
-                    if (a[0].startsWith('Unbekannt')) return 1;
-                    if (b[0].startsWith('Unbekannt')) return -1;
-                    return b[1].length - a[1].length;
-                });
-                // Geräte innerhalb jeder Gruppe sortieren: IP numerisch (WU-32)
-                const _ipNum = (ip) => ip.split('.').reduce((acc, oct) => acc * 256 + parseInt(oct, 10), 0);
-                for (const [, devs] of sortedGroups) {
-                    devs.sort((a, b) => _ipNum(a.ip) - _ipNum(b.ip));
-                }
-                for (const [label, devs] of sortedGroups) {
-                    const firstDev = devs[0];
-                    const typeIcon = this._deviceIcon(firstDev?.deviceIcon || 'help-circle');
-                    const typeClass = firstDev?.deviceType || 'unknown';
-                    const isExpanded = !this._collapsedGroups.has(label);
-                    const arrow = isExpanded ? '\u25BC' : '\u25B6';
-                    tableContent += `<tr class="netinv-group-header" data-group-toggle="${escapeHtml(label)}">
-                        <td colspan="8"><div class="netinv-group-header-inner">
-                            <span class="netinv-group-arrow">${arrow}</span>
-                            <span class="netinv-type-dot netinv-type-${escapeHtml(typeClass)}">${typeIcon}</span>
-                            <strong class="netinv-group-label">${escapeHtml(label)}</strong>
-                            <span class="netinv-group-count">${devs.length}</span>
-                        </div></td>
-                    </tr>`;
-                    if (isExpanded) {
-                        for (const d of devs) {
-                            tableContent += this._renderDeviceRow(d);
-                        }
-                    }
-                }
-            } else {
-                // Flache Liste (Originalverhalten)
-                tableContent = filtered.map(d => this._renderDeviceRow(d)).join('');
-            }
-
-            return `<div class="network-devices-section">
-                ${toolbar}
-                ${progressBar}
-                ${summary}
-                <table class="network-table netinv-table">
-                    <thead><tr>
-                        <th style="width:36px"></th>
-                        <th style="width:16%">Name</th>
-                        <th style="width:9%">Typ</th>
-                        <th style="width:13%">Hersteller</th>
-                        <th>Modell</th>
-                        <th style="width:12%">MAC-Adresse</th>
-                        <th style="width:11%">Ports</th>
-                        <th style="width:50px">Ping</th>
-                    </tr></thead>
-                    <tbody>${tableContent}</tbody>
-                </table>
-            </div>`;
-        }
-
-        // Passive Ansicht (nur ARP-Tabelle, wie vorher)
-        const rows = filtered.map(d => {
-            const stateClass = d.state === 'Erreichbar' ? 'network-device-reachable' :
-                d.state === 'Veraltet' ? 'network-device-stale' : '';
-            return `<tr class="${stateClass}">
-                <td>${escapeHtml(d.hostname) || '<span style="color:var(--text-muted)">—</span>'}</td>
-                <td class="network-ip">${escapeHtml(d.ip)}</td>
-                <td style="font-family:monospace;font-size:11px">${escapeHtml(d.mac) || '\u2014'}</td>
-                <td>${escapeHtml(d.vendor) || '<span style="color:var(--text-muted)">Unbekannt</span>'}</td>
-                <td><span class="network-device-state ${stateClass}">${escapeHtml(d.state)}</span></td>
-            </tr>`;
-        }).join('');
-
-        return `<div class="network-devices-section">
-            ${toolbar}
-            ${progressBar}
-            <table class="network-table network-devices-table">
-                <thead><tr>
-                    <th>Hostname</th>
-                    <th>IP-Adresse</th>
-                    <th>MAC-Adresse</th>
-                    <th>Hersteller</th>
-                    <th>Status</th>
-                </tr></thead>
-                <tbody>${rows}</tbody>
-            </table>
-        </div>`;
-    }
-
-    _renderDeviceRow(d) {
-        const portBadges = (d.openPorts || []).slice(0, 4).map(p =>
-            `<span class="network-port-badge">${p.port} <small>${escapeHtml(p.label)}</small></span>`
-        ).join(' ');
-        const morePortsHint = (d.openPorts || []).length > 4 ? `<span class="network-port-badge">+${d.openPorts.length - 4}</span>` : '';
-        const localBadge = d.isLocal ? ' <span class="network-local-badge">Du</span>' : '';
-        const rttClass = d.rtt < 5 ? 'network-rtt-fast' : d.rtt < 50 ? 'network-rtt-medium' : 'network-rtt-slow';
-        const typeLabel = d.deviceLabel || 'Unbekannt';
-        const typeIcon = this._deviceIcon(d.deviceIcon || 'help-circle');
-        // Prefer friendlyName > hostname > IP for display name
-        const name = d.friendlyName || d.hostname || d.ip;
-
-        const modelParts = [];
-        if (d.modelName) {
-            modelParts.push(`<span class="netinv-model-name">${escapeHtml(d.modelName)}</span>`);
-        }
-        if (d.firmwareVersion) {
-            modelParts.push(`<span class="netinv-fw-badge" title="Firmware: ${escapeHtml(d.firmwareVersion)}">FW ${escapeHtml(d.firmwareVersion)}</span>`);
-        }
-        if (d.serialNumber) {
-            modelParts.push(`<span class="netinv-serial" title="Seriennummer: ${escapeHtml(d.serialNumber)}">S/N ${escapeHtml(d.serialNumber.length > 12 ? d.serialNumber.substring(0, 12) + '...' : d.serialNumber)}</span>`);
-        }
-        if (d.os) {
-            modelParts.push(`<span class="netinv-os-badge" title="Betriebssystem: ${escapeHtml(d.os)}">${escapeHtml(d.os)}</span>`);
-        }
-        if (d.sshBanner) {
-            modelParts.push(`<span class="netinv-ssh-badge" title="${escapeHtml(d.sshBanner)}">SSH</span>`);
-        }
-        if (d.httpServer) {
-            modelParts.push(`<span class="netinv-http-badge" title="HTTP-Server: ${escapeHtml(d.httpServer)}">HTTP</span>`);
-        }
-        if (d.snmpSysName) {
-            modelParts.push(`<span class="netinv-snmp-name" title="SNMP-Gerätename: ${escapeHtml(d.snmpSysName)}${d.snmpLocation ? ' | Standort: ' + escapeHtml(d.snmpLocation) : ''}">${escapeHtml(d.snmpSysName)}</span>`);
-        }
-        if (d.mdnsServices && d.mdnsServices.length > 0) {
-            modelParts.push(`<span class="netinv-mdns-badge" title="mDNS: ${escapeHtml(d.mdnsServices.join(', '))}">${d.mdnsServices.length} Service${d.mdnsServices.length > 1 ? 's' : ''}</span>`);
-        }
-        if (d.identifiedBy) {
-            modelParts.push(`<span class="netinv-source-badge" title="Erkannt via: ${escapeHtml(d.identifiedBy)}">&#9432;</span>`);
-        }
-        const modelHtml = modelParts.length > 0
-            ? modelParts.join('')
-            : '<span style="color:var(--text-muted)">\u2014</span>';
-
-        return `<tr class="network-device-row">
-            <td class="netinv-col-icon"><span class="netinv-type-dot netinv-type-${escapeHtml(d.deviceType || 'unknown')}">${typeIcon}</span></td>
-            <td class="netinv-col-name"><span class="netinv-device-name">${escapeHtml(name)}${localBadge}</span>${d.hostname ? `<span class="netinv-device-ip">${escapeHtml(d.ip)}</span>` : ''}</td>
-            <td class="netinv-col-type">${escapeHtml(typeLabel)}</td>
-            <td class="netinv-col-vendor">${escapeHtml(d.vendor) || '<span style="color:var(--text-muted)">\u2014</span>'}</td>
-            <td class="netinv-col-model">${modelHtml}</td>
-            <td class="netinv-col-mac" style="font-family:monospace;font-size:11px">${escapeHtml(d.mac) || '\u2014'}</td>
-            <td class="netinv-col-ports">${portBadges || morePortsHint || '\u2014'}</td>
-            <td class="netinv-col-rtt"><span class="${rttClass}">${d.rtt > 0 ? d.rtt + ' ms' : '\u2014'}</span></td>
-        </tr>`;
     }
 
     _renderBandwidth() {
@@ -1480,42 +1209,6 @@ export class NetworkView {
             };
         });
 
-        // Gruppierung: Toggle gruppiert/flach
-        const groupToggleBtn = this.container.querySelector('#network-group-toggle');
-        if (groupToggleBtn) {
-            groupToggleBtn.onclick = () => {
-                this._groupByType = !this._groupByType;
-                this.render();
-            };
-        }
-
-        // Gruppierung: Gruppen ein-/ausklappen
-        this.container.querySelectorAll('[data-group-toggle]').forEach(row => {
-            row.onclick = () => {
-                const groupLabel = row.dataset.groupToggle;
-                if (this._collapsedGroups.has(groupLabel)) {
-                    this._collapsedGroups.delete(groupLabel);
-                } else {
-                    this._collapsedGroups.add(groupLabel);
-                }
-                this.render();
-            };
-        });
-
-        // Summary-Badge-Klick: Zur Gruppe scrollen + aufklappen
-        this.container.querySelectorAll('[data-scroll-group]').forEach(badge => {
-            badge.onclick = () => {
-                const groupLabel = badge.dataset.scrollGroup;
-                this._groupByType = true;
-                this._collapsedGroups.delete(groupLabel);
-                this.render();
-                setTimeout(() => {
-                    const header = this.container.querySelector(`[data-group-toggle="${groupLabel}"]`);
-                    if (header) header.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }, 50);
-            };
-        });
-
         // Tier-Level Toggle
         this.container.querySelectorAll('[data-tier-level]').forEach(btn => {
             btn.onclick = () => {
@@ -1560,151 +1253,6 @@ export class NetworkView {
                 this.render();
             };
         }
-
-        // Device filter
-        const deviceFilterInput = this.container.querySelector('#network-device-filter');
-        if (deviceFilterInput) {
-            deviceFilterInput.oninput = () => {
-                this._deviceFilter = deviceFilterInput.value;
-                this.render();
-                const restored = this.container.querySelector('#network-device-filter');
-                if (restored) { restored.focus(); restored.selectionStart = restored.selectionEnd = restored.value.length; }
-            };
-        }
-
-        // Active network scan
-        const scanActiveBtn = this.container.querySelector('#network-scan-active');
-        if (scanActiveBtn) {
-            scanActiveBtn.onclick = async () => {
-                this._activeScanRunning = true;
-                this._activeScanProgress = null;
-                this.render();
-                try {
-                    // OUI-Datenbank automatisch herunterladen wenn noch nicht vorhanden
-                    if (!this._ouiDownloaded && window.api.updateOUIDatabase) {
-                        try {
-                            const ouiResult = await window.api.updateOUIDatabase();
-                            if (ouiResult?.success) {
-                                this._ouiDownloaded = true;
-                                console.log(`OUI-Datenbank geladen: ${ouiResult.lines} Einträge`);
-                            }
-                        } catch { /* Ignorieren — Static-Fallback greift */ }
-                    }
-                    this._activeScanResult = await window.api.scanNetworkActive();
-                    showToast(`${this._activeScanResult.devices.length} Geräte gefunden`, 'success');
-                } catch (err) {
-                    console.error('Aktiver Scan Fehler:', err);
-                    showToast('Netzwerk-Scan fehlgeschlagen: ' + err.message, 'error');
-                }
-                this._activeScanRunning = false;
-                this.render();
-            };
-        }
-
-        // Passive scan (schnell, nur ARP)
-        const scanPassiveBtn = this.container.querySelector('#network-scan-passive');
-        if (scanPassiveBtn) {
-            scanPassiveBtn.onclick = async () => {
-                this._devicesLoading = true;
-                this._activeScanResult = null;
-                this.render();
-                try {
-                    this.localDevices = await window.api.scanLocalNetwork();
-                } catch (err) {
-                    console.error('Schnellscan Fehler:', err);
-                    this.localDevices = [];
-                    showToast('Schnellscan fehlgeschlagen: ' + err.message, 'error');
-                }
-                this._devicesLoading = false;
-                this.render();
-            };
-        }
-
-        // Detail: Port-Scan für einzelnes Gerät
-        this.container.querySelectorAll('[data-detail-ports]').forEach(btn => {
-            btn.onclick = async (e) => {
-                e.stopPropagation();
-                const ip = btn.dataset.detailPorts;
-                btn.disabled = true;
-                btn.textContent = 'Scanne...';
-                try {
-                    const ports = await window.api.scanDevicePorts(ip);
-                    if (this._activeScanResult) {
-                        const device = this._activeScanResult.devices.find(d => d.ip === ip);
-                        if (device) device.openPorts = ports;
-                    }
-                    this.render();
-                } catch (err) {
-                    showToast('Port-Scan fehlgeschlagen: ' + err.message, 'error');
-                }
-            };
-        });
-
-        // Detail: SMB-Shares
-        this.container.querySelectorAll('[data-detail-shares]').forEach(btn => {
-            btn.onclick = async (e) => {
-                e.stopPropagation();
-                const ip = btn.dataset.detailShares;
-                btn.disabled = true;
-                btn.textContent = 'Prüfe...';
-                try {
-                    const shares = await window.api.getSMBShares(ip);
-                    if (this._activeScanResult) {
-                        const device = this._activeScanResult.devices.find(d => d.ip === ip);
-                        if (device) device.shares = shares.map(s => s.name);
-                    }
-                    this.render();
-                } catch (err) {
-                    showToast('SMB-Prüfung fehlgeschlagen: ' + err.message, 'error');
-                }
-            };
-        });
-
-        // Export devices as CSV
-        const exportDevicesBtn = this.container.querySelector('#network-export-devices');
-        if (exportDevicesBtn && this._activeScanResult) {
-            exportDevicesBtn.onclick = () => {
-                const devices = this._activeScanResult.devices || [];
-                const header = 'IP;Hostname;MAC;Hersteller;Modell;Seriennummer;Firmware;Gerätetyp;Betriebssystem;SSH;SNMP-Name;SNMP-Standort;mDNS-Services;Erkannt via;Ports;Ping (ms);Freigaben';
-                const rows = devices.map(d => [
-                    d.ip, d.hostname, d.mac, d.vendor, d.modelName || '', d.serialNumber || '', d.firmwareVersion || '',
-                    d.deviceLabel || '', d.os, d.sshBanner || '', d.snmpSysName || '', d.snmpLocation || '',
-                    (d.mdnsServices || []).join(' '), d.identifiedBy || '',
-                    (d.openPorts || []).map(p => `${p.port}/${p.label}`).join(' '),
-                    d.rtt, (d.shares || []).join(' '),
-                ].join(';'));
-                const csv = header + '\n' + rows.join('\n');
-                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `netzwerk-geraete-${new Date().toISOString().slice(0, 10)}.csv`;
-                a.click();
-                URL.revokeObjectURL(url);
-                showToast('CSV exportiert', 'success');
-            };
-        }
-
-        // Block buttons
-        this.container.querySelectorAll('button[data-block]').forEach(btn => {
-            btn.onclick = async (e) => {
-                e.stopPropagation();
-                const name = btn.dataset.block;
-                const processPath = btn.dataset.path;
-                btn.disabled = true;
-                try {
-                    const result = await window.api.blockProcess(name, processPath);
-                    if (result.success) {
-                        showToast(`${name} blockiert`, 'success');
-                    } else {
-                        showToast(result.error || 'Fehler (Admin-Rechte erforderlich?)', 'error');
-                    }
-                } catch (err) {
-                    showToast('Fehler: ' + err.message, 'error');
-                }
-                btn.disabled = false;
-            };
-        });
 
         // History: Snapshot speichern
         const saveSnapshotBtn = this.container.querySelector('#network-save-snapshot');
@@ -1799,25 +1347,4 @@ export class NetworkView {
         this._sparklineCharts.clear();
     }
 
-    _deviceIcon(name) {
-        const icons = {
-            'monitor':      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>',
-            'server':       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>',
-            'printer':      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>',
-            'wifi':         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M5 12.55a11 11 0 0114.08 0"/><path d="M1.42 9a16 16 0 0121.16 0"/><path d="M8.53 16.11a6 6 0 016.95 0"/><circle cx="12" cy="20" r="1"/></svg>',
-            'smartphone':   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>',
-            'hard-drive':   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><line x1="22" y1="12" x2="2" y2="12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/><line x1="6" y1="16" x2="6.01" y2="16"/><line x1="10" y1="16" x2="10.01" y2="16"/></svg>',
-            'video':        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>',
-            'home':         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>',
-            'speaker':      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><rect x="4" y="2" width="16" height="20" rx="2"/><circle cx="12" cy="14" r="4"/><line x1="12" y1="6" x2="12.01" y2="6"/></svg>',
-            'tv':           '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><rect x="2" y="7" width="20" height="15" rx="2"/><polyline points="17 2 12 7 7 2"/></svg>',
-            'gamepad':      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><line x1="6" y1="12" x2="10" y2="12"/><line x1="8" y1="10" x2="8" y2="14"/><line x1="15" y1="13" x2="15.01" y2="13"/><line x1="18" y1="11" x2="18.01" y2="11"/><path d="M17.32 5H6.68a4 4 0 00-3.978 3.59c-.006.052-.01.101-.017.152C2.604 9.416 2 14.456 2 16a3 3 0 003 3c1 0 1.5-.5 2-1l1.414-1.414A2 2 0 019.828 16h4.344a2 2 0 011.414.586L17 18c.5.5 1 1 2 1a3 3 0 003-3c0-1.544-.604-6.584-.685-7.258-.007-.05-.011-.1-.017-.151A4 4 0 0017.32 5z"/></svg>',
-            'cpu':          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/></svg>',
-            'cloud':        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M18 10h-1.26A8 8 0 109 20h9a5 5 0 000-10z"/></svg>',
-            'activity':     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>',
-            'globe':        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>',
-            'help-circle':  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
-        };
-        return icons[name] || icons['help-circle'];
-    }
 }

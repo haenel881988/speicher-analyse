@@ -76,7 +76,7 @@ Weitere Funktionen fehlen bei entsprechenden Dateitypen, bei Bildern z.B.: die A
 - Issue #20 (Geräte falsch erkannt) wird obsolet
 - GPO-Scanner und Sicherheits-Check bleiben (betreffen nur den lokalen PC)
 
-**Status:** Geplant — Umsetzung in nächster Version
+**Status:** Umgesetzt (19.02.2026) — Frontend-Code entfernt (470 Zeilen). Backend/Bridge hatten keine Scanner-Commands (nie implementiert). oui.rs bleibt (wird vom Verbindungs-Monitor benötigt). ~100 Zeilen verwaiste CSS-Klassen (netinv-*, network-device-*) verbleiben als harmloser toter Code.
 
 ---
 
@@ -117,7 +117,8 @@ Weitere Funktionen fehlen bei entsprechenden Dateitypen, bei Bildern z.B.: die A
 | #1 | X-Button beendet App zuverlässig | 11.02.2026 |
 | #6 | Terminal-Breite + Fenster-Layout | 11.02.2026 |
 | — | Swiss Security Suite (4 Module: Geräte-Scanner, Sicherheits-Check, PDF-Bericht, Hochrisiko-Alarm) | Implementiert |
-| — | Netzwerk-Monitor Upgrade (Echtzeit-Polling, Verlauf-Tab, Aktiver Netzwerk-Scanner) | Implementiert |
+| — | Netzwerk-Monitor Upgrade (Echtzeit-Polling, Verlauf-Tab) | Implementiert |
+| — | IP-Scanner aus Netzwerk-Monitor entfernt (AV-Risiko) | 19.02.2026 |
 
 ---
 
@@ -156,6 +157,32 @@ Weitere Funktionen fehlen bei entsprechenden Dateitypen, bei Bildern z.B.: die A
 - Sicherheitslücke: `unsafe-eval` in CSP + fehlende Pfadprüfung bei Lösch-Befehl
 - 4 Event-Listener im Frontend die auf nie gesendete Backend-Events warten
 - 18 Ansichten ohne Aufräum-Funktion, PowerShell-Fehler auf Englisch
+
+## Log-Analyse Findings (19.02.2026)
+
+> Analyse von 20 Log-Dateien (17.-19.02.2026, ~870 KB). **0 Fehler** in allen Logs — die App läuft stabil.
+
+### Finding L-1: Akku-Abfrage auf Desktop-PCs (Niedrig)
+**Problem:** `get_battery_status` wird alle 30 Sekunden aufgerufen und gibt immer `hasBattery=false` zurück. Auf einem Desktop-PC ohne Akku: 54 unnötige PowerShell-Aufrufe in 12 Minuten.
+**Lösung:** Nach dem ersten `hasBattery=false` das Polling stoppen und den Wert cachen.
+
+### Finding L-2: Doppelte Verzeichnis-Abfragen (Niedrig)
+**Problem:** Dieselben Ordner (Desktop, Dokumente, Downloads) werden 10x in 12 Minuten abgefragt, weil jeder Tab-Wechsel einen neuen `list_directory`-Aufruf auslöst.
+**Lösung:** Kurzzeit-Cache (5-10 Sekunden) für `list_directory`-Ergebnisse.
+
+### Finding L-3: IP-Auflösung dauert 12+ Sekunden (Mittel)
+**Problem:** `resolve_ips` braucht konstant 12.2-12.3 Sekunden (DNS-Reverse-Lookup-Timeout). Die Firma-Namen erscheinen deshalb erst nach einem zweiten Refresh.
+**Lösung:** DNS-Timeout verkürzen oder parallele Auflösung mit schnellerem Timeout pro IP.
+
+### Finding L-4: Sicherheits-Check dauert 16-17 Sekunden (Mittel)
+**Problem:** `run_security_audit` ist der langsamste Befehl — 12 Prüfungen in einem einzigen PowerShell-Aufruf (Get-NetFirewallProfile, Get-MpComputerStatus, Get-BitLockerVolume, etc.).
+**Lösung:** Die 12 Prüfungen in 3-4 parallele Blöcke aufteilen (Ziel: unter 8 Sekunden).
+
+### Finding L-5: Doppelte Laufwerk-Abfrage beim Start (Niedrig)
+**Problem:** `Win32_LogicalDisk` wird beim App-Start zweimal innerhalb von 300ms aufgerufen — derselbe Datensatz wird doppelt abgefragt.
+**Lösung:** Zweiten Aufruf entfernen oder Ergebnis des ersten wiederverwenden.
+
+**Status:** Dokumentiert — Umsetzung bei nächster Optimierungsrunde
 
 ---
 
