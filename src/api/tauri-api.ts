@@ -306,6 +306,11 @@ export const pdfMerge = (filePaths: string[], outputPath: string) =>
 export const openPdfWindow = (filePath: string) =>
   invoke<any>('open_pdf_window', { filePath });
 
+// === Undo-Log ===
+export const getUndoLog = () => invoke<any[]>('get_undo_log');
+export const undoAction = (id: string) => invoke<any>('undo_action', { id });
+export const clearUndoLog = () => invoke<any>('clear_undo_log');
+
 // === Frontend Logging ===
 export const logFrontend = (level: string, message: string, context?: string) =>
   invoke<void>('log_frontend', { level, message, context });

@@ -155,13 +155,13 @@ Weitere Funktionen fehlen bei entsprechenden Dateitypen, bei Bildern z.B.: die A
 | 4 | #9 | Apps-Kontrollzentrum (ersetzt "Updates"-Tab) | Planung |
 | 5 | #10 | System-Profil (Hardware, Seriennummer, Hersteller-Links) | Größtenteils umgesetzt |
 | 6 | #4 | Privacy Dashboard anwenderfreundlicher | Überarbeitung — wartet auf Test |
-| 7 | #5 | PDF Vollansicht + Bearbeitung | Größtenteils umgesetzt |
+| 7 | #5 | PDF Vollansicht + Bearbeitung | Umgesetzt (Changelog #114, #120) |
 | ~~8~~ | ~~#11~~ | ~~Netzwerk-Paketaufzeichnung~~ | ENTFALLEN (AV-Risiko) |
 | ~~9~~ | ~~#20~~ | ~~Netzwerk-Geräte falsch erkannt~~ | OBSOLET (Scanner wird entfernt) |
 | ~~10~~ | ~~#12~~ | ~~WCAG-Kontrast vollständig WCAG 2.2 konform~~ | Bestätigt 19.02.2026 |
 | 11 | #13 | Fenster-Bereiche frei verschiebbar/skalierbar | Größtenteils umgesetzt |
 | 12 | #14 | Echte Terminal-Emulation (Farben, Cursor, interaktive Tools) | Teilweise |
-| 13 | #15 | Vertrauens-System: Undo-Log mit Wiederherstellung | Teilweise |
+| 13 | #15 | Vertrauens-System: Undo-Log mit Wiederherstellung | Umgesetzt (Changelog #121) |
 | 14 | #16 | Backup-Modul (lokale/Netzwerk-Sicherung) | Geplant |
 | 15 | #17 | KI-Integration (Cloud + Lokal) | Idee |
 | 16 | #18 | Offline-Lizenzierung | Idee |
@@ -310,11 +310,11 @@ Weitere Funktionen fehlen bei entsprechenden Dateitypen, bei Bildern z.B.: die A
 
 **Planung:**
 1. ~~**Tab-Ansicht:** PDF als eigenen Tab im Hauptfenster öffnen (wie ein Explorer-Tab)~~ → **Umgesetzt** — PDF-Editor als eigener Sidebar-Tab (Extras-Gruppe) + Einstieg über Explorer-Kontextmenü/Doppelklick/Vorschau
-2. **Losgelöstes Fenster:** Möglichkeit, die PDF in ein eigenständiges Fenster zu verschieben → Noch offen
+2. ~~**Losgelöstes Fenster:** Möglichkeit, die PDF in ein eigenständiges Fenster zu verschieben~~ → **Umgesetzt** (Changelog #120) — "Fenster lösen"-Button öffnet neues Tauri-Fenster mit eigenständigem PDF-Editor
 3. ~~**Bearbeitungsfunktionen:** Text markieren, Kommentare hinzufügen, Hervorhebungen setzen~~ → **Umgesetzt** (Changelog #114) — Markierungen (Highlight), Kommentare, Freihand-Zeichnungen + OCR-Texterkennung + Seiten-Management (Drehen, Löschen, Zusammenfügen)
-4. **Druck/Export:** PDF drucken oder als kommentierte Version speichern → Noch offen
+4. ~~**Druck/Export:** PDF drucken oder als kommentierte Version speichern~~ → **Umgesetzt** (Changelog #120) — "Exportieren"-Button (Kopie mit Annotationen) + "Drucken"-Button (Browser-Druckdialog mit @media print)
 
-**Status:** Größtenteils umgesetzt — 2 von 4 Punkten erledigt (Changelog #114). Offen: Losgelöstes Fenster, Druck/Export.
+**Status:** Vollständig umgesetzt — 4 von 4 Punkten erledigt (Changelog #114, #120). Wartet auf Simons Test.
 
 ---
 
@@ -514,9 +514,9 @@ Eine Art "Waage für die Festplatte":
 - Phase 2: Vorschau/Dry-Run für Lösch-Aktionen
 
 **Was noch fehlt:**
-- Phase 3: Vollständiges Undo-Log mit Wiederherstellung (jede Aktion rückgängig machbar)
+- ~~Phase 3: Vollständiges Undo-Log mit Wiederherstellung (jede Aktion rückgängig machbar)~~ → **Umgesetzt** (Changelog #121) — Undo-Modul (undo.rs), 3 Tauri-Commands (get_undo_log, undo_action, clear_undo_log), 6 destruktive Commands instrumentiert (delete_to_trash, delete_permanent, file_move, toggle_autostart, delete_autostart, apply_privacy_setting), UndoLogView mit Ampel-System (grün=umkehrbar, rot=nicht umkehrbar)
 
-**Status:** Teilweise — Undo-Log fehlt noch
+**Status:** Vollständig umgesetzt — 3 von 3 Phasen erledigt. Wartet auf Simons Test.
 
 → *Aus Visionen: "Vertrauen / Trust"*
 
@@ -731,7 +731,7 @@ Die App hat bereits einen beeindruckenden Funktionsumfang. Jetzt geht es darum, 
 |-------|-----|--------|
 | #2/#3 | Scandaten korrekt speichern und wiederherstellen | Bestätigt 19.02.2026 |
 | #4 | Privacy Dashboard verständlicher machen | Wartet auf Test |
-| #5 | PDF Vollansicht und Bearbeitung | Größtenteils umgesetzt (Changelog #114) |
+| #5 | PDF Vollansicht und Bearbeitung | Umgesetzt (Changelog #114, #120) — wartet auf Test |
 | ~~#12~~ | ~~WCAG-Kontrast vollständig konform~~ | Bestätigt 19.02.2026 |
 | #13 | Fenster-Bereiche frei verschiebbar | Größtenteils umgesetzt |
 | #14 | Echte Terminal-Emulation | Teilweise |

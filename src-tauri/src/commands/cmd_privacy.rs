@@ -63,6 +63,10 @@ pub async fn apply_privacy_setting(id: String) -> Result<Value, String> {
     tracing::info!(setting = %id, "Privacy-Einstellung anwenden");
     let (reg_path, reg_key, recommended, _, _) = privacy_setting_lookup(&id)
         .ok_or_else(|| format!("Einstellung '{}' nicht gefunden", id))?;
+
+    // Undo-Log: Setting-ID protokollieren (umkehrbar via reset_privacy_setting)
+    let desc = format!("Datenschutz-Einstellung \"{}\" auf empfohlen gesetzt", id);
+    crate::undo::log_action("privacy_setting", &desc, json!({ "setting_id": id, "registry_path": reg_path, "registry_key": reg_key }), true);
     // ConsentStore settings use REG_SZ "Deny"/"Allow", not REG_DWORD
     let script = if is_consent_store_setting(&id) {
         let val = if recommended == 0 { "Deny" } else { "Allow" };

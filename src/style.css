@@ -4129,6 +4129,45 @@ textarea::placeholder {
     background: var(--bg-hover);
 }
 
+/* ===== Undo-Log / Aktionsprotokoll ===== */
+.undo-log-view .view-header { margin-bottom: 16px; }
+.undo-log-view .view-header h2 { margin: 0 0 4px; }
+.undo-log-view .view-description { color: var(--text-muted); margin: 0; font-size: 13px; }
+
+.undo-log-toolbar {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 12px;
+    padding: 8px 12px; background: var(--bg-secondary); border-radius: 6px;
+}
+.undo-log-count { flex: 1; font-size: 13px; color: var(--text-muted); }
+
+.undo-log-list { display: flex; flex-direction: column; gap: 2px; }
+
+.undo-log-entry {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 12px; background: var(--bg-secondary); border-radius: 6px;
+    transition: background 0.15s;
+}
+.undo-log-entry:hover { background: var(--bg-hover); }
+.undo-log-entry.undone { opacity: 0.55; }
+
+.undo-log-indicator { flex-shrink: 0; width: 12px; display: flex; justify-content: center; }
+.undo-dot {
+    width: 10px; height: 10px; border-radius: 50%; display: inline-block;
+}
+.undo-dot.reversible { background: var(--accent-green, #4ecca3); }
+.undo-dot.permanent { background: var(--accent-red, #e74c3c); }
+.undo-dot.undone { background: var(--text-muted); }
+
+.undo-log-content { flex: 1; min-width: 0; }
+.undo-log-description { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.undo-log-meta { display: flex; gap: 12px; margin-top: 2px; }
+.undo-log-type { font-size: 11px; color: var(--text-muted); background: var(--bg-tertiary, var(--bg-primary)); padding: 1px 6px; border-radius: 3px; }
+.undo-log-time { font-size: 11px; color: var(--text-muted); }
+
+.undo-log-actions { flex-shrink: 0; display: flex; align-items: center; gap: 6px; }
+.undo-log-badge-undone { font-size: 11px; color: var(--text-muted); font-style: italic; }
+.undo-log-badge-permanent { font-size: 11px; color: var(--accent-red, #e74c3c); opacity: 0.7; }
+
 /* ===== PDF-Editor Druck-Styles ===== */
 @media print {
     /* Nur PDF-Seiten drucken, alles andere ausblenden */

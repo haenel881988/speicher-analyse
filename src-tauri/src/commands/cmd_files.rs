@@ -11,6 +11,15 @@ pub async fn delete_to_trash(paths: Vec<String>) -> Result<Value, String> {
     for p in &paths {
         validate_path(p)?;
     }
+    // Undo-Log: Pfade protokollieren (umkehrbar via Papierkorb)
+    let file_names: Vec<&str> = paths.iter().filter_map(|p| Path::new(p).file_name().and_then(|n| n.to_str())).collect();
+    let desc = if file_names.len() == 1 {
+        format!("\"{}\" in den Papierkorb verschoben", file_names[0])
+    } else {
+        format!("{} Elemente in den Papierkorb verschoben", file_names.len())
+    };
+    crate::undo::log_action("delete_trash", &desc, json!({ "paths": paths }), true);
+
     let ps_paths = paths.iter().map(|p| format!("'{}'", p.replace("'", "''"))).collect::<Vec<_>>().join(",");
     let script = format!(
         r#"Add-Type -AssemblyName Microsoft.VisualBasic
@@ -31,6 +40,23 @@ pub async fn delete_permanent(paths: Vec<String>) -> Result<Value, String> {
     tracing::warn!(count = paths.len(), "Permanente Löschung angefordert");
     for p in &paths {
         validate_path(p)?;
+    }
+
+    // Undo-Log: Pfade + Größen protokollieren (NICHT umkehrbar!)
+    let mut sizes: Vec<Value> = Vec::new();
+    for p in &paths {
+        let size = tokio::fs::metadata(p).await.map(|m| m.len()).unwrap_or(0);
+        sizes.push(json!({ "path": p, "size": size }));
+    }
+    let file_names: Vec<&str> = paths.iter().filter_map(|p| Path::new(p).file_name().and_then(|n| n.to_str())).collect();
+    let desc = if file_names.len() == 1 {
+        format!("\"{}\" endgültig gelöscht", file_names[0])
+    } else {
+        format!("{} Elemente endgültig gelöscht", file_names.len())
+    };
+    crate::undo::log_action("delete_permanent", &desc, json!({ "files": sizes }), false);
+
+    for p in &paths {
         let path = Path::new(p);
         if path.is_dir() {
             tokio::fs::remove_dir_all(path).await.map_err(|e| e.to_string())?;
@@ -60,8 +86,24 @@ pub async fn file_rename(old_path: String, new_name: String) -> Result<Value, St
 
 #[tauri::command]
 pub async fn file_move(source_paths: Vec<String>, dest_dir: String) -> Result<Value, String> {
+    // Undo-Log: Quell- und Zielpfade protokollieren (umkehrbar)
+    let mut moves: Vec<Value> = Vec::new();
     for src in &source_paths {
         validate_path(src)?;
+        let source_dir = Path::new(src).parent().and_then(|p| p.to_str()).unwrap_or("").to_string();
+        let name = Path::new(src).file_name().unwrap_or_default();
+        let dest = Path::new(&dest_dir).join(name);
+        moves.push(json!({ "source": src, "source_dir": source_dir, "dest": dest.to_string_lossy() }));
+    }
+    let file_names: Vec<&str> = source_paths.iter().filter_map(|p| Path::new(p).file_name().and_then(|n| n.to_str())).collect();
+    let desc = if file_names.len() == 1 {
+        format!("\"{}\" verschoben nach {}", file_names[0], dest_dir.split(&['\\', '/'][..]).last().unwrap_or(&dest_dir))
+    } else {
+        format!("{} Elemente verschoben nach {}", file_names.len(), dest_dir.split(&['\\', '/'][..]).last().unwrap_or(&dest_dir))
+    };
+    crate::undo::log_action("file_move", &desc, json!({ "moves": moves }), true);
+
+    for src in &source_paths {
         let name = Path::new(src).file_name().unwrap_or_default();
         let dest = Path::new(&dest_dir).join(name);
         tokio::fs::rename(src, &dest).await.map_err(|e| e.to_string())?;

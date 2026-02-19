@@ -23,6 +23,7 @@ const SystemProfilView = lazy(() => import('../views/SystemProfilView'));
 const HealthCheckView = lazy(() => import('../views/HealthCheckView'));
 const SettingsView = lazy(() => import('../views/SettingsView'));
 const PdfEditorView = lazy(() => import('../views/PdfEditorView'));
+const UndoLogView = lazy(() => import('../views/UndoLogView'));
 
 const Loading = () => <div className="loading-state">Wird geladen...</div>;
 
@@ -53,6 +54,7 @@ const TAB_MAP: Record<string, React.LazyExoticComponent<any>> = {
   'health-check': HealthCheckView,
   'settings': SettingsView,
   'pdf-editor': PdfEditorView,
+  'undo-log': UndoLogView,
 };
 
 export function TabRouter({ activeTab }: TabRouterProps) {

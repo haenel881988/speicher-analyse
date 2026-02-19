@@ -418,6 +418,85 @@ $bitmap.Dispose()
     }
 }
 
+// === Undo-Log ===
+
+#[tauri::command]
+pub async fn get_undo_log() -> Result<Value, String> {
+    let entries = crate::undo::get_log();
+    Ok(json!(entries))
+}
+
+#[tauri::command]
+pub async fn undo_action(id: String) -> Result<Value, String> {
+    let entry = crate::undo::get_entry(&id)
+        .ok_or_else(|| format!("Eintrag '{}' nicht gefunden", id))?;
+
+    if !entry.can_undo {
+        return Err("Diese Aktion kann nicht rückgängig gemacht werden".to_string());
+    }
+    if entry.undone {
+        return Err("Diese Aktion wurde bereits rückgängig gemacht".to_string());
+    }
+
+    // Rückgängig-Logik je nach Aktionstyp
+    match entry.action_type.as_str() {
+        "delete_trash" => {
+            // Papierkorb-Elemente können nicht programmatisch wiederhergestellt werden.
+            // Wir öffnen den Papierkorb, damit der Nutzer manuell wiederherstellen kann.
+            let _ = crate::ps::run_ps("Start-Process shell:RecycleBinFolder").await;
+            crate::undo::mark_undone(&id)?;
+            Ok(json!({ "success": true, "message": "Papierkorb wurde geöffnet. Bitte stelle die Dateien manuell wieder her." }))
+        }
+        "file_move" => {
+            // Dateien zurück an den Ursprungsort verschieben
+            if let Some(moves) = entry.before_state.get("moves").and_then(|v| v.as_array()) {
+                for m in moves {
+                    let from = m.get("dest").and_then(|v| v.as_str()).unwrap_or("");
+                    let to_dir = m.get("source_dir").and_then(|v| v.as_str()).unwrap_or("");
+                    if !from.is_empty() && !to_dir.is_empty() {
+                        let name = std::path::Path::new(from).file_name().unwrap_or_default();
+                        let to = std::path::Path::new(to_dir).join(name);
+                        let _ = tokio::fs::rename(from, &to).await;
+                    }
+                }
+                crate::undo::mark_undone(&id)?;
+                Ok(json!({ "success": true, "message": "Dateien wurden zurück verschoben." }))
+            } else {
+                Err("Keine Verschiebungsdaten vorhanden".to_string())
+            }
+        }
+        "toggle_autostart" => {
+            // Autostart-Eintrag zurücksetzen
+            let prev_enabled = entry.before_state.get("was_enabled").and_then(|v| v.as_bool()).unwrap_or(true);
+            let entry_data = entry.before_state.get("entry").cloned().unwrap_or(json!({}));
+            super::cmd_system::toggle_autostart(entry_data, prev_enabled).await?;
+            crate::undo::mark_undone(&id)?;
+            Ok(json!({ "success": true, "message": "Autostart-Eintrag zurückgesetzt." }))
+        }
+        "privacy_setting" => {
+            // Privacy-Einstellung zurücksetzen
+            let setting_id = entry.before_state.get("setting_id").and_then(|v| v.as_str()).unwrap_or("");
+            if !setting_id.is_empty() {
+                super::cmd_privacy::reset_privacy_setting(setting_id.to_string()).await?;
+                crate::undo::mark_undone(&id)?;
+                Ok(json!({ "success": true, "message": "Datenschutz-Einstellung zurückgesetzt." }))
+            } else {
+                Err("Keine Einstellungs-ID vorhanden".to_string())
+            }
+        }
+        _ => {
+            crate::undo::mark_undone(&id)?;
+            Ok(json!({ "success": true, "message": "Eintrag als rückgängig markiert." }))
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn clear_undo_log() -> Result<Value, String> {
+    crate::undo::clear_log()?;
+    Ok(json!({ "success": true }))
+}
+
 // === Frontend Logging ===
 
 #[tauri::command]

@@ -2,6 +2,7 @@ mod commands;
 mod oui;
 mod ps;
 mod scan;
+mod undo;
 
 use tauri::{Emitter, Manager};
 
@@ -370,6 +371,10 @@ pub fn run() {
             commands::capture_screenshot,
             // Frontend Logging
             commands::log_frontend,
+            // Undo-Log
+            commands::get_undo_log,
+            commands::undo_action,
+            commands::clear_undo_log,
             // PDF Editor
             commands::pdf_get_info,
             commands::pdf_get_annotations,

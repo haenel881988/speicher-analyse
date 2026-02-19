@@ -61,6 +61,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     id: 'extras', label: 'Extras', items: [
       { tab: 'pdf-editor', label: 'PDF-Editor', icon: 'M14,2H6a2,2,0,0,0-2,2v16a2,2,0,0,0,2,2h12a2,2,0,0,0,2-2V8z' },
+      { tab: 'undo-log', label: 'Aktionsprotokoll', icon: 'M3,12a9,9,0,1,0,9-9M3,3v6h6M12,7v5l4,2' },
       { tab: 'settings', label: 'Einstellungen', icon: 'M12,12m-3,0a3,3,0,1,0,6,0a3,3,0,1,0-6,0' },
     ],
   },

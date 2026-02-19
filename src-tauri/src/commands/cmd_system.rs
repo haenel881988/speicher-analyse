@@ -98,6 +98,10 @@ $entries | ConvertTo-Json -Compress"#
 pub async fn toggle_autostart(entry: Value, enabled: bool) -> Result<Value, String> {
     let source = entry.get("source").and_then(|v| v.as_str()).unwrap_or("");
     let name = entry.get("name").and_then(|v| v.as_str()).unwrap_or("");
+
+    // Undo-Log: vorherigen Status protokollieren
+    let desc = format!("Autostart \"{}\" {}", name, if enabled { "aktiviert" } else { "deaktiviert" });
+    crate::undo::log_action("toggle_autostart", &desc, json!({ "entry": entry.clone(), "was_enabled": !enabled }), true);
     let command = entry.get("command").and_then(|v| v.as_str()).unwrap_or("");
     let location_label = entry.get("locationLabel").and_then(|v| v.as_str()).unwrap_or("");
 
@@ -148,6 +152,10 @@ pub async fn toggle_autostart(entry: Value, enabled: bool) -> Result<Value, Stri
 pub async fn delete_autostart(entry: Value) -> Result<Value, String> {
     let source = entry.get("source").and_then(|v| v.as_str()).unwrap_or("");
     let name = entry.get("name").and_then(|v| v.as_str()).unwrap_or("");
+
+    // Undo-Log: Autostart-Daten protokollieren (teilweise umkehrbar)
+    let desc = format!("Autostart-Eintrag \"{}\" gelöscht", name);
+    crate::undo::log_action("delete_autostart", &desc, json!({ "entry": entry.clone() }), false);
     let command = entry.get("command").and_then(|v| v.as_str()).unwrap_or("");
     let location_label = entry.get("locationLabel").and_then(|v| v.as_str()).unwrap_or("");
 
