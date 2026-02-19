@@ -12,7 +12,7 @@ const QA_ICONS = {
 };
 
 // SVG file type icons (16x16, stroke-based, inherits color from CSS)
-const FILE_TYPE_ICONS = {
+export const FILE_TYPE_ICONS = {
     // Documents
     pdf: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><text x="12" y="17" text-anchor="middle" font-size="6" fill="currentColor" stroke="none" font-weight="bold">PDF</text></svg>',
     document: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>',
@@ -42,7 +42,7 @@ const FILE_TYPE_ICONS = {
     folderOpen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 19a2 2 0 01-2-2V5a2 2 0 012-2h4l2 3h9a2 2 0 012 2v1M5 19h14a2 2 0 002-2l1-7H7.5"/></svg>',
 };
 
-const EXT_TO_ICON = {
+export const EXT_TO_ICON = {
     // Documents
     '.pdf': 'pdf', '.doc': 'document', '.docx': 'document', '.odt': 'document', '.rtf': 'document',
     '.txt': 'document', '.md': 'document', '.epub': 'document',
@@ -82,7 +82,7 @@ const EXT_TO_ICON = {
     '.cache': 'system', '.dmp': 'system', '.etl': 'system',
 };
 
-function getFileIcon(extension, isDirectory) {
+export function getFileIcon(extension, isDirectory) {
     if (isDirectory) {
         return FILE_TYPE_ICONS.folder.replace('<svg ', '<svg class="icon-folder" ');
     }

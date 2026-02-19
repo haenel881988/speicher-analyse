@@ -462,6 +462,267 @@ pub async fn file_properties(file_path: String) -> Result<Value, String> {
     crate::ps::run_ps_json(&script).await
 }
 
+// === Extended Properties (4-Tab Dialog) ===
+
+#[tauri::command]
+pub async fn file_properties_general(file_path: String) -> Result<Value, String> {
+    let safe_path = file_path.replace("'", "''");
+    let script = format!(
+        r#"
+$item = Get-Item -LiteralPath '{0}' -Force
+$isDir = $item.PSIsContainer
+
+# Cluster-Size für "Größe auf Datenträger"
+$clusterSize = 4096
+try {{
+    $driveLetter = (Split-Path '{0}' -Qualifier).TrimEnd(':')
+    $vol = Get-Volume -DriveLetter $driveLetter -ErrorAction SilentlyContinue
+    if ($vol.AllocationUnitSize -gt 0) {{ $clusterSize = $vol.AllocationUnitSize }}
+}} catch {{}}
+
+$totalSize = 0
+$sizeOnDisk = 0
+$fileCount = -1
+$dirCount = -1
+
+if ($isDir) {{
+    # Ordner: Nicht rekursiv — Frontend berechnet async via calculateFolderSize
+    $totalSize = 0
+}} else {{
+    $totalSize = [long]$item.Length
+    $sizeOnDisk = [long]([math]::Ceiling($item.Length / $clusterSize) * $clusterSize)
+}}
+
+# Dateityp-Beschreibung + Öffnen-mit
+$typeDesc = ''
+$openWith = ''
+if (-not $isDir) {{
+    $ext = $item.Extension
+    if ($ext) {{
+        try {{
+            $assocResult = cmd /c "assoc $ext" 2>$null
+            if ($assocResult) {{
+                $assocType = ($assocResult -replace "^[^=]+=","").Trim()
+                $typeDesc = $assocType
+                try {{
+                    $ftypeResult = cmd /c "ftype $assocType" 2>$null
+                    if ($ftypeResult) {{
+                        $openWith = ($ftypeResult -replace "^[^=]+=","").Trim()
+                    }}
+                }} catch {{}}
+            }}
+        }} catch {{}}
+    }}
+    if (-not $typeDesc) {{ $typeDesc = if ($ext) {{ "$($ext.TrimStart('.').ToUpper())-Datei" }} else {{ 'Datei' }} }}
+}} else {{
+    $typeDesc = 'Dateiordner'
+}}
+
+# Attribute
+$attrs = $item.Attributes
+[PSCustomObject]@{{
+    name = $item.Name
+    path = $item.FullName
+    parentPath = if ($item.PSIsContainer) {{ $item.Parent.FullName }} else {{ $item.DirectoryName }}
+    extension = $item.Extension
+    isDir = $isDir
+    size = [long]$totalSize
+    sizeOnDisk = [long]$sizeOnDisk
+    sizeBytes = [long]$totalSize
+    fileCount = $fileCount
+    dirCount = $dirCount
+    created = $item.CreationTime.ToString('o')
+    modified = $item.LastWriteTime.ToString('o')
+    accessed = $item.LastAccessTime.ToString('o')
+    typeDescription = $typeDesc
+    openWith = $openWith
+    readOnly = ($attrs -band [IO.FileAttributes]::ReadOnly) -ne 0
+    hidden = ($attrs -band [IO.FileAttributes]::Hidden) -ne 0
+    system = ($attrs -band [IO.FileAttributes]::System) -ne 0
+    archive = ($attrs -band [IO.FileAttributes]::Archive) -ne 0
+}} | ConvertTo-Json -Compress
+"#,
+        safe_path
+    );
+    crate::ps::run_ps_json(&script).await
+}
+
+#[tauri::command]
+pub async fn file_properties_security(file_path: String) -> Result<Value, String> {
+    let safe_path = file_path.replace("'", "''");
+    let script = format!(
+        r#"
+try {{
+    $acl = Get-Acl -LiteralPath '{0}'
+    $owner = $acl.Owner
+
+    $entries = @($acl.Access | ForEach-Object {{
+        [PSCustomObject]@{{
+            identity = $_.IdentityReference.Value
+            type = $_.AccessControlType.ToString()
+            rights = $_.FileSystemRights.ToString()
+            inherited = $_.IsInherited
+        }}
+    }})
+
+    [PSCustomObject]@{{
+        owner = $owner
+        entries = $entries
+    }} | ConvertTo-Json -Depth 3 -Compress
+}} catch {{
+    [PSCustomObject]@{{
+        owner = 'Unbekannt'
+        entries = @()
+        error = $_.Exception.Message
+    }} | ConvertTo-Json -Depth 3 -Compress
+}}
+"#,
+        safe_path
+    );
+    crate::ps::run_ps_json(&script).await
+}
+
+#[tauri::command]
+pub async fn file_properties_details(file_path: String) -> Result<Value, String> {
+    let safe_path = file_path.replace("'", "''");
+    let script = format!(
+        r#"
+$item = Get-Item -LiteralPath '{0}' -Force
+$ext = $item.Extension.ToLower()
+$props = [ordered]@{{}}
+
+$props['Dateiname'] = $item.Name
+$props['Dateityp'] = if ($item.Extension) {{ $item.Extension }} else {{ 'Ordner' }}
+$props['Ordnerpfad'] = if ($item.PSIsContainer) {{ $item.Parent.FullName }} else {{ $item.DirectoryName }}
+
+# Shell.Application für erweiterte Metadaten (Bilder, Audio, Video, Dokumente)
+try {{
+    $shell = New-Object -ComObject Shell.Application
+    $folder = $shell.Namespace($item.DirectoryName)
+    if ($folder) {{
+        $shellFile = $folder.ParseName($item.Name)
+        if ($shellFile) {{
+            $indices = @(
+                @(2, 'Elementtyp'),
+                @(20, 'Autoren'),
+                @(21, 'Titel'),
+                @(14, 'Kommentar'),
+                @(24, 'Copyright'),
+                @(27, 'Bitrate'),
+                @(28, 'Geschützt'),
+                @(176, 'Bewertung'),
+                @(186, 'Abmessungen'),
+                @(175, 'Aufnahmedatum'),
+                @(30, 'Interpret'),
+                @(31, 'Albumtitel'),
+                @(32, 'Jahr'),
+                @(33, 'Titelnummer'),
+                @(34, 'Genre'),
+                @(26, 'Dauer')
+            )
+            foreach ($entry in $indices) {{
+                try {{
+                    $val = $folder.GetDetailsOf($shellFile, $entry[0])
+                    if ($val -and $val.Trim()) {{
+                        $props[$entry[1]] = $val.Trim()
+                    }}
+                }} catch {{}}
+            }}
+        }}
+    }}
+}} catch {{}}
+
+# EXE/DLL: VersionInfo
+if ($ext -in '.exe','.dll','.sys','.ocx','.msi') {{
+    try {{
+        $vi = $item.VersionInfo
+        if ($vi) {{
+            if ($vi.ProductName) {{ $props['Produktname'] = $vi.ProductName }}
+            if ($vi.FileVersion) {{ $props['Dateiversion'] = $vi.FileVersion }}
+            if ($vi.ProductVersion) {{ $props['Produktversion'] = $vi.ProductVersion }}
+            if ($vi.CompanyName) {{ $props['Firma'] = $vi.CompanyName }}
+            if ($vi.FileDescription) {{ $props['Beschreibung'] = $vi.FileDescription }}
+            if ($vi.LegalCopyright) {{ $props['Copyright'] = $vi.LegalCopyright }}
+            if ($vi.OriginalFilename) {{ $props['Originaldateiname'] = $vi.OriginalFilename }}
+        }}
+    }} catch {{}}
+}}
+
+$result = @($props.GetEnumerator() | ForEach-Object {{
+    [PSCustomObject]@{{ key = $_.Key; value = $_.Value }}
+}})
+
+if ($result.Count -eq 0) {{
+    '[]'
+}} else {{
+    $result | ConvertTo-Json -Depth 2 -Compress
+}}
+"#,
+        safe_path
+    );
+    crate::ps::run_ps_json(&script).await
+}
+
+#[tauri::command]
+pub async fn file_properties_versions(file_path: String) -> Result<Value, String> {
+    let safe_path = file_path.replace("'", "''");
+    let script = format!(
+        r#"
+try {{
+    $shadows = @(Get-WmiObject Win32_ShadowCopy -ErrorAction SilentlyContinue | Sort-Object InstallDate -Descending)
+    if ($shadows.Count -eq 0) {{
+        [PSCustomObject]@{{ versions = @(); message = 'Keine Schattenkopien vorhanden. Der Systemschutz ist möglicherweise deaktiviert.' }} | ConvertTo-Json -Compress
+        return
+    }}
+
+    $filePath = '{0}'
+    $drive = (Split-Path $filePath -Qualifier)
+    $relativePath = $filePath.Substring($drive.Length)
+
+    $versions = @()
+    foreach ($shadow in $shadows) {{
+        $shadowPath = $shadow.DeviceObject + $relativePath
+        if (Test-Path -LiteralPath $shadowPath -ErrorAction SilentlyContinue) {{
+            $shadowItem = Get-Item -LiteralPath $shadowPath -Force -ErrorAction SilentlyContinue
+            $dateObj = [Management.ManagementDateTimeConverter]::ToDateTime($shadow.InstallDate)
+            $versions += [PSCustomObject]@{{
+                dateFormatted = $dateObj.ToString('dd.MM.yyyy HH:mm')
+                type = if ($shadow.ClientAccessible) {{ 'Wiederherstellungspunkt' }} else {{ 'Sicherungspunkt' }}
+                size = if ($shadowItem) {{ [long]$shadowItem.Length }} else {{ -1 }}
+            }}
+        }}
+    }}
+
+    [PSCustomObject]@{{ versions = $versions; message = '' }} | ConvertTo-Json -Depth 3 -Compress
+}} catch {{
+    [PSCustomObject]@{{ versions = @(); message = "Fehler: $($_.Exception.Message)" }} | ConvertTo-Json -Compress
+}}
+"#,
+        safe_path
+    );
+    crate::ps::run_ps_json(&script).await
+}
+
+#[tauri::command]
+pub async fn file_properties_hash(file_path: String, algorithm: String) -> Result<Value, String> {
+    let safe_path = file_path.replace("'", "''");
+    // Whitelist: nur bekannte Hash-Algorithmen
+    let safe_algo = match algorithm.to_uppercase().as_str() {
+        "MD5" => "MD5",
+        "SHA1" => "SHA1",
+        "SHA256" => "SHA256",
+        "SHA384" => "SHA384",
+        "SHA512" => "SHA512",
+        _ => return Err(format!("Unbekannter Algorithmus: {}", algorithm)),
+    };
+    let script = format!(
+        r#"(Get-FileHash -LiteralPath '{}' -Algorithm {}).Hash"#,
+        safe_path, safe_algo
+    );
+    let hash = crate::ps::run_ps(&script).await?;
+    Ok(json!({ "algorithm": safe_algo, "hash": hash.trim() }))
+}
+
 #[tauri::command]
 pub async fn open_file(file_path: String) -> Result<Value, String> {
     crate::ps::run_ps(&format!("Start-Process '{}'", file_path.replace("'", "''"))).await?;

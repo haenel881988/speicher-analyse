@@ -406,12 +406,18 @@
         <div class="treemap-tooltip-detail" id="tooltip-detail"></div>
     </div>
 
-    <!-- Properties Modal -->
+    <!-- Properties Modal (Tabbed, Windows Explorer Style) -->
     <div class="modal-overlay" id="properties-modal" style="display:none">
-        <div class="modal-dialog">
+        <div class="modal-dialog props-dialog">
             <div class="modal-header">
-                <span class="modal-title">Eigenschaften</span>
+                <span class="modal-title" id="properties-title">Eigenschaften</span>
                 <button class="modal-close" id="properties-close" aria-label="Eigenschaften schließen">&times;</button>
+            </div>
+            <div class="props-tabs" id="properties-tabs">
+                <button class="props-tab active" data-props-tab="general">Allgemein</button>
+                <button class="props-tab" data-props-tab="security">Sicherheit</button>
+                <button class="props-tab" data-props-tab="details">Details</button>
+                <button class="props-tab" data-props-tab="versions">Vorgängerversionen</button>
             </div>
             <div class="modal-body" id="properties-body"></div>
         </div>

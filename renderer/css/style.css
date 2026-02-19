@@ -1343,6 +1343,106 @@ textarea::placeholder {
     font-size: 12px;
 }
 
+/* ===== Properties Dialog (Tabbed, Windows Explorer Style) ===== */
+.props-dialog { min-width: 480px; max-width: 560px; max-height: 85vh; }
+
+.props-tabs {
+    display: flex;
+    gap: 0;
+    padding: 0 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-secondary);
+}
+
+.props-tab {
+    padding: 8px 16px;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    transition: color var(--transition), border-color var(--transition);
+    white-space: nowrap;
+}
+
+.props-tab:hover { color: var(--text-primary); }
+.props-tab.active { color: var(--accent-text); border-bottom-color: var(--accent); }
+
+/* General tab: Header with icon + filename */
+.props-general-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--border-light);
+    margin-bottom: 12px;
+}
+
+.props-general-icon { width: 48px; height: 48px; flex-shrink: 0; color: var(--accent-text); }
+.props-general-icon svg { width: 100%; height: 100%; }
+.props-general-name { font-size: 15px; font-weight: 600; word-break: break-all; }
+
+/* Separator between groups */
+.props-separator { height: 1px; background: var(--border-light); margin: 8px 0; }
+
+/* Attribute checkboxes (read-only) */
+.props-attrs { display: flex; gap: 18px; padding: 8px 0; }
+.props-attrs label { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-secondary); cursor: default; }
+.props-attrs input[type="checkbox"] { accent-color: var(--accent); pointer-events: none; }
+
+/* Security tab */
+.props-security-owner {
+    font-size: 13px;
+    margin-bottom: 12px;
+    padding: 8px 10px;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-sm, 4px);
+}
+
+.props-acl-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.props-acl-table th { text-align: left; padding: 6px 8px; border-bottom: 2px solid var(--border); color: var(--text-secondary); font-weight: 600; font-size: 11px; }
+.props-acl-table td { padding: 5px 8px; border-bottom: 1px solid var(--border-light); font-size: 11px; }
+.props-acl-table tbody tr:hover td { background: var(--bg-hover, var(--bg-tertiary)); }
+.props-acl-allow { color: var(--success, #2ed573); }
+.props-acl-deny { color: var(--danger, #ff4757); }
+.props-acl-inherited { color: var(--text-muted); font-style: italic; }
+
+/* Details tab */
+.props-detail-row { display: flex; padding: 5px 0; border-bottom: 1px solid var(--border-light); font-size: 12px; }
+.props-detail-key { width: 140px; flex-shrink: 0; color: var(--text-secondary); font-weight: 500; }
+.props-detail-value { flex: 1; word-break: break-all; font-family: var(--font-mono); font-size: 11px; }
+
+.props-hash-section { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-light); }
+.props-hash-btn {
+    padding: 4px 12px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm, 4px);
+    color: var(--text-primary);
+    cursor: pointer;
+    font-size: 12px;
+    transition: background var(--transition);
+}
+.props-hash-btn:hover { background: var(--bg-hover, var(--bg-tertiary)); }
+.props-hash-result { margin-top: 6px; font-family: var(--font-mono); font-size: 11px; word-break: break-all; color: var(--text-secondary); user-select: all; }
+
+/* Versions tab */
+.props-versions-empty { text-align: center; color: var(--text-muted); padding: 30px 20px; font-size: 13px; }
+.props-versions-list { display: flex; flex-direction: column; gap: 6px; }
+.props-version-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 10px;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-sm, 4px);
+    font-size: 12px;
+}
+.props-version-date { font-weight: 600; }
+.props-version-type { color: var(--text-secondary); font-size: 11px; }
+
 /* ===== Context Menu ===== */
 .context-menu {
     position: fixed;
