@@ -1,7 +1,7 @@
 /**
  * Tauri API Bridge — Typisierte ES-Module Version.
  * Ersetzt die alte IIFE-Bridge (renderer/js/tauri-bridge.js).
- * Alle 150 Methoden + 18 Event-Listener.
+ * Alle 150 Methoden + 16 Event-Listener.
  */
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';

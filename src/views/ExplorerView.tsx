@@ -448,8 +448,10 @@ export default function ExplorerView() {
           {knownFolders.map(folder => (
             <div key={folder.path}
               className={`explorer-qa-item ${currentPath === folder.path || currentPath.startsWith(folder.path + '\\') ? 'active' : ''}`}
-              onClick={() => navigateTo(folder.path)} title={folder.path}
-              dangerouslySetInnerHTML={{ __html: (QA_ICONS[folder.icon] || QA_ICONS.documents) + `<span>${folder.name}</span>` }} />
+              onClick={() => navigateTo(folder.path)} title={folder.path}>
+              <span dangerouslySetInnerHTML={{ __html: QA_ICONS[folder.icon] || QA_ICONS.documents }} />
+              <span>{folder.name}</span>
+            </div>
           ))}
         </div>
         <div className="explorer-qa-section">
@@ -458,8 +460,10 @@ export default function ExplorerView() {
             <div key={drive.mountpoint}
               className={`explorer-qa-item ${currentPath === drive.mountpoint || currentPath.startsWith(drive.mountpoint) ? 'active' : ''}`}
               onClick={() => navigateTo(drive.mountpoint)}
-              title={`${drive.device || drive.mountpoint}${drive.free ? ` - ${formatBytes(drive.free)} frei` : ''}`}
-              dangerouslySetInnerHTML={{ __html: QA_ICONS.drive + `<span>${drive.mountpoint.replace('\\', '')}</span>` }} />
+              title={`${drive.device || drive.mountpoint}${drive.free ? ` - ${formatBytes(drive.free)} frei` : ''}`}>
+              <span dangerouslySetInnerHTML={{ __html: QA_ICONS.drive }} />
+              <span>{drive.mountpoint.replace('\\', '')}</span>
+            </div>
           ))}
         </div>
       </div>
@@ -543,7 +547,7 @@ export default function ExplorerView() {
             <div className="omni-dropdown-results">
               {omniResults.map((r, i) => (
                 <div key={i} className="omni-result-item" onClick={() => handleOmniResultClick(r.dirPath || r.path)}>
-                  <span className="omni-result-icon" dangerouslySetInnerHTML={{ __html: getFileIcon(r.isDir ? null : (r.name?.substring(r.name.lastIndexOf('.')) || ''), r.isDir) }} />
+                  <span className="omni-result-icon" dangerouslySetInnerHTML={{ __html: getFileIcon(r.isDir ? null : (r.name?.substring(r.name.lastIndexOf('.')) || ''), r.isDir) }} />{/* SVG-only: getFileIcon gibt nur statische SVGs zurück */}
                   <span className="omni-result-name">{r.name}</span>
                   <span className="omni-result-dir" title={r.dirPath}>{shortenPath(r.dirPath)}</span>
                 </div>
@@ -587,11 +591,10 @@ export default function ExplorerView() {
                   const isRenaming = renamePath === entry.path;
 
                   let sizeStr = '';
-                  let sizeBarHtml = '';
+                  let sizePct = 0;
                   if (entry.isDirectory && entry.size > 0 && folderSizes) {
                     sizeStr = formatBytes(entry.size);
-                    const pct = parentFolderSize > 0 ? (entry.size / parentFolderSize * 100) : 0;
-                    sizeBarHtml = `<div class="explorer-size-bar"><div class="size-bar"><div class="size-bar-fill" style="width:${Math.max(pct, 0.5)}%"></div></div></div>`;
+                    sizePct = parentFolderSize > 0 ? (entry.size / parentFolderSize * 100) : 0;
                   } else if (!entry.isDirectory) {
                     sizeStr = formatBytes(entry.size);
                   }
@@ -624,7 +627,13 @@ export default function ExplorerView() {
                       </td>
                       <td className="explorer-col-size">
                         {sizeStr}
-                        {sizeBarHtml && <span dangerouslySetInnerHTML={{ __html: sizeBarHtml }} />}
+                        {sizePct > 0 && (
+                          <div className="explorer-size-bar">
+                            <div className="size-bar">
+                              <div className="size-bar-fill" style={{ width: `${Math.max(sizePct, 0.5)}%` }} />
+                            </div>
+                          </div>
+                        )}
                       </td>
                       <td className="explorer-col-type">{entry.isDirectory ? 'Ordner' : (entry.extension || '-')}</td>
                       <td className="explorer-col-date">{formatDateTime(entry.modified)}</td>

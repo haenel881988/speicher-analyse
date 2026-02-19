@@ -8,6 +8,7 @@ import { ToastContainer } from './components/Toast';
 import { useTauriEvent } from './hooks/useTauriEvent';
 import * as api from './api/tauri-api';
 import { formatBytes, formatNumber } from './utils/format';
+import { setStubToastCallback } from './utils/stub';
 import './style.css';
 
 const TerminalPanel = lazy(() => import('./views/TerminalView'));
@@ -27,6 +28,11 @@ function AppInner() {
     localStorage.setItem('speicher-analyse-theme', theme);
     api.setPreference('theme', theme).catch(() => {});
   }, [theme]);
+
+  // Register stub toast callback
+  useEffect(() => {
+    setStubToastCallback((msg, type) => ctx.showToast(msg, type as any));
+  }, [ctx.showToast]);
 
   // Load drives on mount
   useEffect(() => {

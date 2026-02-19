@@ -131,7 +131,7 @@ Nach jeder Änderung: `git add .; git commit -m "type: Beschreibung"; git push`
 - **Build:** Vite (`npm run dev` / `npm run build`), Output nach `dist/`
 - **Charts:** Chart.js v4 (global via `<script>` in index.html), **PDF:** pdfjs-dist (npm)
 - **Terminal:** @xterm/xterm + @xterm/addon-fit (npm)
-- **IPC:** Typisierte API-Bridge `src/api/tauri-api.ts` → Tauri `invoke()` (155 Methoden, 16 Events)
+- **IPC:** Typisierte API-Bridge `src/api/tauri-api.ts` → Tauri `invoke()` (150 Methoden, 16 Events)
 
 ## Starten
 
@@ -143,7 +143,7 @@ cargo tauri build # Release-Build (MSI/NSIS)
 ## Architektur
 
 ### IPC-Muster (Tauri v2)
-- `src/api/tauri-api.ts` → typisiertes ES-Module mit 155 exportierten Funktionen, ruft Tauri `invoke()` direkt auf
+- `src/api/tauri-api.ts` → typisiertes ES-Module mit 150 invoke-Methoden + 16 Event-Listener, ruft Tauri `invoke()` direkt auf
 - `src-tauri/src/commands/` → 8 Module (cmd_scan, cmd_files, cmd_network, cmd_privacy, cmd_system, cmd_terminal, cmd_misc + mod.rs)
 - `src-tauri/src/lib.rs` → App-Setup, Menüleiste, Plugin-Registrierung
 - `src-tauri/src/ps.rs` → PowerShell-Ausführung (UTF-8, CREATE_NO_WINDOW)
@@ -158,17 +158,17 @@ cargo tauri build # Release-Build (MSI/NSIS)
 - `src/views/` → 23 Views als React-Komponenten (.tsx), lazy-loaded via `React.lazy()`
 - `src/hooks/` → `useTauriEvent.ts` (Event-Listener mit Auto-Cleanup), `useApi.ts`
 - `src/utils/` → format.ts, escape.ts, categories.ts, file-icons.ts, stub.ts
-- `src/style.css` → Dark/Light Theme (CSS-Variablen, unverändert aus Vanilla-Ära)
+- `src/style.css` → Dark/Light Theme (CSS-Variablen)
 
 ### Kernmodule
 | Bereich | Dateien |
 |---------|---------|
 | Rust-Backend | `src-tauri/src/commands/` (8 Module), `ps.rs` (PowerShell), `scan.rs` (Scan-Store) |
-| API-Bridge | `src/api/tauri-api.ts` (155 typisierte Methoden, 16 Event-Listener) |
+| API-Bridge | `src/api/tauri-api.ts` (150 typisierte Methoden, 16 Event-Listener) |
 | App Shell | `src/App.tsx` (Router, State), `src/context/AppContext.tsx` (globaler Context) |
 | Views | `src/views/*.tsx` (23 Views, React.lazy Code-Splitting) |
 | Styling | `src/style.css` (Dark/Light Theme mit CSS-Variablen) |
-| Anforderungen | `docs/issues/anforderungen.md` (vollständige API-Referenz, 155 Methoden) |
+| Anforderungen | `docs/issues/anforderungen.md` (vollständige API-Referenz, 150 Methoden) |
 
 ## Visuelle Verifikation (ABSOLUT)
 

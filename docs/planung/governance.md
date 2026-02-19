@@ -1,7 +1,7 @@
 # Governance - Qualitätsstandards (Tauri v2)
 
 > Verbindliche Qualitätsanforderungen für die Speicher Analyse App. Jede Änderung muss diese Standards einhalten.
-> Aktualisiert für Tauri v2 (Rust-Backend + System-WebView) am 16.02.2026.
+> Aktualisiert für React 19 + TypeScript + Vite 7 + Tauri v2 am 19.02.2026.
 
 ---
 
@@ -14,22 +14,23 @@
 - **Dateipfade** vom Frontend validieren: Existenz + innerhalb erlaubter Verzeichnisse
 - Kein `format!()` mit unvalidiertem User-Input — keine Ausnahme
 
-### XSS-Prävention
-- **VERBOTEN:** `innerHTML` mit unescapten Variablen → `innerHTML = \`...\${variable}...\``
-- **Fehlermeldungen:** Immer mit `textContent` oder `createElement`, nie mit `innerHTML`
-- **Dynamische Inhalte:** `escapeHtml()` aus `renderer/js/utils.js` importieren und verwenden
-- **Zentrale Escape-Funktion:** Eine einzige `escapeHtml()` in `utils.js` — keine eigenen Varianten pro View
-- **showToast():** Die zentrale Toast-Funktion muss XSS-sicher sein — keine Duplikate erstellen
+### XSS-Prävention (React)
+- **React JSX escaped automatisch** — `{variable}` in JSX ist sicher, kein manuelles Escaping nötig
+- **`dangerouslySetInnerHTML` ist VERBOTEN** für dynamische User-Daten (Dateinamen, Pfade, Suchergebnisse)
+- **`dangerouslySetInnerHTML` NUR für statische SVG-Icons** aus `src/utils/file-icons.ts` — nie für User-Content
+- **Wenn unvermeidbar:** Inhalte MÜSSEN mit `escapeHtml()` aus `src/utils/escape.ts` bereinigt werden
+- **Keine direkte DOM-Manipulation** (`document.getElementById`, `innerHTML`) — immer React-State und JSX verwenden
+- **showToast():** Über `useAppContext()` Hook — nie DOM-Elemente manuell erstellen
 
 ### Tauri-Sicherheitskonfiguration
 - **CSP:** `tauri.conf.json` → `security.csp` MUSS konfiguriert sein (NICHT `null`)
-- **withGlobalTauri:** MUSS `false` sein
+- **withGlobalTauri:** MUSS `true` sein (Zugriffskontrolle über Capabilities, nicht über Verstecken von `__TAURI__`)
 - **Capabilities:** Minimal-Prinzip — nur benötigte APIs freigeben
 - **Single Instance:** `tauri-plugin-single-instance` verwenden
 
 ### Destruktive Operationen
 - **Löschen/Überschreiben:** Pfad-Validierung im Backend + Bestätigungsdialog im Frontend
-- **Bestätigungsdialog:** `window.api.showConfirmDialog()` statt `confirm()` verwenden
+- **Bestätigungsdialog:** `api.showConfirmDialog()` aus `src/api/tauri-api.ts` statt `confirm()` verwenden
 - **Keine stillschweigenden Löschungen:** Jede Dateiänderung braucht User-Bestätigung
 
 ---
@@ -85,14 +86,15 @@
 
 ---
 
-## 5. Memory-Leak-Prävention
+## 5. Memory-Leak-Prävention (React)
 
-- **Jeder `setInterval`** → Interval-ID speichern, in `destroy()` mit `clearInterval()` stoppen
-- **Event-Listener** nur EINMAL registrieren (Flag-Pattern). Bei wiederholtem Aufruf prüfen
-- **`ResizeObserver`** → in `destroy()` mit `.disconnect()` beenden
-- **DOM-Elemente** (Overlays, Modals) → in `destroy()` entfernen
-- **Jede View** MUSS eine `destroy()`-Funktion haben
-- **`app.js`** MUSS `destroy()` auf der alten View aufrufen bevor eine neue aktiviert wird
+- **`useEffect` Cleanup-Funktionen:** Jeder `useEffect` der Ressourcen erstellt (Timer, Listener, Observer) MUSS eine Cleanup-Funktion zurückgeben
+- **`setInterval` / `setTimeout`:** MUSS in `useEffect` mit Cleanup `return () => clearInterval(id)` verwendet werden
+- **Event-Listener:** MÜSSEN in `useEffect` registriert und im Cleanup entfernt werden
+- **`ResizeObserver`:** MUSS in `useEffect`-Cleanup mit `.disconnect()` beendet werden
+- **Refs für imperative Libs** (xterm, Chart.js, pdf.js): Via `useRef` halten, in `useEffect`-Cleanup `.destroy()` / `.dispose()` aufrufen
+- **React.lazy + Suspense:** Views werden lazy-loaded — TabRouter steuert wann Views gemountet/unmountet werden
+- **Tauri-Events:** `useTauriEvent` Hook aus `src/hooks/useTauriEvent.ts` verwenden — Cleanup ist automatisch eingebaut
 
 ---
 
@@ -101,23 +103,25 @@
 - **Konsistente Version** an allen 3 Stellen:
   - `src-tauri/Cargo.toml` → `[package] version` (Hauptquelle)
   - `src-tauri/tauri.conf.json` → `version`
-  - `renderer/index.html` → `.toolbar-version` (falls vorhanden)
+  - `package.json` → `version`
 - **Semantische Versionierung**: MAJOR.MINOR.PATCH
 - Bei Feature-Release: Alle drei Stellen gleichzeitig aktualisieren
 
 ---
 
-## 7. Architektur (Tauri v2)
+## 7. Architektur (React + Tauri v2)
 
 - **IPC-Muster**: Alle Frontend-Backend-Kommunikation über Tauri `invoke()`
-  - `src-tauri/src/commands.rs` → `#[tauri::command]` Funktionen
+  - `src-tauri/src/commands/` → 8 Module mit `#[tauri::command]` Funktionen (cmd_scan, cmd_files, cmd_network, cmd_privacy, cmd_system, cmd_terminal, cmd_misc + mod.rs)
   - `src-tauri/src/lib.rs` → Command-Registrierung in `generate_handler![]`
-  - `renderer/js/tauri-bridge.js` → Bridge-Mapping mit `makeInvoke()`
-  - Frontend ruft `window.api.methodName()` auf
+  - `src/api/tauri-api.ts` → Typisierte ES-Module API-Bridge (~152 Export-Funktionen + 16 Event-Listener)
+  - Frontend importiert typisierte Funktionen: `import { getDrives } from '../api/tauri-api'`
+- **Frontend-Stack:** React 19 + TypeScript 5.9 + Vite 7 (Build-Output nach `dist/`)
+- **State-Management:** React Context (`src/context/AppContext.tsx`) — globaler State für scanId, drives, activeTab, showToast
+- **Views:** 23 React-Komponenten in `src/views/`, lazy-loaded via `React.lazy() + Suspense`
+- **Hooks:** `useTauriEvent.ts` (Event-Listener mit Auto-Cleanup), `useApi.ts` (Loading/Error/Data)
 - **PowerShell:** Über `crate::ps::run_ps()` / `run_ps_json()` — nie direkt `std::process::Command`
 - **Parameter-Escaping:** VOR `format!()` — `.replace("'", "''")`
-- **ES Modules**: Frontend nutzt `import/export`, kein Build-Step
-- **Kein `await` in nicht-async Callbacks** → `.then()` verwenden
 
 ---
 
@@ -173,10 +177,10 @@ Ok(json!({ "success": true }))
 
 Jeder Frontend-Aufruf eines potentiellen Stubs MUSS die Antwort prüfen:
 
-```javascript
-import { isStub } from './utils.js';
+```typescript
+import { isStub } from '../utils/stub';
 
-const result = await window.api.applyPrivacySetting(id);
+const result = await api.applyPrivacySetting(id);
 if (isStub(result, 'Datenschutz-Einstellung anwenden')) return;
 // ... echte Verarbeitung nur wenn kein Stub
 ```
@@ -184,8 +188,8 @@ if (isStub(result, 'Datenschutz-Einstellung anwenden')) return;
 ### Regeln
 
 - **Stubs MÜSSEN als solche erkennbar sein**: `{ stub: true }` statt `{ success: true }`
-- **Frontend MUSS Stub-Antworten erkennen** via `isStub()` aus `renderer/js/utils.js`
+- **Frontend MUSS Stub-Antworten erkennen** via `isStub()` aus `src/utils/stub.ts`
 - **Kritische Stubs** (Privacy, Preferences, Session) haben höchste Implementierungs-Priorität
 - **anforderungen.md** Section 12 führt den Status jeder Methode (Stub/Implementiert/Teilweise)
 - **Kein Stub als "Fertig" markieren** — nur Simon darf Features als erledigt markieren
-- **escapeHtml()**: Zentral in `utils.js` — KEINE eigenen Varianten pro View
+- **escapeHtml()**: Zentral in `src/utils/escape.ts` — KEINE eigenen Varianten pro View

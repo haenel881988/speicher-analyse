@@ -183,4 +183,4 @@ Nach dem Einbinden, gib eine Zusammenfassung:
 - PowerShell-Befehl: Was ausgeführt wird
 - Escaping: Welche Parameter wie escaped werden
 - Timeout: Standard (30s) oder angepasst
-- Registrierung: In lib.rs + tauri-bridge.js eingetragen
+- Registrierung: In lib.rs + tauri-api.ts eingetragen
