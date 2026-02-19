@@ -1269,6 +1269,10 @@ function setupSidebarResize() {
         document.removeEventListener('mouseup', onMouseUp);
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
+        // Persist width
+        if (sidebar.style.width) {
+            localStorage.setItem('speicher-analyse-sidebar-width', sidebar.style.width);
+        }
     };
 
     handle.addEventListener('mousedown', (e) => {
@@ -1285,11 +1289,25 @@ function setupSidebarResize() {
         document.dispatchEvent(new CustomEvent('sidebar-manual-resize'));
     });
 
+    // Restore saved width
+    const savedWidth = localStorage.getItem('speicher-analyse-sidebar-width');
+    if (savedWidth && sidebar.classList.contains('expanded')) {
+        sidebar.style.width = savedWidth;
+        sidebar.style.minWidth = savedWidth;
+    }
+
     // Reset custom width when sidebar is collapsed
     const observer = new MutationObserver(() => {
         if (!sidebar.classList.contains('expanded')) {
             sidebar.style.width = '';
             sidebar.style.minWidth = '';
+        } else {
+            // Restore saved width when re-expanded
+            const w = localStorage.getItem('speicher-analyse-sidebar-width');
+            if (w) {
+                sidebar.style.width = w;
+                sidebar.style.minWidth = w;
+            }
         }
     });
     observer.observe(sidebar, { attributes: true, attributeFilter: ['class'] });
@@ -1317,6 +1335,10 @@ function setupPreviewResize() {
         document.removeEventListener('mouseup', onMouseUp);
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
+        // Persist width
+        if (panel.style.width) {
+            localStorage.setItem('speicher-analyse-preview-width', panel.style.width);
+        }
     };
 
     handle.addEventListener('mousedown', (e) => {
@@ -1328,7 +1350,15 @@ function setupPreviewResize() {
         document.body.style.userSelect = 'none';
         document.addEventListener('mousemove', onMouseMove);
         document.addEventListener('mouseup', onMouseUp);
+        // Signal to SmartLayout: user has manually resized preview
+        document.dispatchEvent(new CustomEvent('preview-manual-resize'));
     });
+
+    // Restore saved width
+    const savedWidth = localStorage.getItem('speicher-analyse-preview-width');
+    if (savedWidth) {
+        panel.style.width = savedWidth;
+    }
 }
 
 // ===== Smart Layout (intelligente Fensteranordnung) =====
@@ -1339,6 +1369,7 @@ function setupSmartLayout() {
     const terminalGlobal = document.getElementById('terminal-global');
     let smartLayoutEnabled = true;
     let userToggledSidebar = false;
+    let userResizedPreview = localStorage.getItem('speicher-analyse-preview-width') !== null;
 
     // Manuelle Sidebar-Toggles erkennen → Smart Layout greift dann nicht in Sidebar ein
     const sidebarToggle = sidebar?.querySelector('.sidebar-toggle-btn');
@@ -1346,6 +1377,7 @@ function setupSmartLayout() {
         sidebarToggle.addEventListener('click', () => { userToggledSidebar = true; });
     }
     document.addEventListener('sidebar-manual-resize', () => { userToggledSidebar = true; });
+    document.addEventListener('preview-manual-resize', () => { userResizedPreview = true; });
 
     // Preference laden
     window.api.getPreferences().then(prefs => {
@@ -1359,6 +1391,8 @@ function setupSmartLayout() {
             smartLayoutEnabled = e.detail.value;
             if (smartLayoutEnabled) {
                 userToggledSidebar = false;
+                userResizedPreview = false;
+                localStorage.removeItem('speicher-analyse-preview-width');
                 applySmartLayout();
             } else {
                 appEl?.classList.remove('smart-layout-narrow', 'smart-layout-wide');
@@ -1383,8 +1417,8 @@ function setupSmartLayout() {
             }
         }
 
-        // 3. Preview Panel Breite anpassen (nur wenn sichtbar)
-        if (previewPanel && previewPanel.style.display !== 'none') {
+        // 3. Preview Panel Breite anpassen (nur wenn sichtbar und nicht manuell skaliert)
+        if (previewPanel && previewPanel.style.display !== 'none' && !userResizedPreview) {
             if (w < 1000) previewPanel.style.width = '280px';
             else if (w < 1400) previewPanel.style.width = '320px';
             else previewPanel.style.width = '400px';

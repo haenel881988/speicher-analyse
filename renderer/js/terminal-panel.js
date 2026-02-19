@@ -110,6 +110,12 @@ export class TerminalPanel {
         this.panel = document.createElement('div');
         this.panel.className = 'terminal-panel';
 
+        // Restore saved height
+        const savedHeight = localStorage.getItem('speicher-analyse-terminal-height');
+        if (savedHeight) {
+            this.panel.style.height = savedHeight;
+        }
+
         // Build shell selector options
         const shellOptions = this.availableShells.map(s =>
             `<option value="${s.id}" ${!s.available ? 'disabled' : ''} ${s.id === this.currentShell ? 'selected' : ''}>${s.label}</option>`
@@ -268,6 +274,10 @@ export class TerminalPanel {
             document.removeEventListener('mouseup', onMouseUp);
             document.body.style.cursor = '';
             document.body.style.userSelect = '';
+            // Persist height
+            if (this.panel?.style.height) {
+                localStorage.setItem('speicher-analyse-terminal-height', this.panel.style.height);
+            }
             // Re-fit xterm after resize
             if (this.fitAddon && this.visible) {
                 this.fitAddon.fit();
