@@ -436,7 +436,7 @@ $upStr=''
 if($os.LastBootUpTime){$sp=(Get-Date)-$os.LastBootUpTime;$upStr="$([int]$sp.TotalDays) Tage, $($sp.Hours) Std., $($sp.Minutes) Min."}
 $r=[PSCustomObject]@{
 computer=[PSCustomObject]@{name=$cs.Name;manufacturer=$cs.Manufacturer;model=$cs.Model;systemType=$cs.SystemType;domain=$cs.Domain;user="$($cs.UserName)"}
-os=[PSCustomObject]@{name=$os.Caption;version=$os.Version;build=$os.BuildNumber;architecture=$os.OSArchitecture;installDate=fD $os.InstallDate;lastBoot=fD $os.LastBootUpTime;windowsDir=$os.WindowsDirectory;uptime=$upStr;productKeyPartial=$null}
+os=[PSCustomObject]@{name=$os.Caption;version=$os.Version;build=$os.BuildNumber;architecture=$os.OSArchitecture;installDate=fD $os.InstallDate;lastBoot=fD $os.LastBootUpTime;windowsDir=$os.WindowsDirectory;uptime=$upStr;productKeyPartial=$(try{$pk=(Get-CimInstance SoftwareLicensingProduct -EA Stop|Where-Object{$_.PartialProductKey -and $_.LicenseStatus -eq 1}|Select-Object -First 1).PartialProductKey;$pk}catch{$null})}
 cpu=[PSCustomObject]@{name=$cpu.Name;manufacturer=$cpu.Manufacturer;cores=[int]$cpu.NumberOfCores;threads=[int]$cpu.NumberOfLogicalProcessors;maxClockMHz=[int]$cpu.MaxClockSpeed;currentClockMHz=[int]$cpu.CurrentClockSpeed;l2CacheKB=[int]$cpu.L2CacheSize;l3CacheKB=[int]$cpu.L3CacheSize}
 gpu=@($gpus|ForEach-Object{[PSCustomObject]@{name=$_.Name;manufacturer=$_.AdapterCompatibility;driverVersion=$_.DriverVersion;vramBytes=[long]$_.AdapterRAM;resolution="$($_.CurrentHorizontalResolution)x$($_.CurrentVerticalResolution)";refreshRate=[int]$_.CurrentRefreshRate}})
 ram=[PSCustomObject]@{totalBytes=$ramT;totalFormatted="$([math]::Round($ramT/1GB,1)) GB";usedBytes=$ramU;freeBytes=$ramF;sticks=@($rams|ForEach-Object{[PSCustomObject]@{manufacturer=$_.Manufacturer;capacityBytes=[long]$_.Capacity;capacityFormatted="$([math]::Round($_.Capacity/1GB,1)) GB";speedMHz=[int]$_.Speed;bank=$_.BankLabel}})}
@@ -446,6 +446,22 @@ bios=[PSCustomObject]@{serialNumber=$biosI.SerialNumber;manufacturer=$biosI.Manu
 motherboard=[PSCustomObject]@{manufacturer=$mb.Manufacturer;product=$mb.Product;serialNumber=$mb.SerialNumber;version=$mb.Version}
 links=@()
 }
+# Dynamic manufacturer links
+$mfr = "$($cs.Manufacturer)".ToLower()
+$gpuMfr = ($gpus | ForEach-Object { "$($_.AdapterCompatibility)".ToLower() }) -join ','
+$cpuMfr = "$($cpu.Manufacturer)".ToLower()
+if($mfr -like '*lenovo*'){$r.links += [PSCustomObject]@{label='Lenovo Support';url='https://support.lenovo.com/'}}
+if($mfr -like '*dell*'){$r.links += [PSCustomObject]@{label='Dell Support';url='https://www.dell.com/support/home/'}}
+if($mfr -like '*hp*' -or $mfr -like '*hewlett*'){$r.links += [PSCustomObject]@{label='HP Support';url='https://support.hp.com/'}}
+if($mfr -like '*asus*'){$r.links += [PSCustomObject]@{label='ASUS Support';url='https://www.asus.com/support/'}}
+if($mfr -like '*acer*'){$r.links += [PSCustomObject]@{label='Acer Support';url='https://www.acer.com/support/'}}
+if($mfr -like '*msi*' -or $mfr -like '*micro-star*'){$r.links += [PSCustomObject]@{label='MSI Support';url='https://www.msi.com/support'}}
+if($mfr -like '*samsung*'){$r.links += [PSCustomObject]@{label='Samsung Support';url='https://www.samsung.com/support/'}}
+if($mfr -like '*microsoft*'){$r.links += [PSCustomObject]@{label='Microsoft Support';url='https://support.microsoft.com/'}}
+if($cpuMfr -like '*intel*'){$r.links += [PSCustomObject]@{label='Intel Treiber-Assistent';url='https://www.intel.com/content/www/us/en/support/detect.html'}}
+if($cpuMfr -like '*amd*'){$r.links += [PSCustomObject]@{label='AMD Treiber';url='https://www.amd.com/en/support'}}
+if($gpuMfr -like '*nvidia*'){$r.links += [PSCustomObject]@{label='NVIDIA Treiber';url='https://www.nvidia.com/Download/index.aspx'}}
+if($gpuMfr -like '*amd*' -or $gpuMfr -like '*ati*'){$r.links += [PSCustomObject]@{label='AMD Grafik-Treiber';url='https://www.amd.com/en/support'}}
 $r | ConvertTo-Json -Depth 4 -Compress"#
     ).await
 }
