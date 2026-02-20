@@ -322,12 +322,7 @@ export default function ExplorerView() {
 
     switch (action) {
       case 'open':
-        if (entry?.isDirectory) navigateTo(entry.path);
-        else if (entry?.extension?.toLowerCase() === '.pdf' && singlePath) {
-          setPendingPdfPath(singlePath);
-          setActiveTab('pdf-editor');
-        }
-        else if (singlePath) api.openFile(singlePath);
+        if (entry) handleDoubleClick(entry);
         break;
       case 'open-with':
         if (singlePath) api.openWithDialog(singlePath);
@@ -398,11 +393,8 @@ export default function ExplorerView() {
       case 'properties':
         if (singlePath) setPropertiesPath(singlePath);
         break;
-      case 'open-in-pdf-editor':
-        if (singlePath) {
-          setPendingPdfPath(singlePath);
-          setActiveTab('pdf-editor');
-        }
+      case 'open-system-default':
+        if (singlePath) api.openFile(singlePath);
         break;
       case 'run-as-admin':
         if (singlePath) api.runAsAdmin(singlePath);
@@ -476,7 +468,7 @@ export default function ExplorerView() {
         if (currentPath) setPropertiesPath(currentPath);
         break;
     }
-  }, [ctxMenu, selectedPaths, currentPath, clipboard, navigateTo, handleDelete, refresh, showToast, setPropertiesPath, setPendingPdfPath, setActiveTab]);
+  }, [ctxMenu, selectedPaths, currentPath, clipboard, navigateTo, handleDelete, handleDoubleClick, refresh, showToast, setPropertiesPath]);
 
   const handleNewFolder = useCallback(async () => {
     if (newFolderName === null) return;
@@ -653,6 +645,61 @@ export default function ExplorerView() {
           } catch (err: any) { showToast('Fehler: ' + err.message, 'error'); }
         })();
       }
+      else if (e.key === 'ArrowDown' && !e.altKey) {
+        e.preventDefault();
+        if (sortedEntries.length === 0) return;
+        const currentIdx = selectedPaths.size === 1
+          ? sortedEntries.findIndex(en => selectedPaths.has(en.path))
+          : -1;
+        const nextIdx = currentIdx < sortedEntries.length - 1 ? currentIdx + 1 : 0;
+        const nextEntry = sortedEntries[nextIdx];
+        if (nextEntry) {
+          setSelectedPaths(new Set([nextEntry.path]));
+          lastClickedRef.current = nextEntry.path;
+          // Scroll into view
+          const row = fileListRef.current?.querySelector(`tr[data-path="${CSS.escape(nextEntry.path)}"]`);
+          row?.scrollIntoView({ block: 'nearest' });
+        }
+      }
+      else if (e.key === 'ArrowUp' && !e.altKey) {
+        e.preventDefault();
+        if (sortedEntries.length === 0) return;
+        const currentIdx = selectedPaths.size === 1
+          ? sortedEntries.findIndex(en => selectedPaths.has(en.path))
+          : sortedEntries.length;
+        const prevIdx = currentIdx > 0 ? currentIdx - 1 : sortedEntries.length - 1;
+        const prevEntry = sortedEntries[prevIdx];
+        if (prevEntry) {
+          setSelectedPaths(new Set([prevEntry.path]));
+          lastClickedRef.current = prevEntry.path;
+          const row = fileListRef.current?.querySelector(`tr[data-path="${CSS.escape(prevEntry.path)}"]`);
+          row?.scrollIntoView({ block: 'nearest' });
+        }
+      }
+      else if (e.key === 'Home') {
+        e.preventDefault();
+        if (sortedEntries.length > 0) {
+          const first = sortedEntries[0];
+          setSelectedPaths(new Set([first.path]));
+          lastClickedRef.current = first.path;
+          const row = fileListRef.current?.querySelector(`tr[data-path="${CSS.escape(first.path)}"]`);
+          row?.scrollIntoView({ block: 'nearest' });
+        }
+      }
+      else if (e.key === 'End') {
+        e.preventDefault();
+        if (sortedEntries.length > 0) {
+          const last = sortedEntries[sortedEntries.length - 1];
+          setSelectedPaths(new Set([last.path]));
+          lastClickedRef.current = last.path;
+          const row = fileListRef.current?.querySelector(`tr[data-path="${CSS.escape(last.path)}"]`);
+          row?.scrollIntoView({ block: 'nearest' });
+        }
+      }
+      else if (e.key === 'N' && e.ctrlKey && e.shiftKey) {
+        e.preventDefault();
+        setNewFolderName('');
+      }
       else if (e.key === 'Delete' && selectedPaths.size > 0) {
         e.preventDefault();
         handleDelete(e.shiftKey);
@@ -672,7 +719,7 @@ export default function ExplorerView() {
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [selectedPaths, entries, currentPath, clipboard, showToast, refresh, handleDelete, handleDoubleClick, goBack, goForward, goUp, selectAll, navigateTo, setPropertiesPath]);
+  }, [selectedPaths, entries, sortedEntries, currentPath, clipboard, showToast, refresh, handleDelete, handleDoubleClick, goBack, goForward, goUp, selectAll, navigateTo, setPropertiesPath]);
 
   const breadcrumbParts = useMemo(() => {
     if (!currentPath) return [];
@@ -911,7 +958,7 @@ export default function ExplorerView() {
         const multi = selectedPaths.size > 1;
         const isDir = entry?.isDirectory;
         const ext = entry?.extension?.toLowerCase() || '';
-        const isArchive = ext === '.zip';
+        const isArchive = ['.zip', '.7z', '.rar', '.tar', '.gz', '.bz2', '.xz', '.tar.gz', '.tgz'].includes(ext);
         const isPdf = ext === '.pdf';
         const isExecutable = ['.exe', '.msi', '.bat', '.cmd', '.ps1'].includes(ext);
         const isTextFile = ['.txt', '.log', '.md', '.json', '.xml', '.csv', '.ini', '.cfg', '.yaml', '.yml',
@@ -924,10 +971,10 @@ export default function ExplorerView() {
             {entry ? (
               <>
                 <button className="ctx-item ctx-item-bold" onClick={() => ctxAction('open')}>Öffnen</button>
-                {!isDir && <button className="ctx-item" onClick={() => ctxAction('open-with')}>Öffnen mit...</button>}
                 {isPdf && (
-                  <button className="ctx-item" onClick={() => ctxAction('open-in-pdf-editor')}>Im PDF-Editor öffnen</button>
+                  <button className="ctx-item" onClick={() => ctxAction('open-system-default')}>Mit Standardprogramm öffnen</button>
                 )}
+                {!isDir && <button className="ctx-item" onClick={() => ctxAction('open-with')}>Öffnen mit...</button>}
                 {(isTextFile || (!isDir && ext === '')) && (
                   <button className="ctx-item" onClick={() => ctxAction('edit')}>Bearbeiten</button>
                 )}
@@ -952,31 +999,33 @@ export default function ExplorerView() {
                 <button className="ctx-item" onClick={() => ctxAction('move-to')}>Verschieben nach...</button>
                 <button className="ctx-item" onClick={() => ctxAction('copy-to')}>Kopieren nach...</button>
                 <div className="ctx-separator" />
-                <button className="ctx-item" onClick={() => ctxAction('create-zip')}>Als ZIP komprimieren</button>
+                {!isArchive && <button className="ctx-item" onClick={() => ctxAction('create-zip')}>Als ZIP komprimieren</button>}
                 {isArchive && <button className="ctx-item" onClick={() => ctxAction('extract')}>Archiv entpacken</button>}
-                <div className="ctx-separator" />
                 {!multi && (
-                  <div className="ctx-submenu-trigger">
-                    <button className="ctx-item">Tag setzen ›</button>
-                    <div className="ctx-submenu">
-                      {['red', 'orange', 'yellow', 'green', 'blue', 'purple'].map(c => (
-                        <button key={c} className="ctx-item ctx-tag-item" onClick={() => ctxAction('tag-' + c)}>
-                          <span className="ctx-tag-dot" style={{ background: TAG_COLORS[c]?.hex || '#888' }} />
-                          {TAG_COLORS[c]?.label || c}
-                        </button>
-                      ))}
-                      {hasTag && <>
-                        <div className="ctx-separator" />
-                        <button className="ctx-item" onClick={() => ctxAction('tag-remove')}>Tag entfernen</button>
-                      </>}
+                  <>
+                    <div className="ctx-separator" />
+                    <div className="ctx-submenu-trigger">
+                      <button className="ctx-item">Tag setzen ›</button>
+                      <div className="ctx-submenu">
+                        {['red', 'orange', 'yellow', 'green', 'blue', 'purple'].map(c => (
+                          <button key={c} className="ctx-item ctx-tag-item" onClick={() => ctxAction('tag-' + c)}>
+                            <span className="ctx-tag-dot" style={{ background: TAG_COLORS[c]?.hex || '#888' }} />
+                            {TAG_COLORS[c]?.label || c}
+                          </button>
+                        ))}
+                        {hasTag && <>
+                          <div className="ctx-separator" />
+                          <button className="ctx-item" onClick={() => ctxAction('tag-remove')}>Tag entfernen</button>
+                        </>}
+                      </div>
                     </div>
-                  </div>
+                  </>
                 )}
                 <div className="ctx-separator" />
                 <button className="ctx-item" onClick={() => ctxAction('trash')}>In Papierkorb <span className="ctx-shortcut">Entf</span></button>
                 <button className="ctx-item ctx-item-danger" onClick={() => ctxAction('delete-permanent')}>Endgültig löschen <span className="ctx-shortcut">Shift+Entf</span></button>
                 <div className="ctx-separator" />
-                {!multi && <button className="ctx-item" onClick={() => ctxAction('properties')}>Eigenschaften <span className="ctx-shortcut">Alt+Enter</span></button>}
+                <button className="ctx-item" onClick={() => ctxAction('properties')}>Eigenschaften <span className="ctx-shortcut">Alt+Enter</span></button>
               </>
             ) : (
               <>
@@ -997,7 +1046,7 @@ export default function ExplorerView() {
                 </div>
                 <button className="ctx-item" onClick={() => ctxAction('refresh')}>Aktualisieren <span className="ctx-shortcut">F5</span></button>
                 <div className="ctx-separator" />
-                <button className="ctx-item" onClick={() => ctxAction('new-folder')}>Neuer Ordner</button>
+                <button className="ctx-item" onClick={() => ctxAction('new-folder')}>Neuer Ordner <span className="ctx-shortcut">Strg+Shift+N</span></button>
                 <button className="ctx-item" onClick={() => ctxAction('new-textfile')}>Neues Textdokument</button>
                 <div className="ctx-separator" />
                 {clipboard && clipboard.paths.length > 0 && (
