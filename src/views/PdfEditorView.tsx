@@ -53,13 +53,18 @@ if(!Uint8Array.fromHex){Uint8Array.fromHex=function(s){const b=new Uint8Array(s.
 
 export default function PdfEditorView({ filePath: propFilePath = '', onClose }: { filePath?: string; onClose?: () => void } = {}) {
   const { showToast, setActiveTab, pendingPdfPath, setPendingPdfPath } = useAppContext();
-  // Use pending path from context if available (e.g. from Explorer double-click), otherwise prop
-  const filePath = pendingPdfPath || propFilePath;
+  // Local state holds the active PDF path — survives clearing of pendingPdfPath
+  const [activePdfPath, setActivePdfPath] = useState(propFilePath || '');
 
-  // Clear pending path after consuming it
+  // Consume pending path from context into local state
   useEffect(() => {
-    if (pendingPdfPath) setPendingPdfPath(null);
+    if (pendingPdfPath) {
+      setActivePdfPath(pendingPdfPath);
+      setPendingPdfPath(null);
+    }
   }, [pendingPdfPath, setPendingPdfPath]);
+
+  const filePath = activePdfPath;
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
   const [totalPages, setTotalPages] = useState(0);
