@@ -96,6 +96,7 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
   const strokeWidthRef = useRef(2);
   const setCommentPopoverRef = useRef((_v: { x: number; y: number; svgX: number; svgY: number; page: number } | null) => {});
   setCommentPopoverRef.current = setCommentPopover;
+  const handlePrintRef = useRef<() => void>(() => {});
 
   // Keep refs in sync
   useEffect(() => { annotationsRef.current = annotations; }, [annotations]);
@@ -299,7 +300,7 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
         redo();
       } else if (e.ctrlKey && e.key === 'p') {
         e.preventDefault();
-        window.print();
+        handlePrintRef.current();
       } else if (e.key === '+' || e.key === '=' || (e.ctrlKey && e.key === '+')) {
         e.preventDefault();
         setScale(s => Math.min(s + 0.25, 3.0));
@@ -535,6 +536,17 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
       }
     }
   }, []);
+
+  // --- Drucken: Alle Seiten rendern bevor window.print() aufgerufen wird ---
+  const handlePrint = useCallback(async () => {
+    const unrendered = pageEntriesRef.current.filter(e => !e.rendered);
+    if (unrendered.length > 0) {
+      for (const entry of unrendered) entry.rendered = true;
+      await Promise.all(unrendered.map(e => renderPage(e.pageNum)));
+    }
+    window.print();
+  }, [renderPage]);
+  handlePrintRef.current = handlePrint;
 
   const wireAnnotationEvents = useCallback((svg: SVGSVGElement, _canvas: HTMLCanvasElement, pageNum: number) => {
     svg.addEventListener('mousedown', (e) => {
@@ -931,7 +943,7 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
           <span className="pdf-editor-separator" />
           <button className="pdf-editor-btn" onClick={save} title="Speichern (Strg+S)">Speichern</button>
           <button className="pdf-editor-btn" onClick={exportAs} title="Als Kopie speichern...">Exportieren</button>
-          <button className="pdf-editor-btn" onClick={() => window.print()} title="Drucken (Strg+P)">Drucken</button>
+          <button className="pdf-editor-btn" onClick={handlePrint} title="Drucken (Strg+P)">Drucken</button>
           <button className="pdf-editor-btn" onClick={() => setShowOcr(true)} title="OCR-Texterkennung">OCR</button>
           <button className="pdf-editor-btn" onClick={() => { setMergeFiles([filePath]); setShowMerge(true); }} title="PDF zusammenfügen">Zusammenfügen</button>
           {!onClose && <button className="pdf-editor-btn" onClick={detachWindow} title="In eigenem Fenster öffnen">Fenster lösen</button>}

@@ -869,6 +869,32 @@ PDF-Editor hatte nach initialer Implementierung keine Grundfunktionen die JEDER 
 
 ---
 
+#### #107 — Detached Window: CSS Height-Chain unterbrochen bei #root
+`2026-02-20`
+
+**Symptom:** Im losgelösten PDF-Fenster füllte der Editor nicht die volle Fensterhöhe. Unten blieb ein leerer Bereich.
+
+**Ursache:** Die CSS Height-Chain `html,body { height: 100% }` → `#root` → `#app { height: 100vh }` war unterbrochen: `#root` hatte kein `height: 100%`. Im Hauptfenster fiel das nicht auf, weil `#app` mit `100vh` unabhängig von `#root` funktioniert. Im Detached Window ohne `#app` fehlte die Height-Propagation komplett.
+
+**Lösung:** `#root { height: 100%; }` in `style.css` ergänzt.
+
+**Lehre:** Height-Propagation in CSS erfordert eine LÜCKENLOSE Kette von `html` bis zum Ziel-Element. Jedes Element ohne explizite `height` unterbricht die Kette. Besonders tückisch bei Standalone-Fenstern die andere Wrapper-Elemente verwenden als das Hauptfenster.
+
+---
+
+#### #108 — IntersectionObserver + window.print() = leere Seiten
+`2026-02-20`
+
+**Symptom:** Beim Drucken eines mehrseitigen PDF wurden nur die besuchten Seiten gedruckt. Alle anderen erschienen als leere weiße Flächen.
+
+**Ursache:** Der PDF-Editor verwendet einen `IntersectionObserver` für Lazy-Rendering: Nur sichtbare Seiten (+ 200px Margin) werden auf Canvas gerendert. Nicht-sichtbare Seiten haben ein leeres Canvas-Element. `window.print()` druckt das DOM "as-is" — leere Canvas = leere Druckseite.
+
+**Lösung:** `handlePrint()` iteriert vor `window.print()` über alle noch nicht gerenderten `pageEntries` und rendert sie. Da `renderPage()` async ist, wird `Promise.all()` verwendet um auf alle Renderings zu warten.
+
+**Lehre:** Lazy-Rendering und Print sind inkompatibel. Vor `window.print()` MÜSSEN alle lazy-geladenen Inhalte (Canvas, Bilder, iframes) vollständig gerendert werden. Bei Keyboard-Shortcut-Integration: Ref-Pattern verwenden wenn die Handler-Funktion erst nach den Shortcuts definiert werden kann (Deklarationsreihenfolge).
+
+---
+
 <br>
 
 ## Terminal
