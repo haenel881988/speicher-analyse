@@ -148,10 +148,10 @@ export default function NetworkView() {
     }).catch(() => {});
   }, []);
 
-  // Initial data load
+  // Initial data load + delayed company resolution refresh
   useEffect(() => {
     refresh();
-    companyTimerRef.current = setTimeout(() => { if (loaded) refresh(); }, 12000);
+    companyTimerRef.current = setTimeout(() => refresh(), 12000);
     return () => {
       if (companyTimerRef.current) clearTimeout(companyTimerRef.current);
     };
@@ -178,11 +178,6 @@ export default function NetworkView() {
       stopFeedPolling();
     }
   }, [activeSubTab]);
-
-  // Render sparklines after each render
-  useEffect(() => {
-    if (loaded && activeSubTab === 'connections') renderSparklines();
-  });
 
   const refresh = useCallback(async () => {
     if (isRefreshingRef.current) return;
@@ -363,6 +358,11 @@ export default function NetworkView() {
       sparklineChartsRef.current.set(name, chart);
     });
   }, [bandwidthHistory]);
+
+  // Render sparklines when bandwidth data or tab changes
+  useEffect(() => {
+    if (loaded && activeSubTab === 'connections') renderSparklines();
+  }, [loaded, activeSubTab, renderSparklines]);
 
   // Filter groups
   const getFilteredGroups = useCallback((): ConnectionGroup[] => {

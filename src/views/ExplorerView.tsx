@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import * as api from '../api/tauri-api';
 import { useAppContext } from '../context/AppContext';
 import { formatBytes } from '../utils/format';
@@ -60,6 +60,7 @@ export default function ExplorerView() {
   const [clipboard, setClipboard] = useState<{ paths: string[]; cut: boolean } | null>(null);
 
   const lastClickedRef = useRef<string | null>(null);
+  const deepSearchUnlistenRef = useRef<Array<() => void>>([]);
   const dirCacheRef = useRef<Map<string, { data: any; time: number }>>(new Map());
   const columnWidthsRef = useRef<Record<string, number>>(
     (() => { try { const s = localStorage.getItem('explorer-col-widths-default'); return s ? JSON.parse(s) : {}; } catch { return {}; } })()
@@ -68,13 +69,14 @@ export default function ExplorerView() {
   const fileListRef = useRef<HTMLDivElement>(null);
   const addressInputRef = useRef<HTMLInputElement>(null);
 
-  // Init: load known folders + drives, navigate to default
+  // Init: load known folders + drives + preferences, navigate to default
   useEffect(() => {
     (async () => {
       let folders: KnownFolder[] = [];
       let drv: Drive[] = [];
       try { folders = await api.getKnownFolders(); } catch {}
       try { drv = await api.getDrives(); } catch {}
+      try { const prefs = await api.getPreferences(); setShowSizeColors(!!prefs.showSizeColors); } catch {}
       setKnownFolders(folders);
       setDrives(drv);
       const defaultPath = folders.length > 0 ? folders[0].path : 'C:\\';
@@ -144,12 +146,6 @@ export default function ExplorerView() {
     setFolderSizes(fSizes);
     setParentFolderSize(pSize);
 
-    // Size color preference
-    try {
-      const prefs = await api.getPreferences();
-      setShowSizeColors(!!prefs.showSizeColors);
-    } catch { setShowSizeColors(false); }
-
     setEntries(newEntries);
     setLoading(false);
 
@@ -199,7 +195,7 @@ export default function ExplorerView() {
     else { setSortCol(col); setSortAsc(col === 'name'); }
   }, [sortCol, sortAsc]);
 
-  const getSortedEntries = useCallback((): FileEntry[] => {
+  const sortedEntries = useMemo((): FileEntry[] => {
     const source = filteredEntries || entries;
     return [...source].sort((a, b) => {
       if (a.isDirectory && !b.isDirectory) return -1;
@@ -227,20 +223,19 @@ export default function ExplorerView() {
       });
       lastClickedRef.current = path;
     } else if (e && e.shiftKey && lastClickedRef.current) {
-      const sorted = getSortedEntries();
-      const startIdx = sorted.findIndex(en => en.path === lastClickedRef.current);
-      const endIdx = sorted.findIndex(en => en.path === path);
+      const startIdx = sortedEntries.findIndex(en => en.path === lastClickedRef.current);
+      const endIdx = sortedEntries.findIndex(en => en.path === path);
       if (startIdx >= 0 && endIdx >= 0) {
         const [lo, hi] = startIdx < endIdx ? [startIdx, endIdx] : [endIdx, startIdx];
         const newSel = new Set<string>();
-        for (let i = lo; i <= hi; i++) newSel.add(sorted[i].path);
+        for (let i = lo; i <= hi; i++) newSel.add(sortedEntries[i].path);
         setSelectedPaths(newSel);
       }
     } else {
       setSelectedPaths(new Set([path]));
       lastClickedRef.current = path;
     }
-  }, [getSortedEntries]);
+  }, [sortedEntries]);
 
   const handleDoubleClick = useCallback((entry: FileEntry) => {
     if (entry.isDirectory) {
@@ -527,22 +522,32 @@ export default function ExplorerView() {
       } catch {}
     }
 
-    // Deep search
+    // Deep search — clean up previous listeners first
     setDeepSearchRunning(true);
     const rootPath = currentPath.match(/^[A-Za-z]:\\/)?.[0] || currentPath;
     const collected: any[] = [];
 
-    api.onDeepSearchResult((data: any) => {
+    for (const unlisten of deepSearchUnlistenRef.current) unlisten();
+    deepSearchUnlistenRef.current = [];
+
+    const u1 = await api.onDeepSearchResult((data: any) => {
       collected.push(data);
       setOmniResults([...collected.slice(0, 200)]);
       setOmniCountText(`${collected.length} Treffer`);
     });
-    api.onDeepSearchComplete((data: any) => {
+    const u2 = await api.onDeepSearchComplete((data: any) => {
       setDeepSearchRunning(false);
       setOmniResults(collected.slice(0, 200));
       setOmniCountText(`${data.resultCount} Treffer in ${data.dirsScanned} Ordnern`);
+      for (const unlisten of deepSearchUnlistenRef.current) unlisten();
+      deepSearchUnlistenRef.current = [];
     });
-    api.onDeepSearchError(() => setDeepSearchRunning(false));
+    const u3 = await api.onDeepSearchError(() => {
+      setDeepSearchRunning(false);
+      for (const unlisten of deepSearchUnlistenRef.current) unlisten();
+      deepSearchUnlistenRef.current = [];
+    });
+    deepSearchUnlistenRef.current = [u1, u2, u3];
     api.deepSearchStart(rootPath, query, false);
   }, [entries, currentScanId, currentPath]);
 
@@ -655,8 +660,7 @@ export default function ExplorerView() {
     return () => document.removeEventListener('keydown', handler);
   }, [selectedPaths, entries, currentPath, clipboard, showToast, refresh, handleDelete, goBack, goForward, goUp, selectAll, navigateTo]);
 
-  const sorted = getSortedEntries();
-  const breadcrumbParts = (() => {
+  const breadcrumbParts = useMemo(() => {
     if (!currentPath) return [];
     const segments = currentPath.split('\\').filter(Boolean);
     let buildPath = '';
@@ -664,7 +668,7 @@ export default function ExplorerView() {
       buildPath += s + (i === 0 ? '\\' : '\\');
       return { name: s, path: buildPath };
     });
-  })();
+  }, [currentPath]);
 
   return (
     <div className="explorer-layout">
@@ -806,11 +810,11 @@ export default function ExplorerView() {
                 </tr>
               </thead>
               <tbody>
-                {sorted.length === 0 ? (
+                {sortedEntries.length === 0 ? (
                   <tr><td colSpan={5} style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>
                     {filteredEntries !== null ? 'Keine Treffer für den Suchbegriff' : 'Dieser Ordner ist leer'}
                   </td></tr>
-                ) : sorted.map(entry => {
+                ) : sortedEntries.map(entry => {
                   const isSelected = selectedPaths.has(entry.path);
                   const isTemp = !entry.isDirectory && isTempFile(entry.name, entry.extension);
                   const isEmpty = entry.isDirectory && emptyFolderPaths.has(entry.path);

@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import * as api from '../api/tauri-api';
 import { useAppContext } from '../context/AppContext';
 import { formatBytes, formatNumber } from '../utils/format';
@@ -99,13 +99,13 @@ export default function ChartsView() {
     else { setSortCol(col); setSortAsc(false); }
   };
 
-  const sortedData = [...data].sort((a: any, b: any) => {
+  const sortedData = useMemo(() => [...data].sort((a: any, b: any) => {
     let va = a[sortCol], vb = b[sortCol];
     if (typeof va === 'string') { va = va.toLowerCase(); vb = vb.toLowerCase(); }
     return sortAsc ? (va > vb ? 1 : -1) : (va < vb ? 1 : -1);
-  });
+  }), [data, sortCol, sortAsc]);
 
-  const totalSize = data.reduce((sum, item) => sum + item.total_size, 0);
+  const totalSize = useMemo(() => data.reduce((sum, item) => sum + item.total_size, 0), [data]);
 
   const showExtensionFiles = useCallback(async (ext: string) => {
     if (!currentScanId) return;

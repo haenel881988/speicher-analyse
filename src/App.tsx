@@ -183,21 +183,21 @@ function AppInner() {
       setStatusText('Bereit');
       setStatusLoading(false);
     }
-  }, [ctx, selectedDrive]);
+  }, [ctx.scanning, ctx.batteryInfo, ctx.showToast, ctx.setScanning, ctx.setCurrentPath, ctx.setScanId, selectedDrive]);
 
   const handleExportCsv = useCallback(() => {
     if (ctx.currentScanId) api.exportCSV(ctx.currentScanId);
     else ctx.showToast('Bitte zuerst einen Scan durchführen', 'info');
-  }, [ctx]);
+  }, [ctx.currentScanId, ctx.showToast]);
 
   const handleExportPdf = useCallback(() => {
     // PDF export via html2pdf (will be handled in the view)
     if (!ctx.currentScanId) ctx.showToast('Bitte zuerst einen Scan durchführen', 'info');
-  }, [ctx]);
+  }, [ctx.currentScanId, ctx.showToast]);
 
   const handleToggleTheme = useCallback(() => {
     ctx.setTheme(ctx.theme === 'dark' ? 'light' : 'dark');
-  }, [ctx]);
+  }, [ctx.setTheme, ctx.theme]);
 
   const handleTabChange = useCallback((tab: string) => {
     ctx.setActiveTab(tab);
@@ -207,7 +207,7 @@ function AppInner() {
       activePath: ctx.currentPath,
       driveSelection: selectedDrive,
     }).catch(() => {});
-  }, [ctx, selectedDrive]);
+  }, [ctx.setActiveTab, ctx.currentPath, selectedDrive]);
 
   // Keyboard shortcuts (Ctrl+` handled by TerminalView, Ctrl+F by ExplorerView)
   useEffect(() => {
