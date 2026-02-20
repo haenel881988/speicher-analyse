@@ -708,6 +708,24 @@ OCR-Scan schlug fehl weil `$stream.AsRandomAccessStream()` aufgerufen wurde. In 
 
 ---
 
+#### #95 — Feature-Implementierung: IMMER aus User-Perspektive denken
+`2026-02-20`
+
+PDF-Editor hatte nach initialer Implementierung keine Grundfunktionen die JEDER Mensch erwartet: Kein Strg+Z (Undo), keine Textauswahl, keine Tastaturkürzel, keine Seitennavigation, keine Annotation-Auswahl/Löschung. Simon musste explizit darauf hinweisen dass "grundlegende Funktionen fehlen" und "Menschen das verwenden".
+
+**Ursache:** Minimalistisches Denken — "Feature implementiert" bedeutete nur "technisch möglich", nicht "benutzbar". Die KI hat nur das absolute Minimum gebaut (Annotationen zeichnen) ohne sich zu fragen: "Was würde ein Mensch erwarten wenn er einen PDF-Editor öffnet?"
+
+**Lösung:** Vor JEDER Feature-Implementierung eine Checkliste abarbeiten:
+1. Welche Tastaturkürzel erwartet der User? (Strg+Z, Strg+S, Strg+P, Escape, +/-, etc.)
+2. Kann der User seine Aktionen rückgängig machen? (Undo/Redo)
+3. Kann der User Inhalte auswählen, markieren, löschen? (Selection)
+4. Gibt es Navigation? (Seiten, Scroll-Position, "Seite X von Y")
+5. Gibt es visuelles Feedback? (Aktives Element hervorgehoben, ungespeicherte Änderungen)
+
+**Lehre:** Ein Feature ist NICHT fertig wenn es technisch funktioniert. Es ist fertig wenn ein Mensch es intuitiv bedienen kann. Bei JEDEM neuen Feature die "Mensch-Checkliste" durchgehen: Undo, Shortcuts, Selection, Navigation, Feedback. Minimalistisch = schlecht. Vollständig = gut.
+
+---
+
 <br>
 
 ## Terminal

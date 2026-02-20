@@ -57,6 +57,20 @@ Annahmen sind nichts anderes als Halluzinationen die auf Basis fehlenden und fal
 - **Lieber zu gründlich als zu schnell.** Wenn die Wahl zwischen "schnell erledigt" und "gründlich geprüft" besteht → IMMER gründlich.
 - **Kontext verstehen.** Code nicht isoliert betrachten. Immer den umliegenden Code, die Aufrufer und die Abhängigkeiten mitlesen.
 
+## Prinzip 3d: User-Perspektive (PFLICHT — Lesson #95)
+
+**Ein Feature ist NICHT fertig wenn es technisch funktioniert. Es ist fertig wenn ein Mensch es intuitiv bedienen kann.**
+
+- **Minimalistisch = schlecht. Vollständig = gut.** "Feature implementiert" bedeutet NICHT "technisch möglich", sondern "benutzbar wie der User es von Windows-Programmen kennt"
+- **Vor JEDEM Feature die Mensch-Checkliste abarbeiten** (definiert in `/new-feature` Skill):
+  1. **Tastaturkürzel:** Strg+Z, Strg+S, Strg+P, Escape, Delete, Bild↑/↓, etc.
+  2. **Undo/Redo:** Kann der User Aktionen rückgängig machen?
+  3. **Auswahl:** Kann der User Elemente auswählen, markieren, löschen?
+  4. **Navigation:** Positionsanzeige, Sprung zu Position, Scroll-Tracking?
+  5. **Feedback:** Ungespeicherte Änderungen (*), Lade-Zustände, Erfolg/Fehler-Toast?
+- **Denkfrage VOR dem Coding:** "Wenn ich dieses Feature als normaler Windows-User zum ersten Mal öffne — was erwarte ich? Was würde mich frustrieren wenn es fehlt?"
+- **NICHT warten bis Simon Grundfunktionen einfordert.** Proaktiv mitdenken.
+
 ## Prinzip 4: Skill-Pflicht (KEINE Ausnahme)
 
 **ALLE Arbeiten MÜSSEN über Skills abgewickelt werden.** Kein Code schreiben ohne passenden Skill.

@@ -112,6 +112,45 @@ const FeatureNameView = lazy(() => import('../views/FeatureNameView'));
 
 Button in die passende Gruppe einfügen.
 
+## Mensch-Checkliste (PFLICHT — Lesson #95)
+
+**Ein Feature ist NICHT fertig wenn es technisch funktioniert. Es ist fertig wenn ein Mensch es intuitiv bedienen kann.**
+
+Vor dem Commit MUSS jeder Punkt geprüft und umgesetzt werden:
+
+### Tastaturkürzel
+- [ ] Strg+Z/Y (Undo/Redo) wo Aktionen rückgängig gemacht werden können?
+- [ ] Strg+S (Speichern) wo Daten gespeichert werden?
+- [ ] Strg+P (Drucken) wo Inhalte gedruckt werden können?
+- [ ] Escape (Abbrechen/Zurücksetzen) für modale Dialoge und Werkzeuge?
+- [ ] Entf/Delete für Löschen von ausgewählten Elementen?
+- [ ] Navigation-Shortcuts (Bild↑/↓, Pos1/Ende) bei langen Listen/Seiten?
+- [ ] Welche Shortcuts kennt der User von ähnlichen Windows-Programmen?
+
+### Undo/Redo
+- [ ] Kann der User seine letzten Aktionen rückgängig machen?
+- [ ] Gibt es sichtbare Undo/Redo-Buttons im Toolbar?
+
+### Auswahl und Interaktion
+- [ ] Kann der User Elemente auswählen (Klick)?
+- [ ] Kann der User ausgewählte Elemente bearbeiten/löschen?
+- [ ] Gibt es visuelles Feedback welches Element ausgewählt ist?
+- [ ] Kann der User Text markieren und kopieren wo es Sinn macht?
+
+### Navigation
+- [ ] Gibt es eine Positionsanzeige (z.B. "Seite X von Y", "Element X von Y")?
+- [ ] Kann der User zu einer bestimmten Position springen?
+- [ ] Scrollt die Ansicht bei Keyboard-Navigation mit?
+
+### Visuelles Feedback
+- [ ] Ungespeicherte Änderungen sichtbar (z.B. * im Titel)?
+- [ ] Lade-Zustände bei async Operationen?
+- [ ] Erfolgs-/Fehler-Toast bei Aktionen?
+- [ ] Aktives/ausgewähltes Element hervorgehoben?
+
+### Denkfrage (VOR dem Coding)
+> "Wenn ich dieses Feature als normaler Windows-User zum ersten Mal öffne — was erwarte ich? Was würde mich frustrieren wenn es fehlt?"
+
 ## Security-Checkliste (PFLICHT vor Commit)
 
 - [ ] Alle PowerShell-Parameter escaped?
