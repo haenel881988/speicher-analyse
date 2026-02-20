@@ -248,6 +248,8 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
     return () => {
       intersectionObRef.current?.disconnect();
       pageEntriesRef.current = [];
+      // Context-Menu DOM-Cleanup bei Unmount
+      document.querySelectorAll('.pdf-page-context-menu').forEach(el => el.remove());
     };
   }, [loaded, totalPages]);
 
@@ -262,6 +264,22 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
       }
     }
   }, [scale, loaded]);
+
+  // --- beforeunload: Warnung bei ungespeicherten Änderungen (Detached Window) ---
+  const unsavedRef = useRef(false);
+  useEffect(() => { unsavedRef.current = unsavedChanges; }, [unsavedChanges]);
+  useEffect(() => {
+    if (!onClose) return; // Nur im Detached Window aktiv
+    const handler = (e: BeforeUnloadEvent) => {
+      if (unsavedRef.current) {
+        e.preventDefault();
+        // Moderne Browser zeigen einen generischen Text; returnValue wird trotzdem benötigt
+        e.returnValue = 'Es gibt ungespeicherte Änderungen.';
+      }
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [onClose]);
 
   // --- Keyboard Shortcuts ---
   useEffect(() => {
@@ -1013,9 +1031,12 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
         />
       )}
 
-      {/* Comment Popover */}
+      {/* Comment Popover — Viewport-Clamping */}
       {commentPopover && (
-        <div className="pdf-comment-popover" style={{ left: commentPopover.x, top: commentPopover.y }}>
+        <div className="pdf-comment-popover" style={{
+          left: Math.min(commentPopover.x, window.innerWidth - 230),
+          top: Math.min(commentPopover.y, window.innerHeight - 120),
+        }}>
           <textarea
             className="pdf-comment-textarea"
             value={commentText}

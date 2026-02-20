@@ -1,7 +1,9 @@
-import React, { lazy, Suspense } from 'react';
+import React, { lazy, Suspense, useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import { AppProvider } from './context/AppContext';
+import { ToastContainer } from './components/Toast';
+import './style.css';
 
 const PdfEditorView = lazy(() => import('./views/PdfEditorView'));
 
@@ -37,16 +39,26 @@ window.addEventListener('unhandledrejection', (event) => {
 const urlParams = new URLSearchParams(window.location.search);
 const pdfPath = urlParams.get('pdf');
 
+// Detached PDF Window — eigene Mini-App mit Theme + Toast
+function DetachedPdfApp({ path }: { path: string }) {
+  // Theme aus localStorage anwenden (gleicher Key wie App.tsx)
+  useEffect(() => {
+    const theme = localStorage.getItem('speicher-analyse-theme') || 'dark';
+    document.documentElement.dataset.theme = theme;
+  }, []);
+
+  return (
+    <AppProvider>
+      <Suspense fallback={<div className="loading-state">PDF wird geladen...</div>}>
+        <PdfEditorView filePath={decodeURIComponent(path)} onClose={() => window.close()} />
+      </Suspense>
+      <ToastContainer />
+    </AppProvider>
+  );
+}
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    {pdfPath ? (
-      <AppProvider>
-        <Suspense fallback={<div className="loading-state">PDF wird geladen...</div>}>
-          <PdfEditorView filePath={decodeURIComponent(pdfPath)} onClose={() => window.close()} />
-        </Suspense>
-      </AppProvider>
-    ) : (
-      <App />
-    )}
+    {pdfPath ? <DetachedPdfApp path={pdfPath} /> : <App />}
   </React.StrictMode>
 );
