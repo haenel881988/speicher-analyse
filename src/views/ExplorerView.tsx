@@ -16,6 +16,20 @@ interface FileEntry {
 interface KnownFolder { name: string; path: string; icon: string; }
 interface Drive { mountpoint: string; device: string; free: number; percent: number; }
 
+interface ExplorerTab {
+  id: string;
+  path: string;
+  label: string;
+  historyBack: string[];
+  historyForward: string[];
+}
+
+let tabIdCounter = 0;
+function createTab(path: string): ExplorerTab {
+  const label = path.split('\\').filter(Boolean).pop() || path;
+  return { id: 'tab-' + (++tabIdCounter), path, label, historyBack: [], historyForward: [] };
+}
+
 type SortCol = 'name' | 'size' | 'type' | 'modified';
 
 const COLUMNS = [
@@ -28,6 +42,8 @@ const COLUMNS = [
 
 export default function ExplorerView() {
   const { currentScanId, showToast, setActiveTab, setPendingPdfPath, setPropertiesPath, fileClipboard, setFileClipboard } = useAppContext();
+  const [tabs, setTabs] = useState<ExplorerTab[]>([]);
+  const [activeTabId, setActiveTabId] = useState<string>('');
   const [currentPath, setCurrentPath] = useState('');
   const [entries, setEntries] = useState<FileEntry[]>([]);
   const [filteredEntries, setFilteredEntries] = useState<FileEntry[] | null>(null);
@@ -52,6 +68,11 @@ export default function ExplorerView() {
   const [parentFolderSize, setParentFolderSize] = useState(0);
   const [showSizeColors, setShowSizeColors] = useState(false);
   const [findingEmpty, setFindingEmpty] = useState(false);
+  const [calculatingSizes, setCalculatingSizes] = useState(false);
+  const [dualMode, setDualMode] = useState(false);
+  const [dualPath, setDualPath] = useState('');
+  const [dualEntries, setDualEntries] = useState<FileEntry[]>([]);
+  const [dualLoading, setDualLoading] = useState(false);
   const [renamePath, setRenamePath] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; entry: FileEntry | null } | null>(null);
@@ -64,12 +85,15 @@ export default function ExplorerView() {
   const deepSearchUnlistenRef = useRef<Array<() => void>>([]);
   const dirCacheRef = useRef<Map<string, { data: any; time: number }>>(new Map());
   const navGenerationRef = useRef(0);
-  const columnWidthsRef = useRef<Record<string, number>>(
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>(
     (() => { try { const s = localStorage.getItem('explorer-col-widths-default'); return s ? JSON.parse(s) : {}; } catch { return {}; } })()
   );
+  const colResizeRef = useRef<{ col: string; startX: number; startW: number } | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fileListRef = useRef<HTMLDivElement>(null);
   const addressInputRef = useRef<HTMLInputElement>(null);
+
+  const navigateToRef = useRef<(path: string, addToHistory?: boolean) => void>(() => {});
 
   // Init: load known folders + drives + preferences, navigate to default
   useEffect(() => {
@@ -82,7 +106,10 @@ export default function ExplorerView() {
       setKnownFolders(folders);
       setDrives(drv);
       const defaultPath = folders.length > 0 ? folders[0].path : 'C:\\';
-      navigateTo(defaultPath, false);
+      const firstTab = createTab(defaultPath);
+      setTabs([firstTab]);
+      setActiveTabId(firstTab.id);
+      navigateToRef.current(defaultPath, false);
     })();
   }, []);
 
@@ -135,7 +162,8 @@ export default function ExplorerView() {
       return;
     }
 
-    const newEntries: FileEntry[] = result.entries;
+    // Clone entries to prevent mutating cached data
+    const newEntries: FileEntry[] = (result.entries as FileEntry[]).map(e => ({ ...e }));
     // Load file tags
     let tags: Record<string, any> = {};
     try { tags = await api.getTagsForDirectory(dirPath); } catch {}
@@ -168,12 +196,83 @@ export default function ExplorerView() {
     setEntries(newEntries);
     setLoading(false);
 
+    // Select pending file from omnibar search result
+    if (pendingSelectRef.current) {
+      const target = pendingSelectRef.current;
+      pendingSelectRef.current = null;
+      const match = newEntries.find(e => e.path === target);
+      if (match) {
+        setSelectedPaths(new Set([match.path]));
+        // Scroll into view after render
+        requestAnimationFrame(() => {
+          const row = fileListRef.current?.querySelector(`tr[data-path="${CSS.escape(match.path)}"]`);
+          row?.scrollIntoView({ block: 'center' });
+        });
+      }
+    }
+
+    // Update active tab label
+    const dirLabel = dirPath.split('\\').filter(Boolean).pop() || dirPath;
+    setTabs(prev => prev.map(t => t.id === activeTabId ? { ...t, path: dirPath, label: dirLabel } : t));
+
     // Status
     const dirs = newEntries.filter(e => e.isDirectory).length;
     const files = newEntries.filter(e => !e.isDirectory).length;
     const totalSize = newEntries.filter(e => !e.isDirectory).reduce((s, e) => s + e.size, 0);
     setStatusText(`${dirs} Ordner, ${files} Dateien — ${formatBytes(pSize > 0 ? pSize : totalSize)}`);
-  }, [currentPath, currentScanId]);
+  }, [currentPath, currentScanId, activeTabId]);
+
+  // Keep ref in sync for use in init effect and tab functions
+  navigateToRef.current = navigateTo;
+
+  // Tab management (declared after navigateTo to avoid "used before declaration" errors)
+  const saveCurrentTabState = useCallback(() => {
+    if (!activeTabId) return;
+    setTabs(prev => prev.map(t => t.id === activeTabId
+      ? { ...t, path: currentPath, label: currentPath.split('\\').filter(Boolean).pop() || currentPath, historyBack, historyForward }
+      : t
+    ));
+  }, [activeTabId, currentPath, historyBack, historyForward]);
+
+  const switchToTab = useCallback((tabId: string) => {
+    saveCurrentTabState();
+    const tab = tabs.find(t => t.id === tabId);
+    if (!tab || tab.id === activeTabId) return;
+    setActiveTabId(tab.id);
+    setHistoryBack(tab.historyBack);
+    setHistoryForward(tab.historyForward);
+    dirCacheRef.current.delete(tab.path);
+    navigateTo(tab.path, false);
+  }, [tabs, activeTabId, saveCurrentTabState, navigateTo]);
+
+  const addNewTab = useCallback((path?: string) => {
+    saveCurrentTabState();
+    const newPath = path || currentPath || 'C:\\';
+    const tab = createTab(newPath);
+    setTabs(prev => [...prev, tab]);
+    setActiveTabId(tab.id);
+    setHistoryBack([]);
+    setHistoryForward([]);
+    navigateTo(newPath, false);
+  }, [currentPath, saveCurrentTabState, navigateTo]);
+
+  const closeTab = useCallback((tabId: string) => {
+    setTabs(prev => {
+      if (prev.length <= 1) return prev;
+      const idx = prev.findIndex(t => t.id === tabId);
+      const next = prev.filter(t => t.id !== tabId);
+      if (tabId === activeTabId && next.length > 0) {
+        const newIdx = Math.min(idx, next.length - 1);
+        const newTab = next[newIdx];
+        setActiveTabId(newTab.id);
+        setHistoryBack(newTab.historyBack);
+        setHistoryForward(newTab.historyForward);
+        dirCacheRef.current.delete(newTab.path);
+        navigateTo(newTab.path, false);
+      }
+      return next;
+    });
+  }, [activeTabId, navigateTo]);
 
   const goBack = useCallback(() => {
     if (historyBack.length === 0) return;
@@ -319,7 +418,11 @@ export default function ExplorerView() {
     if (entry && !selectedPaths.has(entry.path)) {
       setSelectedPaths(new Set([entry.path]));
     }
-    setCtxMenu({ x: e.clientX, y: e.clientY, entry });
+    // Viewport-Overflow: Menü darf nicht über den Bildschirmrand hinausragen
+    const menuW = 280, menuH = 500;
+    const x = Math.min(e.clientX, window.innerWidth - menuW);
+    const y = Math.min(e.clientY, window.innerHeight - menuH);
+    setCtxMenu({ x: Math.max(0, x), y: Math.max(0, y), entry });
   }, [selectedPaths]);
 
   const ctxAction = useCallback(async (action: string) => {
@@ -331,6 +434,9 @@ export default function ExplorerView() {
     switch (action) {
       case 'open':
         if (entry) handleDoubleClick(entry);
+        break;
+      case 'open-in-new-tab':
+        if (entry?.isDirectory) addNewTab(entry.path);
         break;
       case 'open-with':
         if (singlePath) api.openWithDialog(singlePath);
@@ -540,7 +646,7 @@ export default function ExplorerView() {
         if (currentPath) setPropertiesPath(currentPath);
         break;
     }
-  }, [ctxMenu, selectedPaths, currentPath, clipboard, entries, navigateTo, handleDelete, handleDoubleClick, refresh, showToast, setPropertiesPath]);
+  }, [ctxMenu, selectedPaths, currentPath, clipboard, entries, navigateTo, handleDelete, handleDoubleClick, refresh, showToast, setPropertiesPath, addNewTab]);
 
   const handleNewFolder = useCallback(async () => {
     if (newFolderName === null) return;
@@ -552,6 +658,32 @@ export default function ExplorerView() {
     } catch (err: any) { showToast('Fehler: ' + err.message, 'error'); }
     setNewFolderName(null);
   }, [newFolderName, currentPath, refresh, showToast]);
+
+  const calculateFolderSizes = useCallback(async () => {
+    const dirs = entries.filter(e => e.isDirectory);
+    if (dirs.length === 0) return;
+    setCalculatingSizes(true);
+    const sizes: Record<string, any> = {};
+    let totalSize = 0;
+    for (const dir of dirs) {
+      try {
+        const result = await api.calculateFolderSize(dir.path);
+        if (result?.totalSize !== undefined) {
+          sizes[dir.path] = { size: result.totalSize, files: result.fileCount, dirs: result.dirCount };
+          totalSize += result.totalSize;
+        }
+      } catch {}
+    }
+    // Update entries with calculated sizes
+    setEntries(prev => prev.map(e => {
+      if (e.isDirectory && sizes[e.path]) return { ...e, size: sizes[e.path].size };
+      return e;
+    }));
+    setFolderSizes(sizes);
+    setParentFolderSize(totalSize);
+    setCalculatingSizes(false);
+    showToast(`Ordnergrößen für ${Object.keys(sizes).length} Ordner berechnet`, 'info');
+  }, [entries, showToast]);
 
   const findEmptyFolders = useCallback(async () => {
     setFindingEmpty(true);
@@ -632,11 +764,20 @@ export default function ExplorerView() {
     }
   }, [navigateTo, handleOmnibarSearch]);
 
-  const handleOmniResultClick = useCallback((dirPath: string) => {
+  const pendingSelectRef = useRef<string | null>(null);
+
+  const handleOmniResultClick = useCallback((result: any) => {
     setOmnibarSearching(false);
     setAddressMode('breadcrumb');
     setFilteredEntries(null);
     setOmniResults([]);
+    const dirPath = result.dirPath || result.path;
+    const fileName = result.name;
+    // If the result is a file (not a directory), navigate to its parent and select it
+    if (!result.isDir && fileName && dirPath) {
+      const filePath = dirPath.replace(/[\\/]$/, '') + '\\' + fileName;
+      pendingSelectRef.current = filePath;
+    }
     navigateTo(dirPath);
   }, [navigateTo]);
 
@@ -645,14 +786,33 @@ export default function ExplorerView() {
     const paths = selectedPaths.has(path) ? [...selectedPaths] : [path];
     e.dataTransfer.setData('text/plain', JSON.stringify(paths));
     e.dataTransfer.effectAllowed = 'copyMove';
+    // Custom drag image showing count
+    if (paths.length > 1) {
+      const badge = document.createElement('div');
+      badge.className = 'explorer-drag-badge';
+      badge.textContent = `${paths.length} Elemente`;
+      document.body.appendChild(badge);
+      e.dataTransfer.setDragImage(badge, 0, 0);
+      requestAnimationFrame(() => badge.remove());
+    }
   }, [selectedPaths]);
 
   const handleDrop = useCallback(async (e: React.DragEvent, targetPath: string) => {
     e.preventDefault();
     let sourcePaths: string[];
     try { sourcePaths = JSON.parse(e.dataTransfer.getData('text/plain')); } catch { return; }
-    sourcePaths = sourcePaths.filter(p => p !== targetPath);
-    if (!sourcePaths.length) return;
+    // Filter: can't drop onto self or into a subdirectory of the dragged folder
+    const normalizedTarget = targetPath.toLowerCase().replace(/[\\/]+$/, '');
+    sourcePaths = sourcePaths.filter(p => {
+      const normalizedSrc = p.toLowerCase().replace(/[\\/]+$/, '');
+      if (normalizedSrc === normalizedTarget) return false;
+      if (normalizedTarget.startsWith(normalizedSrc + '\\')) return false;
+      return true;
+    });
+    if (!sourcePaths.length) {
+      showToast('Ungültiges Ziel: Ordner kann nicht in sich selbst verschoben werden', 'warning');
+      return;
+    }
     try {
       if (e.ctrlKey) await api.copy(sourcePaths, targetPath);
       else await api.move(sourcePaths, targetPath);
@@ -793,6 +953,71 @@ export default function ExplorerView() {
     return () => document.removeEventListener('keydown', handler);
   }, [selectedPaths, entries, sortedEntries, currentPath, clipboard, showToast, refresh, handleDelete, handleDoubleClick, goBack, goForward, goUp, selectAll, navigateTo, setPropertiesPath]);
 
+  // Dual panel navigation
+  const navigateDualTo = useCallback(async (dirPath: string) => {
+    setDualPath(dirPath);
+    setDualLoading(true);
+    try {
+      const result = await api.listDirectory(dirPath);
+      if (result.error) { setDualEntries([]); }
+      else { setDualEntries((result.entries as FileEntry[]).map(e => ({ ...e }))); }
+    } catch { setDualEntries([]); }
+    setDualLoading(false);
+  }, []);
+
+  const handleDualDoubleClick = useCallback((entry: FileEntry) => {
+    if (entry.isDirectory) navigateDualTo(entry.path);
+    else api.openFile(entry.path);
+  }, [navigateDualTo]);
+
+  const dualGoUp = useCallback(() => {
+    if (/^[A-Z]:\\$/i.test(dualPath)) return;
+    const parent = dualPath.substring(0, Math.max(dualPath.lastIndexOf('\\'), dualPath.lastIndexOf('/')));
+    const normalized = /^[A-Z]:$/i.test(parent) ? parent + '\\' : parent;
+    if (normalized && normalized !== dualPath) navigateDualTo(normalized);
+  }, [dualPath, navigateDualTo]);
+
+  const toggleDualMode = useCallback(() => {
+    setDualMode(prev => {
+      if (!prev) {
+        // Activate: load same path initially
+        navigateDualTo(currentPath || 'C:\\');
+      }
+      return !prev;
+    });
+  }, [currentPath, navigateDualTo]);
+
+  // Column resize handlers
+  const handleColResizeStart = useCallback((e: React.MouseEvent, colId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const col = COLUMNS.find(c => c.id === colId);
+    const startW = columnWidths[colId] || col?.width || 100;
+    colResizeRef.current = { col: colId, startX: e.clientX, startW };
+  }, [columnWidths]);
+
+  useEffect(() => {
+    const onMouseMove = (e: MouseEvent) => {
+      if (!colResizeRef.current) return;
+      const { col, startX, startW } = colResizeRef.current;
+      const diff = e.clientX - startX;
+      const newW = Math.max(40, startW + diff);
+      setColumnWidths(prev => ({ ...prev, [col]: newW }));
+    };
+    const onMouseUp = () => {
+      if (!colResizeRef.current) return;
+      colResizeRef.current = null;
+      // Persist to localStorage
+      setColumnWidths(prev => {
+        try { localStorage.setItem('explorer-col-widths-default', JSON.stringify(prev)); } catch {}
+        return prev;
+      });
+    };
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+    return () => { document.removeEventListener('mousemove', onMouseMove); document.removeEventListener('mouseup', onMouseUp); };
+  }, []);
+
   const breadcrumbParts = useMemo(() => {
     if (!currentPath) return [];
     const segments = currentPath.split('\\').filter(Boolean);
@@ -848,6 +1073,12 @@ export default function ExplorerView() {
           <button className="explorer-nav-btn" title="Aktualisieren (F5)" onClick={refresh}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10" /></svg>
           </button>
+          <button className={`explorer-nav-btn ${dualMode ? 'active' : ''}`} title="Dual-Panel (Zwei-Ordner-Ansicht)" onClick={toggleDualMode}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" /><line x1="12" y1="3" x2="12" y2="21" /></svg>
+          </button>
+          <button className="explorer-nav-btn" title="Ordnergrößen berechnen" disabled={calculatingSizes} onClick={calculateFolderSizes}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" /><text x="12" y="17" textAnchor="middle" fontSize="8" fill="currentColor" stroke="none" fontWeight="bold">MB</text></svg>
+          </button>
           <button className="explorer-nav-btn" title="Leere Ordner finden" disabled={findingEmpty} onClick={findEmptyFolders}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" /><line x1="9" y1="14" x2="15" y2="14" /></svg>
           </button>
@@ -901,6 +1132,23 @@ export default function ExplorerView() {
           </div>
         </div>
 
+        {/* Tab Bar */}
+        {tabs.length > 0 && (
+          <div className="explorer-tab-bar">
+            {tabs.map(tab => (
+              <div key={tab.id} className={`explorer-tab ${tab.id === activeTabId ? 'active' : ''}`}
+                onClick={() => switchToTab(tab.id)}
+                onAuxClick={e => { if (e.button === 1) { e.preventDefault(); closeTab(tab.id); } }}>
+                <span className="explorer-tab-label" title={tab.path}>{tab.label}</span>
+                {tabs.length > 1 && (
+                  <button type="button" className="explorer-tab-close" onClick={e => { e.stopPropagation(); closeTab(tab.id); }} title="Tab schließen">{'\u00D7'}</button>
+                )}
+              </div>
+            ))}
+            <button type="button" className="explorer-tab-new" onClick={() => addNewTab()} title="Neuer Tab">+</button>
+          </div>
+        )}
+
         {/* Omnibar Dropdown */}
         {omnibarSearching && omniResults.length > 0 && (
           <div className="explorer-omni-dropdown">
@@ -910,7 +1158,7 @@ export default function ExplorerView() {
             </div>
             <div className="omni-dropdown-results">
               {omniResults.map((r, i) => (
-                <div key={i} className="omni-result-item" onClick={() => handleOmniResultClick(r.dirPath || r.path)}>
+                <div key={i} className="omni-result-item" onClick={() => handleOmniResultClick(r)}>
                   <span className="omni-result-icon"><FileIcon extension={r.isDir ? null : (r.name?.substring(r.name.lastIndexOf('.')) || '')} isDirectory={r.isDir} /></span>
                   <span className="omni-result-name">{r.name}</span>
                   <span className="omni-result-dir" title={r.dirPath}>{shortenPath(r.dirPath)}</span>
@@ -920,6 +1168,8 @@ export default function ExplorerView() {
           </div>
         )}
 
+        {/* File Area (with optional dual panel) */}
+        <div className={`explorer-file-area ${dualMode ? 'dual-active' : ''}`}>
         {/* File List */}
         <div className="explorer-file-list" ref={fileListRef}
           onContextMenu={e => { if (!(e.target as HTMLElement).closest('tr[data-path]')) handleContextMenu(e, null); }}
@@ -934,10 +1184,13 @@ export default function ExplorerView() {
               <thead>
                 <tr>
                   {COLUMNS.map(col => (
-                    <th key={col.id} style={{ width: columnWidthsRef.current[col.id] || col.width, textAlign: col.align }}
+                    <th key={col.id} style={{ width: columnWidths[col.id] || col.width, textAlign: col.align }}
                       className={sortCol === col.id ? 'sort-active' : ''}
                       onClick={() => col.sortable && handleSort(col.id as SortCol)}>
                       {col.label}{col.sortable && sortCol === col.id ? (sortAsc ? ' \u25B2' : ' \u25BC') : ''}
+                      {col.id !== 'icon' && (
+                        <div className="explorer-col-resize" onMouseDown={e => handleColResizeStart(e, col.id)} />
+                      )}
                     </th>
                   ))}
                 </tr>
@@ -1011,6 +1264,57 @@ export default function ExplorerView() {
           )}
         </div>
 
+        {/* Dual Panel */}
+        {dualMode && (
+          <>
+            <div className="explorer-split-handle" />
+            <div className="explorer-panel explorer-file-list"
+              onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = e.ctrlKey ? 'copy' : 'move'; }}
+              onDrop={e => handleDrop(e, dualPath)}>
+              <div className="explorer-dual-header">
+                <button type="button" className="explorer-nav-btn" title="Übergeordneter Ordner" onClick={dualGoUp}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="18 15 12 9 6 15" /></svg>
+                </button>
+                <span className="explorer-dual-path" title={dualPath}>{dualPath.split('\\').filter(Boolean).pop() || dualPath}</span>
+              </div>
+              {dualLoading ? (
+                <div className="explorer-loading"><div className="loading-spinner" /></div>
+              ) : (
+                <table className="explorer-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: 36 }} />
+                      <th>Name</th>
+                      <th style={{ width: 100, textAlign: 'right' }}>Größe</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dualEntries.length === 0 ? (
+                      <tr><td colSpan={3} style={{ textAlign: 'center', padding: 20, color: 'var(--text-muted)' }}>Leer</td></tr>
+                    ) : [...dualEntries].sort((a, b) => {
+                      if (a.isDirectory && !b.isDirectory) return -1;
+                      if (!a.isDirectory && b.isDirectory) return 1;
+                      return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+                    }).map(entry => (
+                      <tr key={entry.path} data-path={entry.path}
+                        onDoubleClick={() => handleDualDoubleClick(entry)}
+                        draggable onDragStart={e => handleDragStart(e, entry.path)}
+                        onDragOver={entry.isDirectory ? e => { e.preventDefault(); e.dataTransfer.dropEffect = e.ctrlKey ? 'copy' : 'move'; (e.currentTarget as HTMLElement).classList.add('drag-over'); } : undefined}
+                        onDragLeave={entry.isDirectory ? e => (e.currentTarget as HTMLElement).classList.remove('drag-over') : undefined}
+                        onDrop={entry.isDirectory ? e => { (e.currentTarget as HTMLElement).classList.remove('drag-over'); handleDrop(e, entry.path); } : undefined}>
+                        <td className="explorer-col-icon"><FileIcon extension={entry.extension} isDirectory={entry.isDirectory} /></td>
+                        <td className={entry.isDirectory ? 'explorer-col-name dir-name' : 'explorer-col-name'} title={entry.path}>{entry.name}</td>
+                        <td className="explorer-col-size">{entry.isDirectory ? '' : formatBytes(entry.size)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </>
+        )}
+        </div>{/* end explorer-file-area */}
+
         {/* Status Bar */}
         <div className="explorer-status">
           {selectedPaths.size > 0 ? (
@@ -1020,6 +1324,11 @@ export default function ExplorerView() {
             </>
           ) : (
             <span>{statusText}</span>
+          )}
+          {clipboard && clipboard.paths.length > 0 && (
+            <span className="explorer-clipboard-info" title={clipboard.paths.join('\n')}>
+              {clipboard.cut ? '\u2702' : '\u{1F4CB}'} {clipboard.paths.length} Element{clipboard.paths.length !== 1 ? 'e' : ''} in der Zwischenablage
+            </span>
           )}
         </div>
       </div>
@@ -1047,6 +1356,7 @@ export default function ExplorerView() {
             {entry ? (
               <>
                 <button className="ctx-item ctx-item-bold" onClick={() => ctxAction('open')}>Öffnen</button>
+                {isDir && <button className="ctx-item" onClick={() => ctxAction('open-in-new-tab')}>In neuem Tab öffnen</button>}
                 {isPdf && (
                   <button className="ctx-item" onClick={() => ctxAction('open-system-default')}>Mit Standardprogramm öffnen</button>
                 )}

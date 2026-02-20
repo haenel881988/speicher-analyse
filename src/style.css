@@ -3048,6 +3048,12 @@ textarea::placeholder {
 .explorer-status-count {
     font-weight: 600;
 }
+.explorer-clipboard-info {
+    margin-left: auto;
+    font-size: 11px;
+    color: var(--accent-text);
+    opacity: 0.8;
+}
 
 .explorer-status-scan-hint {
     font-size: 10px;
@@ -3463,6 +3469,57 @@ textarea::placeholder {
 .explorer-split-handle:hover,
 .explorer-split-handle.dragging {
     background: var(--accent);
+}
+
+.explorer-file-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.explorer-file-area.dual-active {
+    flex-direction: row;
+}
+.explorer-file-area.dual-active > .explorer-file-list {
+    flex: 1;
+    min-width: 200px;
+}
+.explorer-file-area.dual-active > .explorer-panel {
+    flex: 1;
+    min-width: 200px;
+    overflow: auto;
+}
+.explorer-dual-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+.explorer-dual-path {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.explorer-nav-btn.active {
+    color: var(--accent-text);
+    background: var(--accent-light);
+}
+.explorer-drag-badge {
+    position: absolute;
+    left: -9999px;
+    padding: 4px 10px;
+    background: var(--accent);
+    color: #fff;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+    pointer-events: none;
 }
 
 /* ===== v6.2: Omnibar (Address + Search) ===== */

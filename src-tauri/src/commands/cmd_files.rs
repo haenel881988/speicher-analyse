@@ -79,7 +79,15 @@ pub async fn create_folder(parent_path: String, name: String) -> Result<Value, S
 pub async fn file_rename(old_path: String, new_name: String) -> Result<Value, String> {
     validate_path(&old_path)?;
     let src = Path::new(&old_path);
+    let old_name = src.file_name().unwrap_or_default().to_string_lossy().to_string();
     let dest = src.parent().unwrap_or(Path::new(".")).join(&new_name);
+    let desc = format!("\"{}\" umbenannt zu \"{}\"", old_name, new_name);
+    crate::undo::log_action("file_rename", &desc, json!({
+        "old_path": old_path,
+        "new_path": dest.to_string_lossy(),
+        "old_name": old_name,
+        "new_name": new_name
+    }), true);
     tokio::fs::rename(&src, &dest).await.map_err(|e| e.to_string())?;
     Ok(json!({ "success": true, "newPath": dest.to_string_lossy() }))
 }
@@ -754,9 +762,9 @@ pub async fn get_known_folders() -> Result<Value, String> {
 $folders += [PSCustomObject]@{ name='Desktop'; path=[Environment]::GetFolderPath('Desktop'); icon='desktop' }
 $folders += [PSCustomObject]@{ name='Dokumente'; path=[Environment]::GetFolderPath('MyDocuments'); icon='documents' }
 $folders += [PSCustomObject]@{ name='Downloads'; path=(New-Object -ComObject Shell.Application).NameSpace('shell:Downloads').Self.Path; icon='downloads' }
-$folders += [PSCustomObject]@{ name='Bilder'; path=[Environment]::GetFolderPath('MyPictures'); icon='images' }
+$folders += [PSCustomObject]@{ name='Bilder'; path=[Environment]::GetFolderPath('MyPictures'); icon='pictures' }
 $folders += [PSCustomObject]@{ name='Musik'; path=[Environment]::GetFolderPath('MyMusic'); icon='music' }
-$folders += [PSCustomObject]@{ name='Videos'; path=[Environment]::GetFolderPath('MyVideos'); icon='video' }
+$folders += [PSCustomObject]@{ name='Videos'; path=[Environment]::GetFolderPath('MyVideos'); icon='videos' }
 $folders | ConvertTo-Json -Compress"#
     ).await
 }
@@ -793,7 +801,14 @@ pub async fn copy_to_clipboard(text: String) -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn open_in_terminal(dir_path: String) -> Result<Value, String> {
-    crate::ps::run_ps(&format!("Start-Process wt -ArgumentList '-d', '{}'", dir_path.replace("'", "''"))).await?;
+    let safe_path = dir_path.replace("'", "''");
+    // Try Windows Terminal first, fall back to cmd.exe
+    let script = format!(
+        r#"$wt = Get-Command wt -ErrorAction SilentlyContinue
+if ($wt) {{ Start-Process wt -ArgumentList '-d', '"{}"' }} else {{ Start-Process cmd.exe -ArgumentList '/K', 'cd /d "{}"' }}"#,
+        safe_path, safe_path
+    );
+    crate::ps::run_ps(&script).await?;
     Ok(json!({ "success": true }))
 }
 
