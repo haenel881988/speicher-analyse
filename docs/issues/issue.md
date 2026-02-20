@@ -152,7 +152,7 @@ Weitere Funktionen fehlen bei entsprechenden Dateitypen, bei Bildern z.B.: die A
 | ~~1~~ | ~~#2 + #3~~ | ~~Scandaten überall speichern + wiederherstellen~~ | Bestätigt 19.02.2026 |
 | 2 | #7 | Intelligente Scandaten (Delta-Scan, Verlauf, Hintergrund) | Planung |
 | ~~3~~ | ~~#8~~ | ~~Intelligenter Bloatware-Scanner (5-Stufen-Bewertung)~~ | ENTFALLEN (Windows Defender) |
-| 4 | #9 | Apps-Kontrollzentrum (ersetzt "Updates"-Tab) | Planung |
+| 4 | #9 | Apps-Kontrollzentrum (ersetzt "Updates"-Tab) | Umgesetzt (Changelog #122) |
 | 5 | #10 | System-Profil (Hardware, Seriennummer, Hersteller-Links) | Größtenteils umgesetzt |
 | 6 | #4 | Privacy Dashboard anwenderfreundlicher | Überarbeitung — wartet auf Test |
 | 7 | #5 | PDF Vollansicht + Bearbeitung | Umgesetzt (Changelog #114, #120) |
@@ -387,7 +387,7 @@ Eine Art "Waage für die Festplatte":
 - Direkte Links zum Intel Assistenten, Nvidia App, Hersteller-Support
 - Seriennummer automatisch auslesen
 
-**Status:** Planung
+**Status:** ~~Planung~~ → Umgesetzt (Changelog #122) — 3 Einzeltabs (Autostart, Updates, Software-Audit) zu einem "Apps"-Tab mit 5 Sub-Tabs zusammengeführt. 7 neue Backend-Commands, 3 alte Views gelöscht.
 
 ---
 
@@ -697,6 +697,8 @@ Die App hat bereits einen beeindruckenden Funktionsumfang. Jetzt geht es darum, 
 **Warum das wichtig ist:** Der aktuelle "Updates"-Tab ist zu eng gefasst. Nutzer wollen nicht nur Updates, sondern einen **Gesamtüberblick über ihre Programme** — was brauche ich, was kann weg, was frisst Platz?
 
 → *Details: siehe Issue #9 weiter oben*
+
+**Status:** Umgesetzt (Changelog #122)
 
 ---
 

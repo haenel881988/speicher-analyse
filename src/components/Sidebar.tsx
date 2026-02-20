@@ -42,10 +42,9 @@ const NAV_GROUPS: NavGroup[] = [
   },
   {
     id: 'system', label: 'System', items: [
-      { tab: 'autostart', label: 'Autostart', icon: 'M13,2L3,14h9l-1,8,10-12h-9l1-8z' },
+      { tab: 'apps', label: 'Apps', icon: 'M4,4H10V10H4ZM14,4H20V10H14ZM4,14H10V20H4ZM14,14H20V20H14Z' },
       { tab: 'services', label: 'Dienste', icon: 'M12,12m-3,0a3,3,0,1,0,6,0a3,3,0,1,0-6,0' },
       { tab: 'optimizer', label: 'Optimierung', icon: 'M12,20V10M18,20V4M6,20V16' },
-      { tab: 'updates', label: 'Updates', icon: 'M21,15v4a2,2,0,0,1-2,2H5a2,2,0,0,1-2-2v-4M7,10L12,15L17,10M12,15V3' },
       { tab: 'system-profil', label: 'System-Profil', icon: 'M2,3H22V17H2ZM8,21H16M12,17V21' },
     ],
   },
@@ -55,7 +54,6 @@ const NAV_GROUPS: NavGroup[] = [
       { tab: 'privacy', label: 'Datenschutz', icon: 'M12,22s8-4,8-10V5l-8-3-8,3v7c0,6,8,10,8,10z' },
       { tab: 'smart', label: 'Festplatten', icon: 'M12,5A9,3,0,1,0,12,5ZM3,5V19c0,1.66,4,3,9,3s9-1.34,9-3V5' },
       { tab: 'network', label: 'Netzwerk', icon: 'M2,2H22V10H2ZM2,14H22V22H2Z' },
-      { tab: 'software-audit', label: 'Software-Audit', icon: 'M9,5H7a2,2,0,0,0-2,2v12a2,2,0,0,0,2,2h10a2,2,0,0,0,2-2V7a2,2,0,0,0-2-2h-2M9,3H15V7H9Z' },
     ],
   },
   {

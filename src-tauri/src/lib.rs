@@ -357,6 +357,14 @@ pub fn run() {
             commands::get_audit_history,
             // System Score
             commands::get_system_score,
+            // Apps-Kontrollzentrum
+            commands::get_apps_overview,
+            commands::uninstall_software,
+            commands::check_uninstall_leftovers,
+            commands::get_unused_apps,
+            commands::analyze_app_cache,
+            commands::clean_app_cache,
+            commands::export_program_list,
             // Preferences
             commands::get_preferences,
             commands::set_preference,

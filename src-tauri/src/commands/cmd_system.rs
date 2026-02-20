@@ -871,3 +871,254 @@ pub async fn get_system_score(results: Option<Value>) -> Result<Value, String> {
 }
 
 
+// === Apps-Kontrollzentrum ===
+
+#[tauri::command]
+pub async fn get_apps_overview() -> Result<Value, String> {
+    // Erweiterte Programmliste: Registry + Store-Apps + LastUsed
+    let script = r#"
+$programs = @()
+$regPaths = @(
+    @{p='HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*';s='hklm'},
+    @{p='HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*';s='hklm-wow64'},
+    @{p='HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*';s='hkcu'}
+)
+foreach ($rp in $regPaths) {
+    Get-ItemProperty $rp.p -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName } | ForEach-Object {
+        $loc = "$($_.InstallLocation)"
+        $hasDir = if($loc -and (Test-Path $loc -EA SilentlyContinue)){$true}else{$false}
+        $isOrph = if($loc -and -not $hasDir){$true}else{$false}
+        $programs += [PSCustomObject]@{
+            name=$_.DisplayName; version="$($_.DisplayVersion)"; publisher="$($_.Publisher)"
+            installDate="$($_.InstallDate)"; installLocation=$loc
+            uninstallString="$($_.UninstallString)"; estimatedSize=[long]$_.EstimatedSize
+            source=$rp.s; hasInstallDir=$hasDir; isOrphaned=$isOrph; appType='desktop'
+        }
+    }
+}
+# Store-Apps (nur mit Namen)
+try {
+    Get-AppxPackage | Where-Object { $_.IsFramework -eq $false -and $_.Name -notmatch '^Microsoft\.(NET|VCLibs|UI\.|Windows\.)' } | ForEach-Object {
+        $programs += [PSCustomObject]@{
+            name=$_.Name.Split('.')[-1]; version=$_.Version; publisher=$_.Publisher
+            installDate=''; installLocation=$_.InstallLocation
+            uninstallString=''; estimatedSize=0
+            source='store'; hasInstallDir=$true; isOrphaned=$false; appType='store'
+        }
+    }
+} catch {}
+$programs | Sort-Object name | ConvertTo-Json -Depth 2 -Compress"#;
+    let programs = crate::ps::run_ps_json_array_timeout(script, 120).await?;
+    let arr = programs.as_array().cloned().unwrap_or_default();
+    let total = arr.len();
+    let orphaned = arr.iter().filter(|p| p["isOrphaned"].as_bool().unwrap_or(false)).count();
+    let store_count = arr.iter().filter(|p| p["appType"].as_str() == Some("store")).count();
+    let desktop_count = total - store_count;
+    Ok(json!({
+        "programs": programs,
+        "totalPrograms": total,
+        "desktopCount": desktop_count,
+        "storeCount": store_count,
+        "orphanedCount": orphaned
+    }))
+}
+
+#[tauri::command]
+pub async fn uninstall_software(uninstall_string: String, name: String) -> Result<Value, String> {
+    if uninstall_string.is_empty() {
+        return Err("Kein Deinstallationsbefehl vorhanden".to_string());
+    }
+
+    // Undo-Log
+    let desc = format!("\"{}\" deinstalliert", name);
+    crate::undo::log_action("uninstall_software", &desc, json!({ "name": name, "uninstallString": uninstall_string }), false);
+
+    let safe_str = uninstall_string.replace("'", "''");
+    let script = format!("Start-Process -FilePath cmd.exe -ArgumentList '/c','{}' -Wait", safe_str);
+    crate::ps::run_ps_with_timeout(&script, 300).await?;
+    Ok(json!({ "success": true }))
+}
+
+#[tauri::command]
+pub async fn check_uninstall_leftovers(name: String, install_location: Option<String>) -> Result<Value, String> {
+    let safe_name = name.replace("'", "''");
+    let check_loc = install_location.as_deref().unwrap_or("").replace("'", "''");
+    let script = format!(r#"
+$leftovers = @()
+# Check install directory still exists
+if ('{check_loc}' -ne '' -and (Test-Path '{check_loc}' -EA SilentlyContinue)) {{
+    $size = (Get-ChildItem '{check_loc}' -Recurse -Force -EA SilentlyContinue | Measure-Object -Property Length -Sum).Sum
+    $leftovers += [PSCustomObject]@{{ type='directory'; path='{check_loc}'; size=[long]$size }}
+}}
+# Check AppData folders
+$appDataPaths = @(
+    "$env:APPDATA\{safe_name}",
+    "$env:LOCALAPPDATA\{safe_name}",
+    "$env:PROGRAMDATA\{safe_name}"
+)
+foreach ($p in $appDataPaths) {{
+    if (Test-Path $p -EA SilentlyContinue) {{
+        $size = (Get-ChildItem $p -Recurse -Force -EA SilentlyContinue | Measure-Object -Property Length -Sum).Sum
+        $leftovers += [PSCustomObject]@{{ type='appdata'; path=$p; size=[long]$size }}
+    }}
+}}
+# Check Start Menu
+$startMenu = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs"
+$shortcuts = @(Get-ChildItem $startMenu -Filter "*{safe_name}*" -Recurse -EA SilentlyContinue)
+foreach ($s in $shortcuts) {{
+    $leftovers += [PSCustomObject]@{{ type='shortcut'; path=$s.FullName; size=[long]$s.Length }}
+}}
+if ($leftovers.Count -eq 0) {{ '[]' }}
+else {{ $leftovers | ConvertTo-Json -Depth 2 -Compress }}"#,
+        check_loc = check_loc, safe_name = safe_name
+    );
+    crate::ps::run_ps_json_array_timeout(&script, 30).await
+}
+
+#[tauri::command]
+pub async fn get_unused_apps(threshold_days: Option<u32>) -> Result<Value, String> {
+    let days = threshold_days.unwrap_or(180);
+    let script = format!(r#"
+$threshold = (Get-Date).AddDays(-{days})
+$programs = @()
+$regPaths = @('HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*','HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*','HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*')
+foreach ($rp in $regPaths) {{
+    Get-ItemProperty $rp -ErrorAction SilentlyContinue | Where-Object {{ $_.DisplayName -and $_.InstallLocation }} | ForEach-Object {{
+        $loc = "$($_.InstallLocation)"
+        if ($loc -and (Test-Path $loc -EA SilentlyContinue)) {{
+            $exes = @(Get-ChildItem $loc -Filter '*.exe' -EA SilentlyContinue | Select-Object -First 3)
+            $lastUsed = $null
+            foreach ($exe in $exes) {{
+                if ($exe.LastAccessTime -gt $lastUsed) {{ $lastUsed = $exe.LastAccessTime }}
+            }}
+            if ($lastUsed -and $lastUsed -lt $threshold) {{
+                $size = [long]$_.EstimatedSize
+                $programs += [PSCustomObject]@{{
+                    name=$_.DisplayName; version="$($_.DisplayVersion)"; publisher="$($_.Publisher)"
+                    lastUsed=$lastUsed.ToString('o'); daysSinceUse=[int]((Get-Date) - $lastUsed).TotalDays
+                    estimatedSize=$size; installLocation=$loc
+                }}
+            }}
+        }}
+    }}
+}}
+if ($programs.Count -eq 0) {{ '[]' }}
+else {{ $programs | Sort-Object daysSinceUse -Descending | ConvertTo-Json -Depth 2 -Compress }}"#,
+        days = days
+    );
+    crate::ps::run_ps_json_array_timeout(&script, 60).await
+}
+
+#[tauri::command]
+pub async fn analyze_app_cache() -> Result<Value, String> {
+    let script = r#"
+$caches = @()
+# Bekannte Cache-Verzeichnisse analysieren
+$cachePaths = @(
+    @{name='Windows Temp'; path=$env:TEMP},
+    @{name='Windows Temp (System)'; path='C:\Windows\Temp'},
+    @{name='Prefetch'; path='C:\Windows\Prefetch'},
+    @{name='Thumbnails'; path="$env:LOCALAPPDATA\Microsoft\Windows\Explorer"},
+    @{name='Font Cache'; path="$env:LOCALAPPDATA\FontCache"},
+    @{name='Windows Update Cache'; path='C:\Windows\SoftwareDistribution\Download'}
+)
+foreach ($cp in $cachePaths) {
+    if (Test-Path $cp.path -EA SilentlyContinue) {
+        try {
+            $items = @(Get-ChildItem $cp.path -Recurse -Force -EA SilentlyContinue)
+            $size = ($items | Measure-Object -Property Length -Sum -EA SilentlyContinue).Sum
+            $fileCount = ($items | Where-Object { -not $_.PSIsContainer }).Count
+            $caches += [PSCustomObject]@{
+                name=$cp.name; path=$cp.path; size=[long]$size; fileCount=$fileCount; canClean=$true
+            }
+        } catch {}
+    }
+}
+# Browser-Caches
+$browserPaths = @(
+    @{name='Chrome Cache'; path="$env:LOCALAPPDATA\Google\Chrome\User Data\Default\Cache"},
+    @{name='Edge Cache'; path="$env:LOCALAPPDATA\Microsoft\Edge\User Data\Default\Cache"},
+    @{name='Firefox Cache'; path="$env:LOCALAPPDATA\Mozilla\Firefox\Profiles"}
+)
+foreach ($bp in $browserPaths) {
+    if (Test-Path $bp.path -EA SilentlyContinue) {
+        try {
+            $size = (Get-ChildItem $bp.path -Recurse -Force -EA SilentlyContinue | Measure-Object -Property Length -Sum -EA SilentlyContinue).Sum
+            $caches += [PSCustomObject]@{
+                name=$bp.name; path=$bp.path; size=[long]$size; fileCount=0; canClean=$true
+            }
+        } catch {}
+    }
+}
+$totalSize = ($caches | Measure-Object -Property size -Sum).Sum
+[PSCustomObject]@{ caches=$caches; totalSize=[long]$totalSize } | ConvertTo-Json -Depth 3 -Compress"#;
+    crate::ps::run_ps_json_timeout(script, 60).await
+}
+
+#[tauri::command]
+pub async fn clean_app_cache(paths: Vec<String>) -> Result<Value, String> {
+    let mut cleaned = 0u64;
+    let mut errors: Vec<String> = Vec::new();
+    for p in &paths {
+        // Nur bekannte/sichere Pfade erlauben
+        let p_lower = p.to_lowercase();
+        let is_safe = p_lower.contains("\\temp")
+            || p_lower.contains("\\cache")
+            || p_lower.contains("\\prefetch")
+            || p_lower.contains("\\fontcache")
+            || p_lower.contains("\\explorer")
+            || p_lower.contains("\\softwaredistribution\\download");
+        if !is_safe {
+            errors.push(format!("Pfad nicht als Cache erkannt: {}", p));
+            continue;
+        }
+        let safe_path = p.replace("'", "''");
+        match crate::ps::run_ps(&format!(
+            "Get-ChildItem '{}' -Recurse -Force -EA SilentlyContinue | Remove-Item -Force -Recurse -EA SilentlyContinue; 'ok'",
+            safe_path
+        )).await {
+            Ok(_) => cleaned += 1,
+            Err(e) => errors.push(format!("{}: {}", p, e)),
+        }
+    }
+    Ok(json!({ "success": true, "cleaned": cleaned, "errors": errors }))
+}
+
+#[tauri::command]
+pub async fn export_program_list(format: String, programs: Value) -> Result<Value, String> {
+    let arr = programs.as_array().ok_or("Ungültige Programmliste")?;
+
+    let content = match format.as_str() {
+        "json" => serde_json::to_string_pretty(arr).map_err(|e| e.to_string())?,
+        "csv" => {
+            let mut csv = String::from("Name;Version;Herausgeber;Installationsdatum;Größe (KB)\n");
+            for p in arr {
+                csv.push_str(&format!("{};{};{};{};{}\n",
+                    p["name"].as_str().unwrap_or(""),
+                    p["version"].as_str().unwrap_or(""),
+                    p["publisher"].as_str().unwrap_or(""),
+                    p["installDate"].as_str().unwrap_or(""),
+                    p["estimatedSize"].as_i64().unwrap_or(0),
+                ));
+            }
+            csv
+        }
+        "winget" => {
+            let mut script = String::from("# Winget-Installationsskript\n# Generiert von Speicher Analyse\n\n");
+            for p in arr {
+                let name = p["name"].as_str().unwrap_or("");
+                if !name.is_empty() {
+                    script.push_str(&format!("# winget install --name '{}'\n", name));
+                }
+            }
+            script
+        }
+        _ => return Err(format!("Unbekanntes Format: {}", format)),
+    };
+
+    let ext = match format.as_str() { "json" => "json", "csv" => "csv", _ => "ps1" };
+    let default_name = format!("programmliste.{}", ext);
+
+    Ok(json!({ "content": content, "defaultName": default_name, "format": format }))
+}
+

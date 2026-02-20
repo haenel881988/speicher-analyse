@@ -229,6 +229,20 @@ export const auditSoftware = () => invoke<any>('audit_software');
 export const correlateSoftware = (program: any) => invoke<any>('correlate_software', { program });
 export const checkAuditUpdates = () => invoke<any>('check_audit_updates');
 
+// === Apps-Kontrollzentrum ===
+export const getAppsOverview = () => invoke<any>('get_apps_overview');
+export const uninstallSoftware = (uninstallString: string, name: string) =>
+  invoke<any>('uninstall_software', { uninstallString, name });
+export const checkUninstallLeftovers = (name: string, installLocation?: string) =>
+  invoke<any[]>('check_uninstall_leftovers', { name, installLocation });
+export const getUnusedApps = (thresholdDays?: number) =>
+  invoke<any[]>('get_unused_apps', { thresholdDays });
+export const analyzeAppCache = () => invoke<any>('analyze_app_cache');
+export const cleanAppCache = (paths: string[]) =>
+  invoke<any>('clean_app_cache', { paths });
+export const exportProgramList = (format: string, programs: any[]) =>
+  invoke<any>('export_program_list', { format, programs });
+
 // === Network Monitor ===
 export const getConnections = () => invoke<any[]>('get_connections');
 export const getBandwidth = () => invoke<any[]>('get_bandwidth');

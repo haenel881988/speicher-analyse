@@ -9,14 +9,12 @@ const TopFilesView = lazy(() => import('../views/TopFilesView'));
 const DuplicatesView = lazy(() => import('../views/DuplicatesView'));
 const OldFilesView = lazy(() => import('../views/OldFilesView'));
 const CleanupView = lazy(() => import('../views/CleanupView'));
-const AutostartView = lazy(() => import('../views/AutostartView'));
+const AppsView = lazy(() => import('../views/AppsView'));
 const ServicesView = lazy(() => import('../views/ServicesView'));
 const OptimizerView = lazy(() => import('../views/OptimizerView'));
-const UpdatesView = lazy(() => import('../views/UpdatesView'));
 const ExplorerView = lazy(() => import('../views/ExplorerView'));
 const PrivacyView = lazy(() => import('../views/PrivacyView'));
 const SmartView = lazy(() => import('../views/SmartView'));
-const SoftwareAuditView = lazy(() => import('../views/SoftwareAuditView'));
 const SecurityAuditView = lazy(() => import('../views/SecurityAuditView'));
 const NetworkView = lazy(() => import('../views/NetworkView'));
 const SystemProfilView = lazy(() => import('../views/SystemProfilView'));
@@ -40,14 +38,12 @@ const TAB_MAP: Record<string, React.LazyExoticComponent<any>> = {
   'duplicates': DuplicatesView,
   'old-files': OldFilesView,
   'cleanup': CleanupView,
-  'autostart': AutostartView,
+  'apps': AppsView,
   'services': ServicesView,
   'optimizer': OptimizerView,
-  'updates': UpdatesView,
   'explorer': ExplorerView,
   'privacy': PrivacyView,
   'smart': SmartView,
-  'software-audit': SoftwareAuditView,
   'security-audit': SecurityAuditView,
   'network': NetworkView,
   'system-profil': SystemProfilView,
