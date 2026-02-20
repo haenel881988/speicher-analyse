@@ -125,6 +125,9 @@ pub async fn pdf_get_annotations(file_path: String, page_num: u32) -> Result<Val
         let page = doc.pages().get(page_num as u16)
             .map_err(|e| format!("Seite {page_num} nicht gefunden: {e}"))?;
 
+        // Seitenhöhe für Koordinaten-Konvertierung (PDF bottom-up → Frontend top-down)
+        let page_height = page.height().value;
+
         let mut annotations = Vec::new();
 
         for annotation in page.annotations().iter() {
@@ -141,13 +144,18 @@ pub async fn pdf_get_annotations(file_path: String, page_num: u32) -> Result<Val
                 _ => "unknown",
             };
 
+            // PDF-Koordinaten (Ursprung unten-links) → Frontend-Koordinaten (Ursprung oben-links)
             let bounds = annotation.bounds()
-                .map(|b| json!({
-                    "x1": b.left().value,
-                    "y1": b.bottom().value,
-                    "x2": b.right().value,
-                    "y2": b.top().value,
-                }))
+                .map(|b| {
+                    let pdf_bottom = b.bottom().value;
+                    let pdf_top = b.top().value;
+                    json!({
+                        "x1": b.left().value,
+                        "y1": page_height - pdf_top,     // PDF top → Frontend y1 (oben)
+                        "x2": b.right().value,
+                        "y2": page_height - pdf_bottom,   // PDF bottom → Frontend y2 (unten)
+                    })
+                })
                 .unwrap_or(json!(null));
 
             let contents = annotation.contents().unwrap_or_default();
@@ -179,12 +187,35 @@ pub async fn pdf_save_annotations(
         let doc = pdfium.load_pdf_from_file(&fp, None)
             .map_err(|e| format!("PDF öffnen fehlgeschlagen: {e}"))?;
 
+        // Bestehende Annotationen von betroffenen Seiten entfernen,
+        // damit wiederholtes Speichern keine Duplikate erzeugt.
+        let mut cleared_pages = std::collections::HashSet::new();
+        for anno in &annotations {
+            cleared_pages.insert(anno.page as u16);
+        }
+        for &page_idx in &cleared_pages {
+            if let Ok(mut page) = doc.pages().get(page_idx) {
+                let count = page.annotations().len();
+                // Rückwärts löschen, damit Indices stabil bleiben
+                for i in (0..count).rev() {
+                    if let Ok(existing) = page.annotations().get(i) {
+                        let _ = page.annotations_mut().delete_annotation(existing);
+                    }
+                }
+            }
+        }
+
         for anno in &annotations {
             let page_index = anno.page as u16;
             let mut page = doc.pages().get(page_index)
                 .map_err(|e| format!("Seite {} nicht gefunden: {e}", anno.page))?;
 
             let anno_text = anno.text.as_deref().unwrap_or("");
+
+            // Seitenhöhe für Koordinaten-Konvertierung:
+            // Frontend (pdf.js): Ursprung oben-links, Y nach unten
+            // PDF-Standard: Ursprung unten-links, Y nach oben
+            let page_height = page.height().value;
 
             match anno.anno_type.as_str() {
                 "highlight" => {
@@ -193,8 +224,11 @@ pub async fn pdf_save_annotations(
                             .create_highlight_annotation()
                             .map_err(|e| format!("Highlight erstellen: {e}"))?;
 
+                        // Y-Achse invertieren: screen_y → pdf_y = page_height - screen_y
+                        let pdf_bottom = page_height - rect.y2;
+                        let pdf_top = page_height - rect.y1;
                         new_anno.set_bounds(PdfRect::new_from_values(
-                            rect.y1, rect.x1, rect.y2, rect.x2
+                            pdf_bottom, rect.x1, pdf_top, rect.x2
                         )).map_err(|e| format!("Bounds setzen: {e}"))?;
 
                         if let Some(ref color) = anno.color {
@@ -211,8 +245,10 @@ pub async fn pdf_save_annotations(
                             .create_text_annotation(anno_text)
                             .map_err(|e| format!("Text-Annotation erstellen: {e}"))?;
 
+                        let pdf_bottom = page_height - rect.y2;
+                        let pdf_top = page_height - rect.y1;
                         new_anno.set_bounds(PdfRect::new_from_values(
-                            rect.y1, rect.x1, rect.y2, rect.x2
+                            pdf_bottom, rect.x1, pdf_top, rect.x2
                         )).map_err(|e| format!("Bounds setzen: {e}"))?;
 
                         if let Some(ref color) = anno.color {
@@ -228,8 +264,10 @@ pub async fn pdf_save_annotations(
                             .create_free_text_annotation(anno_text)
                             .map_err(|e| format!("FreeText-Annotation erstellen: {e}"))?;
 
+                        let pdf_bottom = page_height - rect.y2;
+                        let pdf_top = page_height - rect.y1;
                         new_anno.set_bounds(PdfRect::new_from_values(
-                            rect.y1, rect.x1, rect.y2, rect.x2
+                            pdf_bottom, rect.x1, pdf_top, rect.x2
                         )).map_err(|e| format!("Bounds setzen: {e}"))?;
 
                         if let Some(ref color) = anno.color {
@@ -245,8 +283,10 @@ pub async fn pdf_save_annotations(
                             .create_ink_annotation()
                             .map_err(|e| format!("Ink-Annotation erstellen: {e}"))?;
 
+                        let pdf_bottom = page_height - rect.y2;
+                        let pdf_top = page_height - rect.y1;
                         new_anno.set_bounds(PdfRect::new_from_values(
-                            rect.y1, rect.x1, rect.y2, rect.x2
+                            pdf_bottom, rect.x1, pdf_top, rect.x2
                         )).map_err(|e| format!("Bounds setzen: {e}"))?;
 
                         if let Some(ref color) = anno.color {
@@ -254,6 +294,11 @@ pub async fn pdf_save_annotations(
                                 let _ = new_anno.set_stroke_color(c);
                             }
                         }
+
+                        // Hinweis: pdfium-render 0.8 bietet keine API für InkList-Pfaddaten.
+                        // Ink-Annotationen werden nur mit Bounds und Farbe gespeichert.
+                        // Freihand-Pfade sind in der App sichtbar, aber in externen Editoren
+                        // wird nur die Bounding-Box angezeigt.
                     }
                 }
                 _ => {

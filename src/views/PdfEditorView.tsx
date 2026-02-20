@@ -56,14 +56,6 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
   // Local state holds the active PDF path — survives clearing of pendingPdfPath
   const [activePdfPath, setActivePdfPath] = useState(propFilePath || '');
 
-  // Consume pending path from context into local state
-  useEffect(() => {
-    if (pendingPdfPath) {
-      setActivePdfPath(pendingPdfPath);
-      setPendingPdfPath(null);
-    }
-  }, [pendingPdfPath, setPendingPdfPath]);
-
   const filePath = activePdfPath;
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
@@ -83,7 +75,7 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
   const [showGotoInput, setShowGotoInput] = useState(false);
   const [annoColor, setAnnoColor] = useState('#FFFF00');
   const [strokeWidth, setStrokeWidth] = useState(2);
-  const [commentPopover, setCommentPopover] = useState<{ x: number; y: number; page: number } | null>(null);
+  const [commentPopover, setCommentPopover] = useState<{ x: number; y: number; svgX: number; svgY: number; page: number } | null>(null);
   const [commentText, setCommentText] = useState('');
 
   // Undo/Redo stacks
@@ -102,7 +94,7 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
   const currentPathRef = useRef<Point[]>([]);
   const annoColorRef = useRef('#FFFF00');
   const strokeWidthRef = useRef(2);
-  const setCommentPopoverRef = useRef((_v: { x: number; y: number; page: number } | null) => {});
+  const setCommentPopoverRef = useRef((_v: { x: number; y: number; svgX: number; svgY: number; page: number } | null) => {});
   setCommentPopoverRef.current = setCommentPopover;
 
   // Keep refs in sync
@@ -111,6 +103,29 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
   useEffect(() => { currentToolRef.current = currentTool; }, [currentTool]);
   useEffect(() => { annoColorRef.current = annoColor; }, [annoColor]);
   useEffect(() => { strokeWidthRef.current = strokeWidth; }, [strokeWidth]);
+
+  // Consume pending PDF path from context — warnt bei ungespeicherten Änderungen
+  useEffect(() => {
+    if (!pendingPdfPath) return;
+    if (pendingPdfPath === activePdfPath) { setPendingPdfPath(null); return; }
+
+    if (unsavedChanges) {
+      (async () => {
+        const confirmed = await api.showConfirmDialog({
+          type: 'warning', title: 'Änderungen verwerfen?',
+          message: 'Es gibt ungespeicherte Änderungen. Andere PDF öffnen?',
+          buttons: ['Abbrechen', 'Verwerfen'], defaultId: 0,
+        });
+        if (confirmed.response === 1) {
+          setActivePdfPath(pendingPdfPath);
+        }
+        setPendingPdfPath(null);
+      })();
+    } else {
+      setActivePdfPath(pendingPdfPath);
+      setPendingPdfPath(null);
+    }
+  }, [pendingPdfPath, setPendingPdfPath, activePdfPath, unsavedChanges]);
 
   const fileName = filePath.split(/[\\/]/).pop() || 'PDF';
 
@@ -566,8 +581,13 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
           });
         }
       } else if (currentToolRef.current === 'comment') {
-        // Popover an der Klick-Position öffnen
-        setCommentPopoverRef.current({ x: e.clientX, y: e.clientY, page: pageNum });
+        // Popover an der Klick-Position öffnen — SVG-relative Koordinaten sofort berechnen
+        // (damit Scrolling zwischen Klick und OK die Position nicht verschiebt)
+        const svgRect = svg.getBoundingClientRect();
+        const s = scaleRef.current;
+        const svgX = (e.clientX - svgRect.left) / s;
+        const svgY = (e.clientY - svgRect.top) / s;
+        setCommentPopoverRef.current({ x: e.clientX, y: e.clientY, svgX, svgY, page: pageNum });
       } else if (currentToolRef.current === 'freehand' && currentPathRef.current.length > 2) {
         const scaledPath = currentPathRef.current.map(p => ({ x: p.x / s, y: p.y / s }));
         const bounds = pathBounds(scaledPath);
@@ -677,6 +697,17 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
         await page.render({ canvasContext: ctx, viewport }).promise;
         const imageBase64 = canvas.toDataURL('image/png');
         const ocrResult = await api.pdfOcrPage(imageBase64, language);
+
+        // OCR-Koordinaten sind im 3x-skalierten Pixelraum → auf PDF-Punkte herunterskalieren
+        const OCR_SCALE = 3.0;
+        if (ocrResult?.words && Array.isArray(ocrResult.words)) {
+          for (const word of ocrResult.words) {
+            word.x = (word.x || 0) / OCR_SCALE;
+            word.y = (word.y || 0) / OCR_SCALE;
+            word.width = (word.width || 0) / OCR_SCALE;
+            word.height = (word.height || 0) / OCR_SCALE;
+          }
+        }
         ocrResults.push(ocrResult);
       }
 
@@ -698,42 +729,73 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
   const handleMerge = useCallback(async () => {
     if (mergeFiles.length < 2) return;
     try {
-      const outputPath = filePath.replace(/\.pdf$/i, '_zusammengefügt.pdf');
-      await api.pdfMerge(mergeFiles, outputPath);
+      const defaultName = filePath.replace(/\.pdf$/i, '_zusammengefügt.pdf');
+      const result = await api.showSaveDialog({
+        title: 'Zusammengefügte PDF speichern unter...',
+        defaultPath: defaultName,
+        filters: [{ name: 'PDF', extensions: ['pdf'] }],
+      });
+      if (!result || result.canceled || !result.path) return;
+      await api.pdfMerge(mergeFiles, result.path);
       setShowMerge(false);
       setMergeFiles([]);
-      showToast('PDFs zusammengefügt', 'success');
+      showToast('PDFs zusammengefügt: ' + result.path.split(/[\\/]/).pop(), 'success');
     } catch (err: any) {
       showToast('Zusammenfügen fehlgeschlagen: ' + err.message, 'error');
     }
   }, [filePath, mergeFiles, showToast]);
 
   const rotatePage = useCallback(async (pageNum: number, degrees: number) => {
+    // Rotation ändert das Koordinatensystem — bestehende Annotations werden ungültig
+    if (annotations.length > 0) {
+      const confirmed = await api.showConfirmDialog({
+        type: 'warning', title: 'Seite drehen',
+        message: 'Beim Drehen werden bestehende Annotationen verworfen, da sich das Koordinatensystem ändert. Fortfahren?',
+        buttons: ['Abbrechen', 'Fortfahren'], defaultId: 0,
+      });
+      if (confirmed.response !== 1) return;
+    }
     try {
       await api.pdfRotatePage(filePath, filePath, pageNum - 1, degrees);
+      // Annotations + Undo/Redo zurücksetzen (Koordinaten stimmen nicht mehr)
+      setAnnotations([]);
+      undoStackRef.current = [];
+      redoStackRef.current = [];
+      setSelectedAnnoIdx(null);
+      setUnsavedChanges(false);
       setLoaded(false);
       setTimeout(() => setLoaded(true), 100);
     } catch (err: any) {
       showToast('Drehen fehlgeschlagen: ' + err.message, 'error');
     }
-  }, [filePath, showToast]);
+  }, [filePath, showToast, annotations.length]);
 
   const deletePage = useCallback(async (pageNum: number) => {
     if (totalPages <= 1) { showToast('Die letzte Seite kann nicht gelöscht werden.', 'error'); return; }
+    const hasAnnotationsOnLaterPages = annotations.some(a => a.page >= pageNum - 1);
+    const warnText = hasAnnotationsOnLaterPages
+      ? `Seite ${pageNum} wirklich löschen? Bestehende Annotationen werden verworfen (Seitenreferenzen ändern sich). Dies kann nicht rückgängig gemacht werden.`
+      : `Seite ${pageNum} wirklich löschen? Dies kann nicht rückgängig gemacht werden.`;
     const confirmed = await api.showConfirmDialog({
       type: 'warning', title: 'Seite löschen',
-      message: `Seite ${pageNum} wirklich löschen? Dies kann nicht rückgängig gemacht werden.`,
+      message: warnText,
       buttons: ['Abbrechen', 'Löschen'], defaultId: 0,
     });
     if (confirmed.response !== 1) return;
     try {
       await api.pdfDeletePages(filePath, filePath, [pageNum - 1]);
+      // Annotations zurücksetzen (Seitenindizes stimmen nicht mehr)
+      setAnnotations([]);
+      undoStackRef.current = [];
+      redoStackRef.current = [];
+      setSelectedAnnoIdx(null);
+      setUnsavedChanges(false);
       setLoaded(false);
       setTimeout(() => setLoaded(true), 100);
     } catch (err: any) {
       showToast('Löschen fehlgeschlagen: ' + err.message, 'error');
     }
-  }, [filePath, totalPages, showToast]);
+  }, [filePath, totalPages, showToast, annotations]);
 
   const showPageContextMenu = useCallback((e: MouseEvent, pageNum: number) => {
     document.querySelectorAll('.pdf-page-context-menu').forEach(el => el.remove());
@@ -769,21 +831,15 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
 
   const submitComment = useCallback(() => {
     if (!commentPopover || !commentText.trim()) { setCommentPopover(null); return; }
-    const s = scaleRef.current;
-    // Wir brauchen die Position relativ zum SVG — hier approximieren wir via die Popover-Koordinaten
-    // Die Position wird relativ zur Seite berechnet
-    const entry = pageEntriesRef.current[commentPopover.page - 1];
-    if (entry) {
-      const svgRect = entry.svg.getBoundingClientRect();
-      const x = (commentPopover.x - svgRect.left) / s;
-      const y = (commentPopover.y - svgRect.top) / s;
-      addAnnotation({
-        type: 'text', page: commentPopover.page - 1,
-        rect: { x1: x, y1: y, x2: x + 24 / s, y2: y + 24 / s },
-        text: commentText.trim(), color: annoColor,
-      });
-      setTimeout(() => renderAnnotationsForPage(commentPopover.page), 50);
-    }
+    // SVG-relative Koordinaten wurden bereits beim Klick berechnet (scroll-sicher)
+    const x = commentPopover.svgX;
+    const y = commentPopover.svgY;
+    addAnnotation({
+      type: 'text', page: commentPopover.page - 1,
+      rect: { x1: x, y1: y, x2: x + 24, y2: y + 24 },
+      text: commentText.trim(), color: annoColor,
+    });
+    setTimeout(() => renderAnnotationsForPage(commentPopover.page), 50);
     setCommentPopover(null);
     setCommentText('');
   }, [commentPopover, commentText, annoColor, addAnnotation, renderAnnotationsForPage]);
@@ -926,7 +982,7 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
           files={mergeFiles}
           onAddFile={async () => {
             try {
-              const result = await api.showSaveDialog({ title: 'PDF auswählen', filters: [{ name: 'PDF', extensions: ['pdf'] }] });
+              const result = await api.showSaveDialog({ title: 'PDF auswählen', open: true, filters: [{ name: 'PDF', extensions: ['pdf'] }] });
               if (result && !result.canceled && result.path) setMergeFiles(prev => [...prev, result.path]);
             } catch { /* Cancelled */ }
           }}

@@ -261,22 +261,36 @@ pub async fn show_save_dialog(app: tauri::AppHandle, options: Option<Value>) -> 
             None => Ok(json!({ "canceled": true })),
         }
     } else {
-        // Datei-Speichern-Dialog
+        let is_open = options.as_ref()
+            .and_then(|o| o.get("open"))
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
         let (tx, rx) = std::sync::mpsc::channel();
         let mut builder = app.dialog().file();
         if !title.is_empty() {
             builder = builder.set_title(&title);
         }
-        if !default_path.is_empty() {
+        if !default_path.is_empty() && !is_open {
             builder = builder.set_file_name(&default_path);
         }
         for (name, exts) in &filters {
             let ext_refs: Vec<&str> = exts.iter().map(|s| s.as_str()).collect();
             builder = builder.add_filter(name, &ext_refs);
         }
-        builder.save_file(move |path| {
-            let _ = tx.send(path);
-        });
+
+        if is_open {
+            // Datei-Öffnen-Dialog (bestehende Datei auswählen)
+            builder.pick_file(move |path| {
+                let _ = tx.send(path);
+            });
+        } else {
+            // Datei-Speichern-Dialog (neue Datei erstellen)
+            builder.save_file(move |path| {
+                let _ = tx.send(path);
+            });
+        }
+
         let path = tokio::task::spawn_blocking(move || {
             rx.recv().unwrap_or(None)
         }).await.unwrap_or(None);
