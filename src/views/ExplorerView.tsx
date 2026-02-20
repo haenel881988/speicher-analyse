@@ -381,15 +381,56 @@ export default function ExplorerView() {
           refresh();
         } catch (err: any) { showToast('Fehler: ' + err.message, 'error'); }
         break;
-      case 'extract':
-        if (singlePath) {
-          try {
-            await api.extractArchive(singlePath);
-            showToast('Archiv entpackt', 'info');
-            refresh();
-          } catch (err: any) { showToast('Fehler: ' + err.message, 'error'); }
+      case 'extract': {
+        // Alle ausgewählten Archive entpacken (jeweils in Unterordner neben dem Archiv)
+        const archiveExts = ['.zip'];
+        const archivePaths = paths.filter(p => {
+          const e = p.substring(p.lastIndexOf('.')).toLowerCase();
+          return archiveExts.includes(e);
+        });
+        if (archivePaths.length === 0 && singlePath) archivePaths.push(singlePath);
+        if (archivePaths.length > 0) {
+          let ok = 0;
+          let fail = 0;
+          for (const ap of archivePaths) {
+            try {
+              const res = await api.extractArchive(ap);
+              if (res?.success) ok++; else fail++;
+            } catch { fail++; }
+          }
+          if (fail === 0) showToast(`${ok} Archiv(e) entpackt`, 'info');
+          else showToast(`${ok} entpackt, ${fail} fehlgeschlagen`, 'error');
+          refresh();
         }
         break;
+      }
+      case 'extract-to': {
+        // Entpacken nach... — Zielordner wählen
+        const archiveExtsTo = ['.zip'];
+        const archivePathsTo = paths.filter(p => {
+          const e = p.substring(p.lastIndexOf('.')).toLowerCase();
+          return archiveExtsTo.includes(e);
+        });
+        if (archivePathsTo.length === 0 && singlePath) archivePathsTo.push(singlePath);
+        if (archivePathsTo.length > 0) {
+          const result = await api.showSaveDialog({ title: 'Zielordner zum Entpacken wählen', directory: true });
+          const dest = result?.path;
+          if (dest && !result.canceled) {
+            let ok = 0;
+            let fail = 0;
+            for (const ap of archivePathsTo) {
+              try {
+                const res = await api.extractArchive(ap, dest);
+                if (res?.success) ok++; else fail++;
+              } catch { fail++; }
+            }
+            if (fail === 0) showToast(`${ok} Archiv(e) nach "${dest}" entpackt`, 'info');
+            else showToast(`${ok} entpackt, ${fail} fehlgeschlagen`, 'error');
+            refresh();
+          }
+        }
+        break;
+      }
       case 'properties':
         if (singlePath) setPropertiesPath(singlePath);
         break;
@@ -958,7 +999,9 @@ export default function ExplorerView() {
         const multi = selectedPaths.size > 1;
         const isDir = entry?.isDirectory;
         const ext = entry?.extension?.toLowerCase() || '';
-        const isArchive = ['.zip', '.7z', '.rar', '.tar', '.gz', '.bz2', '.xz', '.tar.gz', '.tgz'].includes(ext);
+        const isArchive = ext === '.zip';
+        // Bei Mehrfachauswahl: prüfen ob mindestens ein Archiv dabei ist
+        const hasArchiveInSelection = multi ? [...selectedPaths].some(p => p.toLowerCase().endsWith('.zip')) : isArchive;
         const isPdf = ext === '.pdf';
         const isExecutable = ['.exe', '.msi', '.bat', '.cmd', '.ps1'].includes(ext);
         const isTextFile = ['.txt', '.log', '.md', '.json', '.xml', '.csv', '.ini', '.cfg', '.yaml', '.yml',
@@ -999,8 +1042,13 @@ export default function ExplorerView() {
                 <button className="ctx-item" onClick={() => ctxAction('move-to')}>Verschieben nach...</button>
                 <button className="ctx-item" onClick={() => ctxAction('copy-to')}>Kopieren nach...</button>
                 <div className="ctx-separator" />
-                {!isArchive && <button className="ctx-item" onClick={() => ctxAction('create-zip')}>Als ZIP komprimieren</button>}
-                {isArchive && <button className="ctx-item" onClick={() => ctxAction('extract')}>Archiv entpacken</button>}
+                <button className="ctx-item" onClick={() => ctxAction('create-zip')}>Als ZIP komprimieren</button>
+                {hasArchiveInSelection && (
+                  <>
+                    <button className="ctx-item" onClick={() => ctxAction('extract')}>Hier entpacken</button>
+                    <button className="ctx-item" onClick={() => ctxAction('extract-to')}>Entpacken nach...</button>
+                  </>
+                )}
                 {!multi && (
                   <>
                     <div className="ctx-separator" />
