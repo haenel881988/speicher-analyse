@@ -56,7 +56,6 @@ export default function ExplorerView() {
   const [renameValue, setRenameValue] = useState('');
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; entry: FileEntry | null } | null>(null);
   const [newFolderName, setNewFolderName] = useState<string | null>(null);
-  const [moveTarget, setMoveTarget] = useState<string | null>(null);
   const [clipboard, setClipboard] = useState<{ paths: string[]; cut: boolean } | null>(null);
 
   const lastClickedRef = useRef<string | null>(null);
@@ -278,10 +277,14 @@ export default function ExplorerView() {
       message: msg, buttons: ['Abbrechen', 'Löschen'], defaultId: 0,
     });
     if (result.response !== 1) return;
-    if (permanent) await api.deletePermanent(paths);
-    else await api.deleteToTrash(paths);
-    refresh();
-  }, [selectedPaths, refresh]);
+    try {
+      if (permanent) await api.deletePermanent(paths);
+      else await api.deleteToTrash(paths);
+      refresh();
+    } catch (err: any) {
+      showToast('Fehler beim Löschen: ' + (err.message || 'Unbekannter Fehler'), 'error');
+    }
+  }, [selectedPaths, refresh, showToast]);
 
   const handleRename = useCallback(async () => {
     if (!renamePath || !renameValue.trim()) { setRenamePath(null); return; }
@@ -290,9 +293,12 @@ export default function ExplorerView() {
     try {
       const result = await api.rename(renamePath, renameValue.trim());
       if (result.success) refresh();
-    } catch {}
+      else showToast('Umbenennen fehlgeschlagen', 'error');
+    } catch (err: any) {
+      showToast('Fehler beim Umbenennen: ' + (err.message || 'Unbekannter Fehler'), 'error');
+    }
     setRenamePath(null);
-  }, [renamePath, renameValue, entries, refresh]);
+  }, [renamePath, renameValue, entries, refresh, showToast]);
 
   // Close context menu on click anywhere or Escape
   useEffect(() => {
@@ -331,10 +337,10 @@ export default function ExplorerView() {
         if (singlePath) api.editInEditor(singlePath);
         break;
       case 'open-in-explorer':
-        if (singlePath) api.showInExplorer(singlePath);
+        api.showInExplorer(singlePath || currentPath);
         break;
       case 'open-terminal':
-        if (singlePath) api.openInTerminal(entry?.isDirectory ? singlePath : currentPath);
+        api.openInTerminal(entry?.isDirectory ? singlePath : currentPath);
         break;
       case 'copy-path':
         if (paths.length > 1) {
@@ -490,9 +496,20 @@ export default function ExplorerView() {
         }
         break;
       case 'new-textfile': {
-        const fileName = 'Neues Textdokument.txt';
+        const baseName = 'Neues Textdokument';
+        const ext = '.txt';
+        const dir = currentPath.replace(/[\\/]$/, '');
+        let fileName = baseName + ext;
+        let fullPath = dir + '\\' + fileName;
+        // Kollisionserkennung: Prüfe ob Datei bereits existiert
+        let counter = 2;
+        const existingNames = new Set(entries.map(e => e.name.toLowerCase()));
+        while (existingNames.has(fileName.toLowerCase()) && counter <= 99) {
+          fileName = `${baseName} (${counter})${ext}`;
+          fullPath = dir + '\\' + fileName;
+          counter++;
+        }
         try {
-          const fullPath = currentPath.replace(/[\\/]$/, '') + '\\' + fileName;
           await api.writeFileContent(fullPath, '');
           refresh();
           setRenamePath(fullPath);
@@ -521,7 +538,7 @@ export default function ExplorerView() {
         if (currentPath) setPropertiesPath(currentPath);
         break;
     }
-  }, [ctxMenu, selectedPaths, currentPath, clipboard, navigateTo, handleDelete, handleDoubleClick, refresh, showToast, setPropertiesPath]);
+  }, [ctxMenu, selectedPaths, currentPath, clipboard, entries, navigateTo, handleDelete, handleDoubleClick, refresh, showToast, setPropertiesPath]);
 
   const handleNewFolder = useCallback(async () => {
     if (newFolderName === null) return;
@@ -1020,7 +1037,9 @@ export default function ExplorerView() {
           '.bat', '.cmd', '.ps1', '.py', '.js', '.ts', '.jsx', '.tsx', '.html', '.htm', '.css', '.scss',
           '.java', '.c', '.cpp', '.h', '.cs', '.rb', '.go', '.rs', '.php', '.sql', '.sh', '.toml', '.env',
           '.gitignore', '.editorconfig', '.properties', '.conf', '.reg'].includes(ext);
-        const hasTag = entry ? !!dirTags[entry.path] : false;
+        const hasTag = multi
+          ? [...selectedPaths].some(p => !!dirTags[p])
+          : (entry ? !!dirTags[entry.path] : false);
         return (
           <div className="explorer-ctx-menu" style={{ left: ctxMenu.x, top: ctxMenu.y }} onClick={e => e.stopPropagation()}>
             {entry ? (
@@ -1085,12 +1104,10 @@ export default function ExplorerView() {
               </>
             ) : (
               <>
-                <div className="ctx-submenu-trigger">
-                  <button className="ctx-item">Ansicht ›</button>
-                  <div className="ctx-submenu">
-                    <button className="ctx-item" onClick={() => { /* Platzhalter für Ansicht-Modi */ }}>Details</button>
-                  </div>
-                </div>
+                <button type="button" className={`ctx-item ${showSizeColors ? 'ctx-item-active' : ''}`}
+                  onClick={() => { setCtxMenu(null); setShowSizeColors(v => !v); }}>
+                  {showSizeColors ? 'Größenfarben ausblenden' : 'Größenfarben einblenden'}
+                </button>
                 <div className="ctx-submenu-trigger">
                   <button className="ctx-item">Sortieren nach ›</button>
                   <div className="ctx-submenu">

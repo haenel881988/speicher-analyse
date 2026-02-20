@@ -331,10 +331,11 @@ try {{
     $ocrEngine = [Windows.Media.Ocr.OcrEngine, Windows.Foundation, ContentType=WindowsRuntime]::TryCreateFromLanguage($ocrLang)
     if (-not $ocrEngine) {{ throw "OCR-Engine für Sprache '{lang}' nicht verfügbar" }}
 
-    # Bild laden
+    # Bild laden via StorageFile (vermeidet Extension-Method-Problem in PS 5.1)
     $imgPath = '{img_path}'
-    $stream = [System.IO.File]::OpenRead($imgPath)
-    $decoder = Await ([Windows.Graphics.Imaging.BitmapDecoder, Windows.Foundation, ContentType=WindowsRuntime]::CreateAsync([Windows.Storage.Streams.IRandomAccessStream, Windows.Storage.Streams.ContentType=WindowsRuntime]$stream.AsRandomAccessStream())) ([Windows.Graphics.Imaging.BitmapDecoder])
+    $storageFile = Await ([Windows.Storage.StorageFile, Windows.Storage, ContentType=WindowsRuntime]::GetFileFromPathAsync($imgPath)) ([Windows.Storage.StorageFile])
+    $stream = Await ($storageFile.OpenReadAsync()) ([Windows.Storage.Streams.IRandomAccessStreamWithContentType])
+    $decoder = Await ([Windows.Graphics.Imaging.BitmapDecoder, Windows.Foundation, ContentType=WindowsRuntime]::CreateAsync($stream)) ([Windows.Graphics.Imaging.BitmapDecoder])
     $bitmap = Await ($decoder.GetSoftwareBitmapAsync()) ([Windows.Graphics.Imaging.SoftwareBitmap])
 
     # OCR ausführen
@@ -360,7 +361,7 @@ try {{
         words = $words
     }} | ConvertTo-Json -Depth 3 -Compress
 
-    $stream.Close()
+    $stream.Dispose()
 }} catch {{
     Write-Error $_.Exception.Message
 }}
