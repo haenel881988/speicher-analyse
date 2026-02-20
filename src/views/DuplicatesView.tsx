@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import * as api from '../api/tauri-api';
 import { useAppContext } from '../context/AppContext';
 import { formatBytes, parseSize } from '../utils/format';
@@ -9,6 +9,8 @@ interface DupGroup { size: number; files: DupFile[]; }
 interface DupResults { groups: DupGroup[]; totalGroups: number; totalDuplicates: number; totalSaveable: number; }
 interface DupProgress { phase: string; filesHashed: number; totalToHash: number; eta: number; currentFile: string; }
 
+interface ContextMenu { x: number; y: number; path: string; }
+
 export default function DuplicatesView() {
   const { currentScanId, showToast } = useAppContext();
   const [results, setResults] = useState<DupResults | null>(null);
@@ -17,6 +19,7 @@ export default function DuplicatesView() {
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [minSize, setMinSize] = useState('1KB');
   const [maxSize, setMaxSize] = useState('2GB');
+  const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
 
   // Event listeners for duplicate scan
   useTauriEvent<DupProgress>('duplicate-progress', useCallback((data) => {
@@ -98,11 +101,10 @@ export default function DuplicatesView() {
     } catch (e: any) {
       showToast('Fehler: ' + e.message, 'error');
     }
-  }, [checked, results, showToast]);
+  }, [checked, showToast]);
 
   const checkedSize = useMemo(() => {
     if (!results || checked.size === 0) return 0;
-    // Build path→size lookup for O(1) access instead of O(N*M) nested loop
     const pathSizeMap = new Map<string, number>();
     for (const g of results.groups) {
       for (const f of g.files) pathSizeMap.set(f.path, g.size);
@@ -111,6 +113,39 @@ export default function DuplicatesView() {
     for (const path of checked) sum += pathSizeMap.get(path) || 0;
     return sum;
   }, [checked, results]);
+
+  // Close context menu on click anywhere
+  useEffect(() => {
+    if (!contextMenu) return;
+    const handler = () => setContextMenu(null);
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, [contextMenu]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    if (!results || results.groups.length === 0) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement) return;
+      if (e.ctrlKey && e.key === 'a') {
+        e.preventDefault();
+        selectAllDuplicates();
+      } else if (e.key === 'Delete' && checked.size > 0) {
+        e.preventDefault();
+        deleteSelected();
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [results, checked, selectAllDuplicates, deleteSelected]);
+
+  const handleContextMenu = (e: React.MouseEvent, path: string) => {
+    e.preventDefault();
+    if (!checked.has(path)) {
+      setChecked(prev => { const next = new Set(prev); next.add(path); return next; });
+    }
+    setContextMenu({ x: e.clientX, y: e.clientY, path });
+  };
 
   const progressPct = progress && progress.totalToHash > 0
     ? (progress.filesHashed / progress.totalToHash * 100) : 0;
@@ -148,8 +183,8 @@ export default function DuplicatesView() {
       )}
       {results && results.groups.length > 0 && (
         <div className="tool-actions" style={{ display: 'flex' }}>
-          <button className="btn btn-primary" onClick={selectAllDuplicates}>Alle Duplikate auswählen (Neueste behalten)</button>
-          <button className="btn btn-danger" onClick={deleteSelected}>Ausgewählte löschen</button>
+          <button className="btn btn-primary" onClick={selectAllDuplicates} title="Strg+A">Alle Duplikate auswählen (Neueste behalten)</button>
+          <button className="btn btn-danger" onClick={deleteSelected} disabled={checked.size === 0} title="Entf">Ausgewählte löschen</button>
           <span className="selected-info">
             {checked.size > 0 && `${checked.size} ausgewählt (${formatBytes(checkedSize)})`}
           </span>
@@ -171,21 +206,42 @@ export default function DuplicatesView() {
             </div>
             <div className="dup-group-files">
               {group.files.map((f, fi) => (
-                <div className="dup-file-row" key={fi} onDoubleClick={() => api.openFile(f.path)}>
+                <div
+                  className={`dup-file-row ${checked.has(f.path) ? 'selected' : ''}`}
+                  key={fi}
+                  onDoubleClick={() => api.openFile(f.path)}
+                  onContextMenu={(e) => handleContextMenu(e, f.path)}
+                >
                   <input
                     type="checkbox"
                     className="dup-check"
                     checked={checked.has(f.path)}
                     onChange={() => toggleCheck(f.path)}
+                    title="Datei auswählen"
                   />
                   <span className="dup-file-name" title={f.path}>{f.name}</span>
                   <span className="dup-file-path">{f.path.substring(0, f.path.lastIndexOf('\\') || f.path.lastIndexOf('/'))}</span>
+                  <button className="btn-icon dup-file-explorer" onClick={(e) => { e.stopPropagation(); api.showInExplorer(f.path); }} title="Im Explorer anzeigen">
+                    {'\uD83D\uDCC2'}
+                  </button>
                 </div>
               ))}
             </div>
           </div>
         ))}
       </div>
+
+      {/* Context Menu */}
+      {contextMenu && (
+        <div className="context-menu" style={{ position: 'fixed', left: contextMenu.x, top: contextMenu.y, zIndex: 9999 }}>
+          <button className="context-menu-item" onClick={() => { api.openFile(contextMenu.path); setContextMenu(null); }}>Öffnen</button>
+          <button className="context-menu-item" onClick={() => { api.showInExplorer(contextMenu.path); setContextMenu(null); }}>Im Explorer anzeigen</button>
+          <div className="context-menu-separator" />
+          <button className="context-menu-item context-menu-danger" onClick={() => { setContextMenu(null); deleteSelected(); }}>
+            {checked.size > 1 ? `${checked.size} Dateien löschen` : 'Löschen'}
+          </button>
+        </div>
+      )}
     </>
   );
 }

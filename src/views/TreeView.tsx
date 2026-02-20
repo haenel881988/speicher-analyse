@@ -22,6 +22,8 @@ interface RowData {
 
 const CACHE_MAX_SIZE = 500;
 
+interface ContextMenu { x: number; y: number; path: string; }
+
 export default function TreeView() {
   const { currentScanId, currentPath, showToast } = useAppContext();
   const [rows, setRows] = useState<RowData[]>([]);
@@ -29,6 +31,7 @@ export default function TreeView() {
   const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
   const [rootPath, setRootPath] = useState('');
   const [rootSize, setRootSize] = useState(0);
+  const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
   const cacheRef = useRef<Map<string, TreeNode>>(new Map());
   const lastClickedRef = useRef<string | null>(null);
 
@@ -152,6 +155,21 @@ export default function TreeView() {
     }
   }, [rows]);
 
+  // Context menu
+  const handleContextMenu = useCallback((e: React.MouseEvent, path: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setSelectedPaths(new Set([path]));
+    setContextMenu({ x: e.clientX, y: e.clientY, path });
+  }, []);
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const handler = () => setContextMenu(null);
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, [contextMenu]);
+
   // Breadcrumb
   const breadcrumbParts = useMemo(() => {
     if (!rootPath) return [];
@@ -205,6 +223,7 @@ export default function TreeView() {
               style={{ paddingLeft: 12 + r.depth * 20 }}
               onClick={(e) => { selectRow(r.node.path, e); if (hasChildren) toggleExpand(r.node.path, r.depth); }}
               onDoubleClick={() => api.openInExplorer(r.node.path)}
+              onContextMenu={(e) => handleContextMenu(e, r.node.path)}
             >
               <span className={`tree-arrow ${r.expanded ? 'expanded' : ''} ${!hasChildren ? 'empty' : ''}`}>{'\u25B6'}</span>
               <span className="tree-icon">{'\uD83D\uDCC1'}</span>
@@ -219,6 +238,16 @@ export default function TreeView() {
           );
         })}
       </div>
+
+      {/* Context Menu */}
+      {contextMenu && (
+        <div className="context-menu" style={{ position: 'fixed', left: contextMenu.x, top: contextMenu.y, zIndex: 9999 }}>
+          <button className="context-menu-item" onClick={() => { api.openInExplorer(contextMenu.path); setContextMenu(null); }}>Im Explorer öffnen</button>
+          <button className="context-menu-item" onClick={() => { loadRoot(contextMenu.path); setContextMenu(null); }}>Hier als Wurzel setzen</button>
+          <div className="context-menu-separator" />
+          <button className="context-menu-item" onClick={() => { navigator.clipboard.writeText(contextMenu.path); showToast('Pfad kopiert', 'success'); setContextMenu(null); }}>Pfad kopieren</button>
+        </div>
+      )}
     </>
   );
 }

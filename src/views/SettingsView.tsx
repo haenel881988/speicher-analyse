@@ -3,6 +3,14 @@ import * as api from '../api/tauri-api';
 import { useAppContext } from '../context/AppContext';
 import { formatBytes } from '../utils/format';
 
+function getAppVersion(): Promise<string> {
+  try {
+    const tauriApp = (window as any).__TAURI__?.app;
+    if (tauriApp?.getVersion) return tauriApp.getVersion();
+  } catch { /* fallback */ }
+  return Promise.resolve('?');
+}
+
 interface Prefs {
   sessionRestore?: boolean;
   sessionSaveOnClose?: boolean;
@@ -42,6 +50,7 @@ export default function SettingsView() {
   const [tags, setTags] = useState<{ path: string; color: string }[]>([]);
   const [tagCount, setTagCount] = useState(0);
   const [saveSessionLabel, setSaveSessionLabel] = useState('Jetzt speichern');
+  const [appVersion, setAppVersion] = useState('...');
   const hotkeyInputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
@@ -63,7 +72,9 @@ export default function SettingsView() {
       setShells(sh);
       setLoaded(true);
 
-      // Tag count
+      // App version + Tag count
+      const ver = await getAppVersion();
+      setAppVersion(ver);
       try {
         const t = await api.getAllTags();
         setTagCount(t.length);
@@ -390,7 +401,7 @@ export default function SettingsView() {
             <span className="settings-desc">Disk Space Analyzer & System Tools</span>
           </div>
           <div className="settings-value">
-            <span className="settings-version">v7.2.1</span>
+            <span className="settings-version">v{appVersion}</span>
           </div>
         </div>
       </div>

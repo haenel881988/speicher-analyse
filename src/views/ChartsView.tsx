@@ -4,6 +4,8 @@ import { useAppContext } from '../context/AppContext';
 import { formatBytes, formatNumber } from '../utils/format';
 import { getCategoryColor, getCategoryClass } from '../utils/categories';
 
+interface DetailContextMenu { x: number; y: number; path: string; }
+
 interface FileTypeItem {
   extension: string;
   category: string;
@@ -23,6 +25,15 @@ export default function ChartsView() {
   const [sortAsc, setSortAsc] = useState(false);
   const [detailFiles, setDetailFiles] = useState<any[] | null>(null);
   const [detailTitle, setDetailTitle] = useState('');
+  const [detailCtx, setDetailCtx] = useState<DetailContextMenu | null>(null);
+
+  // Close detail context menu on click
+  useEffect(() => {
+    if (!detailCtx) return;
+    const handler = () => setDetailCtx(null);
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, [detailCtx]);
 
   const loadData = useCallback(async () => {
     if (!currentScanId) return;
@@ -130,7 +141,12 @@ export default function ChartsView() {
             <thead><tr><th>#</th><th>Name</th><th>Pfad</th><th style={{ textAlign: 'right' }}>Größe</th></tr></thead>
             <tbody>
               {detailFiles.map((f, i) => (
-                <tr key={f.path} style={{ cursor: 'pointer' }} onDoubleClick={() => api.openFile(f.path)}>
+                <tr
+                  key={f.path}
+                  style={{ cursor: 'pointer' }}
+                  onDoubleClick={() => api.openFile(f.path)}
+                  onContextMenu={(e) => { e.preventDefault(); setDetailCtx({ x: e.clientX, y: e.clientY, path: f.path }); }}
+                >
                   <td style={{ color: 'var(--text-muted)' }}>{i + 1}</td>
                   <td className="name-col" title={f.name}>{f.name}</td>
                   <td className="path-col" title={f.path}>{f.path.substring(0, Math.max(f.path.lastIndexOf('\\'), f.path.lastIndexOf('/')))}</td>
@@ -140,6 +156,12 @@ export default function ChartsView() {
             </tbody>
           </table>
         </div>
+        {detailCtx && (
+          <div className="context-menu" style={{ position: 'fixed', left: detailCtx.x, top: detailCtx.y, zIndex: 9999 }}>
+            <button className="context-menu-item" onClick={() => { api.openFile(detailCtx.path); setDetailCtx(null); }}>Öffnen</button>
+            <button className="context-menu-item" onClick={() => { api.showInExplorer(detailCtx.path); setDetailCtx(null); }}>Im Explorer anzeigen</button>
+          </div>
+        )}
       </>
     );
   }

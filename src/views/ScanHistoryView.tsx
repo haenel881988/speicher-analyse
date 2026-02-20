@@ -123,6 +123,12 @@ export default function ScanHistoryView() {
   }, [showToast, loadHistory]);
 
   const handleClearHistory = useCallback(async () => {
+    const confirmed = await api.showConfirmDialog({
+      type: 'warning', title: 'Verlauf leeren',
+      message: `Gesamten Scan-Verlauf (${history.length} Snapshots) löschen? Dies kann nicht rückgängig gemacht werden.`,
+      buttons: ['Abbrechen', 'Leeren'], defaultId: 0,
+    });
+    if (confirmed.response !== 1) return;
     try {
       await api.clearScanHistory();
       setHistory([]);
@@ -130,7 +136,7 @@ export default function ScanHistoryView() {
     } catch (err: any) {
       showToast('Löschen fehlgeschlagen: ' + err.message, 'error');
     }
-  }, [showToast]);
+  }, [showToast, history.length]);
 
   // Auto-load sub-tab data
   useEffect(() => {
