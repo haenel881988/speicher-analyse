@@ -11,14 +11,6 @@ pub async fn delete_to_trash(paths: Vec<String>) -> Result<Value, String> {
     for p in &paths {
         validate_path(p)?;
     }
-    // Undo-Log: Pfade protokollieren (umkehrbar via Papierkorb)
-    let file_names: Vec<&str> = paths.iter().filter_map(|p| Path::new(p).file_name().and_then(|n| n.to_str())).collect();
-    let desc = if file_names.len() == 1 {
-        format!("\"{}\" in den Papierkorb verschoben", file_names[0])
-    } else {
-        format!("{} Elemente in den Papierkorb verschoben", file_names.len())
-    };
-    crate::undo::log_action("delete_trash", &desc, json!({ "paths": paths }), true);
 
     let ps_paths = paths.iter().map(|p| format!("'{}'", p.replace("'", "''"))).collect::<Vec<_>>().join(",");
     let script = format!(
@@ -32,7 +24,18 @@ pub async fn delete_to_trash(paths: Vec<String>) -> Result<Value, String> {
 }}
 'ok'"#, ps_paths
     );
-    crate::ps::run_ps(&script).await.map(|_| json!({ "success": true }))
+    crate::ps::run_ps(&script).await?;
+
+    // Undo-Log AFTER successful trash operation (failed deletes must not appear in undo log)
+    let file_names: Vec<&str> = paths.iter().filter_map(|p| Path::new(p).file_name().and_then(|n| n.to_str())).collect();
+    let desc = if file_names.len() == 1 {
+        format!("\"{}\" in den Papierkorb verschoben", file_names[0])
+    } else {
+        format!("{} Elemente in den Papierkorb verschoben", file_names.len())
+    };
+    crate::undo::log_action("delete_trash", &desc, json!({ "paths": paths }), true);
+
+    Ok(json!({ "success": true }))
 }
 
 #[tauri::command]
@@ -42,19 +45,12 @@ pub async fn delete_permanent(paths: Vec<String>) -> Result<Value, String> {
         validate_path(p)?;
     }
 
-    // Undo-Log: Pfade + Größen protokollieren (NICHT umkehrbar!)
+    // Collect sizes BEFORE deletion (for undo log info)
     let mut sizes: Vec<Value> = Vec::new();
     for p in &paths {
         let size = tokio::fs::metadata(p).await.map(|m| m.len()).unwrap_or(0);
         sizes.push(json!({ "path": p, "size": size }));
     }
-    let file_names: Vec<&str> = paths.iter().filter_map(|p| Path::new(p).file_name().and_then(|n| n.to_str())).collect();
-    let desc = if file_names.len() == 1 {
-        format!("\"{}\" endgültig gelöscht", file_names[0])
-    } else {
-        format!("{} Elemente endgültig gelöscht", file_names.len())
-    };
-    crate::undo::log_action("delete_permanent", &desc, json!({ "files": sizes }), false);
 
     for p in &paths {
         let path = Path::new(p);
@@ -64,6 +60,16 @@ pub async fn delete_permanent(paths: Vec<String>) -> Result<Value, String> {
             tokio::fs::remove_file(path).await.map_err(|e| e.to_string())?;
         }
     }
+
+    // Undo-Log AFTER successful deletion (failed deletes must not appear in undo log)
+    let file_names: Vec<&str> = paths.iter().filter_map(|p| Path::new(p).file_name().and_then(|n| n.to_str())).collect();
+    let desc = if file_names.len() == 1 {
+        format!("\"{}\" endgültig gelöscht", file_names[0])
+    } else {
+        format!("{} Elemente endgültig gelöscht", file_names.len())
+    };
+    crate::undo::log_action("delete_permanent", &desc, json!({ "files": sizes }), false);
+
     Ok(json!({ "success": true }))
 }
 
@@ -95,7 +101,7 @@ pub async fn file_rename(old_path: String, new_name: String) -> Result<Value, St
 
 #[tauri::command]
 pub async fn file_move(source_paths: Vec<String>, dest_dir: String) -> Result<Value, String> {
-    // Undo-Log: Quell- und Zielpfade protokollieren (umkehrbar)
+    // Validate all paths first, collect move info for undo log
     let mut moves: Vec<Value> = Vec::new();
     for src in &source_paths {
         validate_path(src)?;
@@ -104,14 +110,8 @@ pub async fn file_move(source_paths: Vec<String>, dest_dir: String) -> Result<Va
         let dest = Path::new(&dest_dir).join(name);
         moves.push(json!({ "source": src, "source_dir": source_dir, "dest": dest.to_string_lossy() }));
     }
-    let file_names: Vec<&str> = source_paths.iter().filter_map(|p| Path::new(p).file_name().and_then(|n| n.to_str())).collect();
-    let desc = if file_names.len() == 1 {
-        format!("\"{}\" verschoben nach {}", file_names[0], dest_dir.split(&['\\', '/'][..]).last().unwrap_or(&dest_dir))
-    } else {
-        format!("{} Elemente verschoben nach {}", file_names.len(), dest_dir.split(&['\\', '/'][..]).last().unwrap_or(&dest_dir))
-    };
-    crate::undo::log_action("file_move", &desc, json!({ "moves": moves }), true);
 
+    // Perform the actual move operations first
     for src in &source_paths {
         let name = Path::new(src).file_name().unwrap_or_default();
         let dest = Path::new(&dest_dir).join(name);
@@ -142,6 +142,16 @@ pub async fn file_move(source_paths: Vec<String>, dest_dir: String) -> Result<Va
             }
         }
     }
+
+    // Undo-Log AFTER successful move (failed moves must not appear in undo log)
+    let file_names: Vec<&str> = source_paths.iter().filter_map(|p| Path::new(p).file_name().and_then(|n| n.to_str())).collect();
+    let desc = if file_names.len() == 1 {
+        format!("\"{}\" verschoben nach {}", file_names[0], dest_dir.split(&['\\', '/'][..]).last().unwrap_or(&dest_dir))
+    } else {
+        format!("{} Elemente verschoben nach {}", file_names.len(), dest_dir.split(&['\\', '/'][..]).last().unwrap_or(&dest_dir))
+    };
+    crate::undo::log_action("file_move", &desc, json!({ "moves": moves }), true);
+
     Ok(json!({ "success": true }))
 }
 

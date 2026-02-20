@@ -117,11 +117,14 @@ export default function ExplorerView() {
     })();
   }, []);
 
-  // Cleanup on unmount: deep search listeners + debounce timer
+  // Cleanup on unmount: cancel deep search + remove listeners + debounce timer
   useEffect(() => {
     return () => {
-      for (const unlisten of deepSearchUnlistenRef.current) unlisten();
-      deepSearchUnlistenRef.current = [];
+      if (deepSearchUnlistenRef.current.length > 0) {
+        api.deepSearchCancel();
+        for (const unlisten of deepSearchUnlistenRef.current) unlisten();
+        deepSearchUnlistenRef.current = [];
+      }
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, []);
@@ -1030,11 +1033,21 @@ export default function ExplorerView() {
     else api.openFile(entry.path);
   }, [navigateDualTo]);
 
+  const sortedDualEntries = useMemo(() => {
+    return [...dualEntries].sort((a, b) => {
+      if (a.isDirectory && !b.isDirectory) return -1;
+      if (!a.isDirectory && b.isDirectory) return 1;
+      return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+    });
+  }, [dualEntries]);
+
   const dualGoUp = useCallback(() => {
-    if (/^[A-Z]:\\$/i.test(dualPath)) return;
-    const parent = dualPath.substring(0, Math.max(dualPath.lastIndexOf('\\'), dualPath.lastIndexOf('/')));
+    // Strip trailing separator before computing parent (same pattern as goUp)
+    const cleaned = dualPath.replace(/[\\/]+$/, '');
+    if (/^[A-Z]:$/i.test(cleaned)) return; // Already at drive root
+    const parent = cleaned.substring(0, Math.max(cleaned.lastIndexOf('\\'), cleaned.lastIndexOf('/')));
     const normalized = /^[A-Z]:$/i.test(parent) ? parent + '\\' : parent;
-    if (normalized && normalized !== dualPath) navigateDualTo(normalized);
+    if (normalized && normalized !== cleaned) navigateDualTo(normalized);
   }, [dualPath, navigateDualTo]);
 
   const toggleDualMode = useCallback(() => {
@@ -1083,7 +1096,7 @@ export default function ExplorerView() {
     const segments = currentPath.split('\\').filter(Boolean);
     let buildPath = '';
     return segments.map((s, i) => {
-      buildPath += s + (i === 0 ? '\\' : '\\');
+      buildPath += s + '\\';
       return { name: s, path: buildPath };
     });
   }, [currentPath]);
@@ -1349,13 +1362,9 @@ export default function ExplorerView() {
                     </tr>
                   </thead>
                   <tbody>
-                    {dualEntries.length === 0 ? (
+                    {sortedDualEntries.length === 0 ? (
                       <tr><td colSpan={3} style={{ textAlign: 'center', padding: 20, color: 'var(--text-muted)' }}>Leer</td></tr>
-                    ) : [...dualEntries].sort((a, b) => {
-                      if (a.isDirectory && !b.isDirectory) return -1;
-                      if (!a.isDirectory && b.isDirectory) return 1;
-                      return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
-                    }).map(entry => (
+                    ) : sortedDualEntries.map(entry => (
                       <tr key={entry.path} data-path={entry.path}
                         onDoubleClick={() => handleDualDoubleClick(entry)}
                         draggable onDragStart={e => handleDragStart(e, entry.path)}
@@ -1477,7 +1486,7 @@ export default function ExplorerView() {
             ) : (
               <>
                 <button type="button" className={`ctx-item ${showSizeColors ? 'ctx-item-active' : ''}`}
-                  onClick={() => { setCtxMenu(null); setShowSizeColors(v => !v); }}>
+                  onClick={() => { setCtxMenu(null); setShowSizeColors(v => { const next = !v; api.setPreference('showSizeColors', next); return next; }); }}>
                   {showSizeColors ? 'Größenfarben ausblenden' : 'Größenfarben einblenden'}
                 </button>
                 <div className="ctx-submenu-trigger">
