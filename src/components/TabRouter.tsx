@@ -10,12 +10,9 @@ const DuplicatesView = lazy(() => import('../views/DuplicatesView'));
 const OldFilesView = lazy(() => import('../views/OldFilesView'));
 const CleanupView = lazy(() => import('../views/CleanupView'));
 const AppsView = lazy(() => import('../views/AppsView'));
-const ServicesView = lazy(() => import('../views/ServicesView'));
-const OptimizerView = lazy(() => import('../views/OptimizerView'));
 const ExplorerView = lazy(() => import('../views/ExplorerView'));
 const PrivacyView = lazy(() => import('../views/PrivacyView'));
 const SmartView = lazy(() => import('../views/SmartView'));
-const SecurityAuditView = lazy(() => import('../views/SecurityAuditView'));
 const NetworkView = lazy(() => import('../views/NetworkView'));
 const SystemProfilView = lazy(() => import('../views/SystemProfilView'));
 const HealthCheckView = lazy(() => import('../views/HealthCheckView'));
@@ -40,12 +37,9 @@ const TAB_MAP: Record<string, React.LazyExoticComponent<any>> = {
   'old-files': OldFilesView,
   'cleanup': CleanupView,
   'apps': AppsView,
-  'services': ServicesView,
-  'optimizer': OptimizerView,
   'explorer': ExplorerView,
   'privacy': PrivacyView,
   'smart': SmartView,
-  'security-audit': SecurityAuditView,
   'network': NetworkView,
   'system-profil': SystemProfilView,
   'health-check': HealthCheckView,

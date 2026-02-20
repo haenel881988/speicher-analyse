@@ -146,7 +146,7 @@ function AppInner() {
     if (data.action === 'about') {
       api.showConfirmDialog({
         title: 'Über Speicher Analyse',
-        message: 'Speicher Analyse v7.2.1\nDisk Space Analyzer & System Optimizer\n\nTauri v2 + Rust Backend',
+        message: 'Speicher Analyse v7.2.1\nDisk Space Analyzer & System Tools\n\nTauri v2 + Rust Backend',
         okLabel: 'OK',
       });
     }

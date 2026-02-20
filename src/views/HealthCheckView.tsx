@@ -98,44 +98,20 @@ export default function HealthCheckView() {
     return result;
   };
 
-  const analyzeSecurity = (securityData: any): CategoryResult => {
-    const result: CategoryResult = { name: 'Sicherheit', icon: 'security', score: 100, detail: '', recommendations: [] };
-    if (!securityData || !Array.isArray(securityData)) {
-      result.score = 50; result.detail = 'Sicherheits-Check nicht verfügbar'; return result;
-    }
-    let okCount = 0, warnCount = 0, critCount = 0;
-    for (const check of securityData) {
-      if (check.status === 'ok') okCount++;
-      else if (check.status === 'warning') {
-        warnCount++;
-        result.recommendations.push({ level: 'warning', text: `${check.name || check.id}: ${check.detail || ''}`, action: 'security-audit', actionLabel: 'Sicherheit' });
-      } else if (check.status === 'critical') {
-        critCount++;
-        result.recommendations.push({ level: 'critical', text: `${check.name || check.id}: ${check.detail || ''}`, action: 'security-audit', actionLabel: 'Sicherheit' });
-      }
-    }
-    const total = okCount + warnCount + critCount;
-    if (total > 0) result.score = Math.round(((okCount * 100) + (warnCount * 40)) / total);
-    result.detail = `${total} Prüfungen — ${okCount} bestanden, ${warnCount} Warnungen, ${critCount} kritisch`;
-    return result;
-  };
-
   const runDiagnosis = useCallback(async () => {
     if (running) return;
     setRunning(true);
     try {
-      const [drives, diskHealth, privacy, security] = await Promise.allSettled([
+      const [drives, diskHealth, privacy] = await Promise.allSettled([
         api.getDrives(),
         api.getDiskHealth(),
         api.getPrivacySettings(),
-        api.runSecurityAudit(),
       ]);
 
       const categories = [
         analyzeStorage(drives.status === 'fulfilled' ? drives.value : null),
         analyzeDiskHealth(diskHealth.status === 'fulfilled' ? diskHealth.value : null),
         analyzePrivacy(privacy.status === 'fulfilled' ? privacy.value : null),
-        analyzeSecurity(security.status === 'fulfilled' ? security.value : null),
       ];
 
       const allRecs = categories.flatMap(c => c.recommendations);
@@ -166,7 +142,7 @@ export default function HealthCheckView() {
       <div className="health-check">
         <div className="health-header">
           <h2>PC-Diagnose</h2>
-          <p className="health-subtitle">Prüft Festplatten, Datenschutz, Sicherheit und Systemzustand in einem Durchlauf.</p>
+          <p className="health-subtitle">Prüft Speicherplatz, Festplatten und Datenschutz in einem Durchlauf.</p>
         </div>
         <div className="health-start-area">
           <button className="health-start-btn" onClick={runDiagnosis} disabled={running}>

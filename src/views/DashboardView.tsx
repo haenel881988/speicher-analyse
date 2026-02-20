@@ -72,28 +72,20 @@ export default function DashboardView() {
           onClick={() => navigate('duplicates')}
         />
         <DashCard
-          icon="&#x26A1;"
-          title="Optimierung"
-          value="System optimieren"
-          detail="Hardware, Datenschutz, Leistung"
+          icon="&#x1F4E6;"
+          title="Apps"
+          value="Apps verwalten"
+          detail="Programme, Updates, Autostart"
           clickable
-          onClick={() => navigate('optimizer')}
+          onClick={() => navigate('apps')}
         />
         <DashCard
-          icon="&#x1F680;"
-          title="Autostart"
-          value="Einträge anzeigen"
-          detail="Programme beim Systemstart"
+          icon="&#x1F50D;"
+          title="Diagnose"
+          value="PC-Gesundheitscheck"
+          detail="Speicher, Festplatten, Datenschutz"
           clickable
-          onClick={() => navigate('autostart')}
-        />
-        <DashCard
-          icon="&#x2699;"
-          title="Dienste"
-          value="Dienste verwalten"
-          detail="Windows-Dienste steuern"
-          clickable
-          onClick={() => navigate('services')}
+          onClick={() => navigate('health-check')}
         />
       </div>
     </div>

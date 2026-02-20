@@ -188,92 +188,6 @@ pub async fn delete_autostart(entry: Value) -> Result<Value, String> {
     }
 }
 
-// === Services ===
-
-#[tauri::command]
-pub async fn get_services() -> Result<Value, String> {
-    crate::ps::run_ps_json_array(
-        r#"Get-Service | ForEach-Object {
-$st = switch([int]$_.Status){1{'Stopped'}2{'StartPending'}3{'StopPending'}4{'Running'}5{'ContinuePending'}6{'PausePending'}7{'Paused'}default{'Unknown'}}
-$stt = switch([int]$_.StartType){0{'Boot'}1{'System'}2{'Automatic'}3{'Manual'}4{'Disabled'}default{'Unknown'}}
-[PSCustomObject]@{name=$_.Name;displayName=$_.DisplayName;status=$st;startType=$stt}
-} | ConvertTo-Json -Compress"#
-    ).await
-}
-
-#[tauri::command]
-pub async fn control_service(name: String, action: String) -> Result<Value, String> {
-    tracing::info!(service = %name, action = %action, "Service-Steuerung");
-    let safe_name = name.replace("'", "''");
-    let cmd = match action.as_str() {
-        "start" => format!("Start-Service '{}'", safe_name),
-        "stop" => format!("Stop-Service '{}' -Force", safe_name),
-        "restart" => format!("Restart-Service '{}' -Force", safe_name),
-        _ => return Err(format!("Unknown action: {}", action)),
-    };
-    crate::ps::run_ps(&cmd).await?;
-    Ok(json!({ "success": true }))
-}
-
-#[tauri::command]
-pub async fn set_service_start_type(name: String, start_type: String) -> Result<Value, String> {
-    tracing::info!(service = %name, start_type = %start_type, "Service-Starttyp ändern");
-    // Frontend sends 'auto'|'demand'|'disabled', PowerShell needs 'Automatic'|'Manual'|'Disabled'
-    let ps_type = match start_type.as_str() {
-        "auto" => "Automatic",
-        "demand" => "Manual",
-        "disabled" => "Disabled",
-        _ => return Err(format!("Ungültiger Start-Typ: '{}'. Erlaubt: auto, demand, disabled", start_type)),
-    };
-    let safe_name = name.replace("'", "''");
-    crate::ps::run_ps(&format!("Set-Service '{}' -StartupType '{}'", safe_name, ps_type)).await?;
-    Ok(json!({ "success": true }))
-}
-
-// === Optimizer ===
-
-#[tauri::command]
-pub async fn get_optimizations() -> Result<Value, String> {
-    crate::ps::run_ps_json_array(
-        r#"$opts = @()
-$vfx = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects' -ErrorAction SilentlyContinue).VisualFXSetting
-$opts += [PSCustomObject]@{ id='visual_effects'; title='Visuelle Effekte optimieren'; name='Visuelle Effekte optimieren'; description='Deaktiviert Animationen und Transparenz für bessere Performance'; applied=($vfx -eq 2); category='performance'; impact='medium'; savingsBytes=0; requiresAdmin=$false; reversible=$true }
-$prefetchSize = 0; try { $prefetchSize = [long](Get-ChildItem "$env:SystemRoot\Prefetch" -Force -File -EA Stop | Measure-Object -Property Length -Sum).Sum } catch {}
-$opts += [PSCustomObject]@{ id='prefetch'; title='Prefetch bereinigen'; name='Prefetch bereinigen'; description='Löscht alte Prefetch-Daten um Speicherplatz freizugeben'; applied=$false; category='cleanup'; impact='low'; savingsBytes=$prefetchSize; requiresAdmin=$true; reversible=$false }
-$tpEnabled = (Get-ItemProperty 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize' -EA SilentlyContinue).EnableTransparency
-$opts += [PSCustomObject]@{ id='transparency'; title='Transparenz deaktivieren'; name='Transparenz deaktivieren'; description='Deaktiviert Transparenzeffekte für bessere Performance'; applied=($tpEnabled -eq 0); category='performance'; impact='low'; savingsBytes=0; requiresAdmin=$false; reversible=$true }
-$opts | ConvertTo-Json -Compress"#
-    ).await
-}
-
-#[tauri::command]
-pub async fn apply_optimization(id: String) -> Result<Value, String> {
-    tracing::info!(optimization = %id, "Optimierung anwenden");
-    let script = match id.as_str() {
-        "visual_effects" => {
-            r#"Set-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects' -Name 'VisualFXSetting' -Value 2 -Type DWord -Force
-Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name 'UserPreferencesMask' -Value ([byte[]](0x90,0x12,0x03,0x80,0x10,0x00,0x00,0x00)) -Type Binary -Force"#.to_string()
-        }
-        "prefetch" => {
-            r#"Remove-Item "$env:SystemRoot\Prefetch\*" -Force -Recurse -ErrorAction SilentlyContinue"#.to_string()
-        }
-        "transparency" => {
-            r#"Set-ItemProperty -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize' -Name 'EnableTransparency' -Value 0 -Type DWord -Force"#.to_string()
-        }
-        _ => return Err(format!("Unbekannte Optimierung: {}", id)),
-    };
-    match crate::ps::run_ps(&script).await {
-        Ok(_) => Ok(json!({ "success": true })),
-        Err(e) => {
-            if e.contains("Zugriff") || e.contains("Access") || e.contains("Administrator") {
-                Ok(json!({ "success": false, "error": "Administratorrechte erforderlich", "requiresAdmin": true }))
-            } else {
-                Ok(json!({ "success": false, "error": e }))
-            }
-        }
-    }
-}
-
 // === Updates ===
 
 #[tauri::command]
@@ -622,165 +536,6 @@ pub async fn get_system_info() -> Result<Value, String> {
     get_system_profile().await
 }
 
-// === Security Audit ===
-
-#[tauri::command]
-pub async fn run_security_audit() -> Result<Value, String> {
-    tracing::debug!("Starte Sicherheitscheck (parallelisiert)");
-
-    // Group A: Fast checks — registry reads, net commands, Secure Boot (~1-2s)
-    let group_a = crate::ps::run_ps_json_array(
-        r#"$checks = @()
-
-# 1. Firewall
-$fw = (Get-NetFirewallProfile -EA SilentlyContinue | Where-Object { $_.Enabled }).Count
-$checks += [PSCustomObject]@{ id='firewall'; name='Firewall'; status=if($fw -ge 3){'ok'}elseif($fw -ge 1){'warning'}else{'critical'}; detail="$fw/3 Profile aktiv" }
-
-# 2. UAC
-$uac = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -EA SilentlyContinue).EnableLUA
-$checks += [PSCustomObject]@{ id='uac'; name='UAC (Benutzerkontensteuerung)'; status=if($uac -eq 1){'ok'}else{'critical'}; detail=if($uac -eq 1){'Aktiviert'}else{'Deaktiviert'} }
-
-# 9. Remotedesktop
-$rdp = (Get-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -EA SilentlyContinue).fDenyTSConnections
-$checks += [PSCustomObject]@{ id='rdp'; name='Remotedesktop'; status=if($rdp -eq 1){'ok'}else{'warning'}; detail=if($rdp -eq 1){'Deaktiviert'}else{'Aktiviert — nur aktivieren wenn benötigt'} }
-
-# 10. Passwort — Ablauf
-try {
-    $maxPwAge = (net accounts 2>$null | Select-String 'Maximum password age').ToString() -replace '.*:\s*',''
-    $checks += [PSCustomObject]@{ id='password-policy'; name='Passwort-Richtlinie'; status=if($maxPwAge -match 'Unlimited|Unbegrenzt'){'warning'}else{'ok'}; detail="Max. Passwort-Alter: $maxPwAge" }
-} catch {
-    $checks += [PSCustomObject]@{ id='password-policy'; name='Passwort-Richtlinie'; status='warning'; detail='Konnte nicht geprüft werden' }
-}
-
-# 11. Secure Boot
-try {
-    $sb = Confirm-SecureBootUEFI -EA Stop
-    $checks += [PSCustomObject]@{ id='secure-boot'; name='Secure Boot'; status=if($sb){'ok'}else{'warning'}; detail=if($sb){'Aktiviert'}else{'Deaktiviert'} }
-} catch {
-    $checks += [PSCustomObject]@{ id='secure-boot'; name='Secure Boot'; status='warning'; detail='Nicht verfügbar (Legacy BIOS)' }
-}
-
-$checks | ConvertTo-Json -Compress"#
-    );
-
-    // Group B: CIM/WMI + Defender checks (~3-5s)
-    let group_b = crate::ps::run_ps_json_array(
-        r#"$checks = @()
-
-# 3. Antivirus
-$av = Get-CimInstance -Namespace root/SecurityCenter2 -ClassName AntiVirusProduct -EA SilentlyContinue
-$checks += [PSCustomObject]@{ id='antivirus'; name='Antivirus'; status=if($av){'ok'}else{'critical'}; detail=if($av){$av[0].displayName}else{'Nicht gefunden'} }
-
-# 4. Windows Defender Echtzeitschutz
-$defPref = Get-MpPreference -EA SilentlyContinue
-$rtDisabled = $defPref.DisableRealtimeMonitoring
-$checks += [PSCustomObject]@{ id='defender-realtime'; name='Echtzeitschutz'; status=if($rtDisabled -eq $false){'ok'}else{'critical'}; detail=if($rtDisabled -eq $false){'Aktiviert'}else{'Deaktiviert'} }
-
-# 5. Defender Definitionen Alter
-try {
-    $defStatus = Get-MpComputerStatus -EA Stop
-    $daysOld = ((Get-Date) - $defStatus.AntivirusSignatureLastUpdated).Days
-    $checks += [PSCustomObject]@{ id='defender-definitions'; name='Virendefinitionen'; status=if($daysOld -le 2){'ok'}elseif($daysOld -le 7){'warning'}else{'critical'}; detail="Letztes Update vor $daysOld Tagen" }
-} catch {
-    $checks += [PSCustomObject]@{ id='defender-definitions'; name='Virendefinitionen'; status='warning'; detail='Status konnte nicht abgefragt werden' }
-}
-
-# 7. BitLocker / Verschlüsselung
-try {
-    $bl = Get-BitLockerVolume -MountPoint 'C:' -EA Stop
-    $checks += [PSCustomObject]@{ id='bitlocker'; name='Laufwerksverschlüsselung'; status=if($bl.ProtectionStatus -eq 'On'){'ok'}else{'warning'}; detail=if($bl.ProtectionStatus -eq 'On'){'BitLocker aktiviert'}else{'BitLocker deaktiviert'} }
-} catch {
-    $checks += [PSCustomObject]@{ id='bitlocker'; name='Laufwerksverschlüsselung'; status='warning'; detail='BitLocker nicht verfügbar' }
-}
-
-# 8. SMBv1 (veraltet, Sicherheitsrisiko)
-try {
-    $smb1 = (Get-SmbServerConfiguration -EA Stop).EnableSMB1Protocol
-    $checks += [PSCustomObject]@{ id='smb1'; name='SMBv1-Protokoll'; status=if($smb1 -eq $false){'ok'}else{'critical'}; detail=if($smb1 -eq $false){'Deaktiviert (sicher)'}else{'Aktiviert (Sicherheitsrisiko!)'} }
-} catch {
-    $checks += [PSCustomObject]@{ id='smb1'; name='SMBv1-Protokoll'; status='ok'; detail='Nicht verfügbar (sicher)' }
-}
-
-# 12. Autostart-Einträge (zu viele = Risiko)
-$asCount = @(Get-CimInstance Win32_StartupCommand -EA SilentlyContinue).Count
-$checks += [PSCustomObject]@{ id='autostart'; name='Autostart-Programme'; status=if($asCount -le 5){'ok'}elseif($asCount -le 15){'warning'}else{'critical'}; detail="$asCount Programme im Autostart" }
-
-$checks | ConvertTo-Json -Compress"#
-    );
-
-    // Group C: Windows Update — slowest check, COM object (~5-10s)
-    let group_c = crate::ps::run_ps_json_array(
-        r#"$checks = @()
-
-# 6. Windows Update — ausstehende Updates
-try {
-    $updateSession = New-Object -ComObject Microsoft.Update.Session -EA Stop
-    $searcher = $updateSession.CreateUpdateSearcher()
-    $pending = $searcher.Search("IsInstalled=0 and Type='Software'").Updates.Count
-    $checks += [PSCustomObject]@{ id='windows-updates'; name='Windows-Updates'; status=if($pending -eq 0){'ok'}elseif($pending -le 3){'warning'}else{'critical'}; detail=if($pending -eq 0){'Alle Updates installiert'}else{"$pending Updates ausstehend"} }
-} catch {
-    $checks += [PSCustomObject]@{ id='windows-updates'; name='Windows-Updates'; status='warning'; detail='Konnte nicht geprüft werden' }
-}
-
-$checks | ConvertTo-Json -Compress"#
-    );
-
-    // Run all 3 groups concurrently
-    let (res_a, res_b, res_c) = tokio::join!(group_a, group_b, group_c);
-
-    // Merge results — collect all successful checks, log failures
-    let mut all_checks: Vec<Value> = Vec::with_capacity(12);
-    let groups: [(&str, Result<Value, String>); 3] = [("A", res_a), ("B", res_b), ("C", res_c)];
-    for (name, res) in groups {
-        match res {
-            Ok(val) => {
-                if let Some(arr) = val.as_array() {
-                    all_checks.extend(arr.iter().cloned());
-                }
-            }
-            Err(e) => {
-                tracing::warn!(group = name, error = %e, "Sicherheitscheck-Gruppe fehlgeschlagen");
-            }
-        }
-    }
-
-    let result = Value::Array(all_checks);
-
-    // Persist the audit result to history
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or(0);
-
-    let mut history = read_json_file("audit-history.json");
-    let entries = history.as_object_mut()
-        .and_then(|o| o.get_mut("entries"))
-        .and_then(|e| e.as_array_mut());
-
-    let entry = json!({
-        "timestamp": now,
-        "checks": result,
-    });
-
-    if let Some(arr) = entries {
-        arr.insert(0, entry);
-        // Keep max 20 entries
-        arr.truncate(20);
-    } else {
-        history = json!({ "entries": [entry] });
-    }
-    write_json_file("audit-history.json", &history)?;
-    tracing::debug!("Sicherheitscheck abgeschlossen, Ergebnis gespeichert");
-
-    Ok(result)
-}
-
-#[tauri::command]
-pub async fn get_audit_history() -> Result<Value, String> {
-    let history = read_json_file("audit-history.json");
-    Ok(history.get("entries").cloned().unwrap_or(json!([])))
-}
-
 // === System Score ===
 
 #[tauri::command]
@@ -809,13 +564,6 @@ pub async fn get_system_score(results: Option<Value>) -> Result<Value, String> {
         if total_entries == 0 { 100 } else if total_entries < 10 { 85 } else if total_entries < 50 { 65 } else { 40 }
     } else { 50 };
 
-    // Optimizer score: based on how many optimizations are applied
-    let optimizer_score = if let Some(opts) = r.get("optimizations").and_then(|o| o.as_array()) {
-        let total = opts.len() as f64;
-        let applied = opts.iter().filter(|o| o["applied"].as_bool().unwrap_or(false)).count() as f64;
-        if total > 0.0 { (applied / total * 100.0).round() as u32 } else { 50 }
-    } else { 50 };
-
     // Updates score: fewer pending = better
     let updates_score = if let Some(updates) = r.get("updates").and_then(|u| u.as_array()) {
         if updates.is_empty() { 100 } else if updates.len() < 3 { 80 } else if updates.len() < 10 { 60 } else { 40 }
@@ -828,14 +576,13 @@ pub async fn get_system_score(results: Option<Value>) -> Result<Value, String> {
 
     let has_real_data = r.as_object().map(|o| !o.is_empty()).unwrap_or(false);
 
-    // Weighted average
+    // Weighted average (5 categories, total = 100%)
     let categories = vec![
         json!({"name": "Datenschutz", "weight": 25, "score": privacy_score, "description": "Windows-Datenschutzeinstellungen"}),
-        json!({"name": "Festplatten", "weight": 20, "score": disk_score, "description": "Festplatten-Gesundheit und Speicherplatz"}),
+        json!({"name": "Festplatten", "weight": 25, "score": disk_score, "description": "Festplatten-Gesundheit und Speicherplatz"}),
         json!({"name": "Registry", "weight": 15, "score": registry_score, "description": "Registry-Sauberkeit"}),
-        json!({"name": "Optimierung", "weight": 15, "score": optimizer_score, "description": "Systemoptimierungen"}),
-        json!({"name": "Updates", "weight": 15, "score": updates_score, "description": "Windows- und Software-Updates"}),
-        json!({"name": "Software", "weight": 10, "score": software_score, "description": "Software-Inventar"}),
+        json!({"name": "Updates", "weight": 20, "score": updates_score, "description": "Windows- und Software-Updates"}),
+        json!({"name": "Software", "weight": 15, "score": software_score, "description": "Software-Inventar"}),
     ];
 
     let total_score: f64 = categories.iter().map(|c| {

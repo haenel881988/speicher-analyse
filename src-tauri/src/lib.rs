@@ -250,13 +250,6 @@ pub fn run() {
             commands::get_autostart_entries,
             commands::toggle_autostart,
             commands::delete_autostart,
-            // Services
-            commands::get_services,
-            commands::control_service,
-            commands::set_service_start_type,
-            // Optimizer
-            commands::get_optimizations,
-            commands::apply_optimization,
             // Updates
             commands::check_windows_updates,
             commands::get_update_history,
@@ -353,9 +346,6 @@ pub fn run() {
             commands::export_network_history,
             // System Info
             commands::get_system_info,
-            // Security Audit
-            commands::run_security_audit,
-            commands::get_audit_history,
             // System Score
             commands::get_system_score,
             // Apps-Kontrollzentrum

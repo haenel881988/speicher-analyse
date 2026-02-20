@@ -119,17 +119,6 @@ export const toggleAutoStart = (entry: any, enabled: boolean) =>
   invoke<any>('toggle_autostart', { entry, enabled });
 export const deleteAutoStart = (entry: any) => invoke<any>('delete_autostart', { entry });
 
-// === Services ===
-export const getServices = () => invoke<any[]>('get_services');
-export const controlService = (name: string, action: string) =>
-  invoke<any>('control_service', { name, action });
-export const setServiceStartType = (name: string, startType: string) =>
-  invoke<any>('set_service_start_type', { name, startType });
-
-// === Optimizer ===
-export const getOptimizations = () => invoke<any>('get_optimizations');
-export const applyOptimization = (id: string) => invoke<any>('apply_optimization', { id });
-
 // === Updates ===
 export const checkWindowsUpdates = () => invoke<any>('check_windows_updates');
 export const getUpdateHistory = () => invoke<any[]>('get_update_history');
@@ -273,11 +262,6 @@ export const exportNetworkHistory = (format: string) =>
 
 // === System Info ===
 export const getSystemInfo = () => invoke<any>('get_system_info');
-
-// === Security Audit ===
-export const runSecurityAudit = () => invoke<any>('run_security_audit');
-export const getAuditHistory = () => invoke<any[]>('get_audit_history');
-export const generateSecurityReport = (data: any) => invoke<any>('generate_security_report', { data });
 
 // === System Score ===
 export const getSystemScore = (results: any) => invoke<any>('get_system_score', { results });

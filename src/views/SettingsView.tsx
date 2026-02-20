@@ -387,7 +387,7 @@ export default function SettingsView() {
         <div className="settings-row">
           <div className="settings-label">
             <strong>Speicher Analyse</strong>
-            <span className="settings-desc">Disk Space Analyzer & System Optimizer</span>
+            <span className="settings-desc">Disk Space Analyzer & System Tools</span>
           </div>
           <div className="settings-value">
             <span className="settings-version">v7.2.1</span>
