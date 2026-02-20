@@ -30,24 +30,13 @@ interface PageEntry {
   rendered: boolean;
 }
 
-// Lazy pdf.js loader (shared pattern)
+// Lazy pdf.js loader — Worker aus public/ (statisch, ohne Vite-Transformation)
 let _pdfjsLib: any = null;
 async function loadPdfjs(): Promise<any> {
   if (_pdfjsLib) return _pdfjsLib;
   _pdfjsLib = await import('pdfjs-dist');
-  // Polyfills for Uint8Array.toHex/fromHex (needed by pdf.js worker in older WebView2 versions)
-  const polyfill = `
-if(!Uint8Array.prototype.toHex){Uint8Array.prototype.toHex=function(){const h=[];for(let i=0;i<this.length;i++)h.push(this[i].toString(16).padStart(2,'0'));return h.join('')};}
-if(!Uint8Array.fromHex){Uint8Array.fromHex=function(s){const b=new Uint8Array(s.length/2);for(let i=0;i<s.length;i+=2)b[i/2]=parseInt(s.substring(i,i+2),16);return b};}
-`;
-  // Fetch the worker source and inject polyfills via blob URL
-  const workerUrl = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).href;
-  const resp = await fetch(workerUrl);
-  let workerCode = await resp.text();
-  workerCode = workerCode.replace(/;\s*export\s*\{[^}]*\}\s*$/, ';');
-  workerCode = polyfill + workerCode;
-  const blob = new Blob([workerCode], { type: 'text/javascript' });
-  _pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(blob);
+  // Worker liegt in src/public/pdf.worker.min.mjs — wird von Vite unverändert ausgeliefert
+  _pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
   return _pdfjsLib;
 }
 
