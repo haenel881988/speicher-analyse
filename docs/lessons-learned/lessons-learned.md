@@ -817,6 +817,58 @@ PDF-Editor hatte nach initialer Implementierung keine Grundfunktionen die JEDER 
 
 ---
 
+#### #103 — Detached Window: Kein ToastContainer = stumme Fehler
+`2026-02-20`
+
+**Symptom:** Im losgelösten PDF-Fenster wurden Speichern/Export-Erfolgsmeldungen und Fehlermeldungen nicht angezeigt. Der User hat kein Feedback ob seine Aktion funktioniert hat.
+
+**Ursache:** `main.tsx` renderte im Standalone-Modus nur `<AppProvider><PdfEditorView/></AppProvider>` — ohne `<ToastContainer>`. Die `ToastContainer`-Komponente registriert sich via `setToastCallback` als Toast-Empfänger. Ohne sie werden `showToast()`-Aufrufe stillschweigend verworfen.
+
+**Lösung:** Neue `DetachedPdfApp`-Wrapper-Komponente in `main.tsx` mit eigenem `<ToastContainer/>`.
+
+**Lehre:** Jedes eigenständige Fenster braucht seine eigene Infrastruktur (Toast, Theme, Error-Handling). Eine Komponente aus der Haupt-App zu extrahieren reicht nicht — alle Stützkomponenten müssen mit.
+
+---
+
+#### #104 — Detached Window: Theme nicht angewendet
+`2026-02-20`
+
+**Symptom:** Das losgelöste PDF-Fenster zeigte immer Dark Theme, auch wenn der User Light Theme gewählt hatte.
+
+**Ursache:** Die Theme-Anwendung (`document.documentElement.dataset.theme = ctx.theme`) geschieht in `AppInner` (App.tsx), das im Detached-Modus nie gerendert wird. Dark Theme funktionierte zufällig, weil CSS `:root` die Dark-Variablen als Default definiert.
+
+**Lösung:** `DetachedPdfApp` liest beim Mount das Theme aus `localStorage` und setzt es auf das DOM.
+
+**Lehre:** "Funktioniert zufällig" ≠ "korrekt implementiert". Wenn ein Default-Wert das gewünschte Ergebnis liefert, ist das kein Beweis für korrekte Logik.
+
+---
+
+#### #105 — Undo/Redo: unsavedChanges-Tracking ist kein Boolean-Check
+`2026-02-20`
+
+**Symptom:** User speichert PDF mit 3 Annotationen, macht alle rückgängig (Undo 3x). Der Editor zeigt KEINEN Stern (*) — User denkt alles ist gespeichert und schließt. Die 3 Annotationen sind im gespeicherten PDF, der aktuelle Zustand (0 Annotationen) wurde nie gespeichert.
+
+**Ursache:** `setUnsavedChanges(prev.length > 0)` — prüft nur ob Annotationen existieren, nicht ob sie sich vom gespeicherten Zustand unterscheiden.
+
+**Lösung:** Konservativer Ansatz: `setUnsavedChanges(true)` bei JEDER Undo/Redo-Operation. Leicht über-vorsichtig, aber nie unter-vorsichtig.
+
+**Lehre:** "Gibt es Änderungen?" und "Gibt es Daten?" sind zwei verschiedene Fragen. Undo auf leeren Zustand = Änderung (Daten gelöscht), auch wenn die Annotation-Liste leer ist.
+
+---
+
+#### #106 — Export muss den gleichen clearPages-Mechanismus wie Save verwenden
+`2026-02-20`
+
+**Symptom:** User speichert PDF mit Annotations, macht alle rückgängig, exportiert als Kopie → Export enthält die zuvor gespeicherten Annotations.
+
+**Ursache:** `exportAs()` rief `pdfSaveAnnotations()` ohne `clearPages`-Parameter auf. Das Backend lud die Originaldatei (mit gespeicherten Annotations) und schrieb sie unverändert in den Export.
+
+**Lösung:** `exportAs()` sammelt jetzt die gleichen Dirty-Pages wie `save()` (aus aktuellen Annotations + Undo-History).
+
+**Lehre:** Zwei Codepfade die dasselbe Ergebnis erzeugen sollen (Save vs Export) müssen auch dieselbe Logik verwenden. Wenn ein Parameter für Save eingeführt wird, IMMER prüfen ob Export ihn auch braucht.
+
+---
+
 <br>
 
 ## Terminal
