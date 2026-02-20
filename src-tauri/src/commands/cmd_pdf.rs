@@ -642,6 +642,177 @@ pub async fn pdf_merge(
     }).await.map_err(|e| format!("Task fehlgeschlagen: {e}"))?
 }
 
+/// Ausgewählte Seiten als neue PDF extrahieren
+#[tauri::command]
+pub async fn pdf_extract_pages(file_path: String, output_path: String, pages: Vec<u32>) -> Result<Value, String> {
+    validate_path(&output_path)?;
+    if pages.is_empty() { return Err("Keine Seiten ausgewählt".into()); }
+    let fp = file_path.clone();
+    let op = output_path.clone();
+
+    tokio::task::spawn_blocking(move || {
+        // Datei kopieren, dann nicht-ausgewählte Seiten löschen
+        std::fs::copy(&fp, &op).map_err(|e| format!("Kopieren fehlgeschlagen: {e}"))?;
+        let pdfium = create_pdfium()?;
+        let doc = pdfium.load_pdf_from_file(&op, None)
+            .map_err(|e| format!("PDF öffnen fehlgeschlagen: {e}"))?;
+        let total = doc.pages().len();
+        let keep: std::collections::HashSet<u32> = pages.iter().cloned().collect();
+        // Rückwärts löschen (gleiche Pattern wie pdf_delete_pages)
+        for i in (0..total).rev() {
+            if !keep.contains(&(i as u32)) {
+                let page = doc.pages().get(i as u16)
+                    .map_err(|e| format!("Seite {} nicht gefunden: {e}", i))?;
+                page.delete()
+                    .map_err(|e| format!("Seite {} löschen fehlgeschlagen: {e}", i))?;
+            }
+        }
+        doc.save_to_file(&op).map_err(|e| format!("Speichern fehlgeschlagen: {e}"))?;
+        Ok(json!({ "success": true, "pages": pages.len(), "path": op }))
+    }).await.map_err(|e| format!("Task fehlgeschlagen: {e}"))?
+}
+
+/// Leere Seite an Position einfügen
+#[tauri::command]
+pub async fn pdf_insert_blank_page(file_path: String, output_path: String, after_page: u32, width: f32, height: f32) -> Result<Value, String> {
+    validate_path(&output_path)?;
+    let fp = file_path.clone();
+    let op = output_path.clone();
+
+    tokio::task::spawn_blocking(move || {
+        if fp != op { std::fs::copy(&fp, &op).map_err(|e| format!("Kopieren fehlgeschlagen: {e}"))?; }
+        let pdfium = create_pdfium()?;
+        let mut doc = pdfium.load_pdf_from_file(&op, None)
+            .map_err(|e| format!("PDF öffnen fehlgeschlagen: {e}"))?;
+        // Seitenmaße: Standard A4 = 595x842 Punkte (72 dpi)
+        let w = if width > 0.0 { width } else { 595.0 };
+        let h = if height > 0.0 { height } else { 842.0 };
+        let size = PdfPagePaperSize::Custom(PdfPoints::new(w), PdfPoints::new(h));
+        let insert_idx = (after_page + 1) as u16;
+        doc.pages_mut().create_page_at_index(
+            size,
+            insert_idx,
+        ).map_err(|e| format!("Seite erstellen fehlgeschlagen: {e}"))?;
+        doc.save_to_file(&op).map_err(|e| format!("Speichern fehlgeschlagen: {e}"))?;
+        let total = doc.pages().len();
+        Ok(json!({ "success": true, "totalPages": total, "path": op }))
+    }).await.map_err(|e| format!("Task fehlgeschlagen: {e}"))?
+}
+
+/// Lesezeichen/Inhaltsverzeichnis auslesen
+#[tauri::command]
+pub async fn pdf_get_bookmarks(file_path: String) -> Result<Value, String> {
+    let fp = file_path.clone();
+    tokio::task::spawn_blocking(move || {
+        let pdfium = create_pdfium()?;
+        let doc = pdfium.load_pdf_from_file(&fp, None)
+            .map_err(|e| format!("PDF öffnen fehlgeschlagen: {e}"))?;
+
+        // Rekursive Lesezeichen-Sammlung: root → first_child → Geschwister → Kinder
+        fn collect_bookmark(bookmark: &PdfBookmark, result: &mut Vec<Value>) {
+            let title = bookmark.title().unwrap_or_default();
+            let dest_page = bookmark.destination()
+                .and_then(|d| d.page_index().ok())
+                .map(|idx| idx as u32);
+            let mut children_json = Vec::new();
+            // Direkte Kinder durchlaufen
+            for child in bookmark.iter_direct_children() {
+                collect_bookmark(&child, &mut children_json);
+            }
+            result.push(json!({
+                "title": title,
+                "page": dest_page,
+                "children": children_json,
+            }));
+        }
+
+        let mut bookmarks = Vec::new();
+        if let Some(root) = doc.bookmarks().root() {
+            // Root und dessen Geschwister (Top-Level-Einträge)
+            collect_bookmark(&root, &mut bookmarks);
+            for sibling in root.iter_siblings() {
+                collect_bookmark(&sibling, &mut bookmarks);
+            }
+        }
+        Ok(json!(bookmarks))
+    }).await.map_err(|e| format!("Task fehlgeschlagen: {e}"))?
+}
+
+/// Bild auf einer PDF-Seite einfügen
+#[tauri::command]
+pub async fn pdf_add_image(
+    file_path: String,
+    output_path: String,
+    page_num: u32,
+    image_base64: String,
+    rect: RectData,
+) -> Result<Value, String> {
+    validate_path(&output_path)?;
+    let fp = file_path.clone();
+    let op = output_path.clone();
+
+    tokio::task::spawn_blocking(move || {
+        if fp != op { std::fs::copy(&fp, &op).map_err(|e| format!("Kopieren fehlgeschlagen: {e}"))?; }
+        let pdfium = create_pdfium()?;
+        let doc = pdfium.load_pdf_from_file(&op, None)
+            .map_err(|e| format!("PDF öffnen fehlgeschlagen: {e}"))?;
+        let mut page = doc.pages().get(page_num as u16)
+            .map_err(|e| format!("Seite {page_num} nicht gefunden: {e}"))?;
+
+        // Base64 → Bild-Bytes → DynamicImage
+        use base64::Engine;
+        let raw = image_base64.split(',').last().unwrap_or(&image_base64);
+        let img_bytes = base64::engine::general_purpose::STANDARD.decode(raw)
+            .map_err(|e| format!("Base64-Dekodierung fehlgeschlagen: {e}"))?;
+        let dyn_image = image::load_from_memory(&img_bytes)
+            .map_err(|e| format!("Bild dekodieren fehlgeschlagen: {e}"))?;
+
+        // Gewünschte Größe in PDF-Punkten
+        let width = PdfPoints::new(rect.x2 - rect.x1);
+        let height = PdfPoints::new(rect.y2 - rect.y1);
+        let mut img_obj = PdfPageImageObject::new_with_size(&doc, &dyn_image, width, height)
+            .map_err(|e| format!("Bild-Objekt erstellen fehlgeschlagen: {e}"))?;
+
+        // Position: Frontend (top-down) → PDF (bottom-up)
+        let page_height = page.height().value;
+        let pdf_bottom = page_height - rect.y2;
+        img_obj.translate(PdfPoints::new(rect.x1), PdfPoints::new(pdf_bottom))
+            .map_err(|e| format!("Position setzen fehlgeschlagen: {e}"))?;
+
+        page.objects_mut().add_image_object(img_obj)
+            .map_err(|e| format!("Bild einfügen fehlgeschlagen: {e}"))?;
+
+        doc.save_to_file(&op).map_err(|e| format!("Speichern fehlgeschlagen: {e}"))?;
+        Ok(json!({ "success": true }))
+    }).await.map_err(|e| format!("Task fehlgeschlagen: {e}"))?
+}
+
+/// Seiten in neuer Reihenfolge anordnen
+#[tauri::command]
+pub async fn pdf_reorder_pages(file_path: String, output_path: String, order: Vec<u32>) -> Result<Value, String> {
+    validate_path(&output_path)?;
+    if order.is_empty() { return Err("Leere Reihenfolge".into()); }
+    let fp = file_path.clone();
+    let op = output_path.clone();
+
+    tokio::task::spawn_blocking(move || {
+        let pdfium = create_pdfium()?;
+        let source = pdfium.load_pdf_from_file(&fp, None)
+            .map_err(|e| format!("PDF öffnen fehlgeschlagen: {e}"))?;
+        let mut dest = pdfium.create_new_pdf()
+            .map_err(|e| format!("Neues PDF erstellen fehlgeschlagen: {e}"))?;
+
+        for (i, &page_idx) in order.iter().enumerate() {
+            let dest_idx = i as u16;
+            dest.pages_mut().copy_page_from_document(&source, page_idx as u16, dest_idx)
+                .map_err(|e| format!("Seite {} kopieren fehlgeschlagen: {e}", page_idx))?;
+        }
+
+        dest.save_to_file(&op).map_err(|e| format!("Speichern fehlgeschlagen: {e}"))?;
+        Ok(json!({ "success": true, "totalPages": order.len() }))
+    }).await.map_err(|e| format!("Task fehlgeschlagen: {e}"))?
+}
+
 // === Detached Window ===
 
 #[tauri::command]

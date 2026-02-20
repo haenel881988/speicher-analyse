@@ -75,8 +75,22 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
   const [showGotoInput, setShowGotoInput] = useState(false);
   const [annoColor, setAnnoColor] = useState('#FFFF00');
   const [strokeWidth, setStrokeWidth] = useState(2);
-  const [commentPopover, setCommentPopover] = useState<{ x: number; y: number; svgX: number; svgY: number; page: number } | null>(null);
+  const [commentPopover, setCommentPopover] = useState<{ x: number; y: number; svgX: number; svgY: number; page: number; editIdx?: number } | null>(null);
   const [commentText, setCommentText] = useState('');
+  const [passwordPrompt, setPasswordPrompt] = useState<{ data: Uint8Array } | null>(null);
+  const [passwordText, setPasswordText] = useState('');
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<{ page: number; matchIdx: number }[]>([]);
+  const [searchCurrentIdx, setSearchCurrentIdx] = useState(0);
+  const [bookmarks, setBookmarks] = useState<any[]>([]);
+  const [showBookmarks, setShowBookmarks] = useState(false);
+  const [showImageInsert, setShowImageInsert] = useState(false);
+  const [imageInsertData, setImageInsertData] = useState<{ base64: string; name: string } | null>(null);
+  const [showPrintDialog, setShowPrintDialog] = useState(false);
+  const [printRange, setPrintRange] = useState('');
+  const [thumbDragIdx, setThumbDragIdx] = useState<number | null>(null);
+  const [thumbDropIdx, setThumbDropIdx] = useState<number | null>(null);
 
   // Undo/Redo stacks
   const undoStackRef = useRef<Annotation[][]>([]);
@@ -91,12 +105,17 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
   const currentToolRef = useRef<string>('select');
   const drawingRef = useRef(false);
   const drawStartRef = useRef<Point | null>(null);
+  const draggingAnnoRef = useRef<{ idx: number; startX: number; startY: number; origRect: Rect } | null>(null);
   const currentPathRef = useRef<Point[]>([]);
   const annoColorRef = useRef('#FFFF00');
   const strokeWidthRef = useRef(2);
-  const setCommentPopoverRef = useRef((_v: { x: number; y: number; svgX: number; svgY: number; page: number } | null) => {});
+  const setCommentPopoverRef = useRef((_v: { x: number; y: number; svgX: number; svgY: number; page: number; editIdx?: number } | null) => {});
   setCommentPopoverRef.current = setCommentPopover;
+  const setCommentTextRef = useRef((_v: string) => {});
+  setCommentTextRef.current = setCommentText;
   const handlePrintRef = useRef<() => void>(() => {});
+  const showImageInsertRef = useRef(false);
+  const placeImageOnPageRef = useRef((_pageNum: number, _x: number, _y: number) => {});
 
   // Keep refs in sync
   useEffect(() => { annotationsRef.current = annotations; }, [annotations]);
@@ -104,6 +123,7 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
   useEffect(() => { currentToolRef.current = currentTool; }, [currentTool]);
   useEffect(() => { annoColorRef.current = annoColor; }, [annoColor]);
   useEffect(() => { strokeWidthRef.current = strokeWidth; }, [strokeWidth]);
+  useEffect(() => { showImageInsertRef.current = showImageInsert; }, [showImageInsert]);
 
   // Consume pending PDF path from context — warnt bei ungespeicherten Änderungen
   useEffect(() => {
@@ -211,7 +231,17 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
         const data = new Uint8Array(binaryStr.length);
         for (let i = 0; i < binaryStr.length; i++) data[i] = binaryStr.charCodeAt(i);
 
-        const pdfDoc = await pdfjsLib.getDocument({ data }).promise;
+        let pdfDoc;
+        try {
+          pdfDoc = await pdfjsLib.getDocument({ data }).promise;
+        } catch (loadErr: any) {
+          // Passwortgeschützte PDF → Dialog anzeigen
+          if (loadErr?.name === 'PasswordException') {
+            if (!cancelled) setPasswordPrompt({ data });
+            return;
+          }
+          throw loadErr;
+        }
         if (cancelled) return;
         pdfDocRef.current = pdfDoc;
         setTotalPages(pdfDoc.numPages);
@@ -226,8 +256,44 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
 
         const info = await api.pdfGetInfo(filePath);
         const parts = [`${info.pageCount} Seiten`];
+        if (info.title) parts.push(info.title);
+        if (info.author) parts.push(`von ${info.author}`);
+        if (info.creationDate) {
+          // PDF-Datum: D:YYYYMMDDHHmmSS → DD.MM.YYYY
+          const ds = String(info.creationDate).replace(/^D:/, '');
+          if (ds.length >= 8) parts.push(`${ds.substring(6,8)}.${ds.substring(4,6)}.${ds.substring(0,4)}`);
+        }
         if (!info.isTextSearchable) parts.push('OCR empfohlen');
         setInfoText(parts.join(' \u2022 '));
+
+        // Gespeicherte Annotationen laden
+        try {
+          const allAnnos: Annotation[] = [];
+          for (let p = 0; p < pdfDoc.numPages; p++) {
+            if (cancelled) break;
+            const pageAnnos = await api.pdfGetAnnotations(filePath, p);
+            if (Array.isArray(pageAnnos)) {
+              for (const a of pageAnnos) {
+                if (a.rect && (a.type === 'highlight' || a.type === 'text' || a.type === 'ink')) {
+                  allAnnos.push({
+                    type: a.type, page: p, rect: a.rect,
+                    color: a.type === 'highlight' ? '#FFFF00' : a.type === 'text' ? '#FFD700' : '#FF0000',
+                    text: a.text || undefined,
+                  });
+                }
+              }
+            }
+          }
+          if (!cancelled && allAnnos.length > 0) setAnnotations(allAnnos);
+        } catch { /* Annotation-Laden fehlgeschlagen — PDF bleibt nutzbar */ }
+
+        // Lesezeichen laden
+        try {
+          const bm = await api.pdfGetBookmarks(filePath);
+          if (!cancelled && Array.isArray(bm) && bm.length > 0) setBookmarks(bm);
+          else setBookmarks([]);
+        } catch { setBookmarks([]); }
+
         setLoaded(true);
         setError('');
       } catch (err: any) {
@@ -292,7 +358,10 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
       // Ignore when typing in inputs
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
 
-      if (e.ctrlKey && e.key === 's') {
+      if (e.ctrlKey && e.key === 'f') {
+        e.preventDefault();
+        setShowSearch(true);
+      } else if (e.ctrlKey && e.key === 's') {
         e.preventDefault();
         save();
       } else if (e.ctrlKey && e.key === 'z') {
@@ -541,19 +610,76 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
   }, []);
 
   // --- Drucken: Alle Seiten rendern bevor window.print() aufgerufen wird ---
-  const handlePrint = useCallback(async () => {
+  const handlePrint = useCallback(async (pageSet?: Set<number>) => {
     const unrendered = pageEntriesRef.current.filter(e => !e.rendered);
     if (unrendered.length > 0) {
       for (const entry of unrendered) entry.rendered = true;
       await Promise.all(unrendered.map(e => renderPage(e.pageNum)));
     }
+    // Wenn Seitenbereich angegeben, nicht-ausgewählte Seiten ausblenden
+    if (pageSet) {
+      for (const entry of pageEntriesRef.current) {
+        entry.wrapper.style.display = pageSet.has(entry.pageNum) ? '' : 'none';
+      }
+    }
     window.print();
+    // Nach dem Druck alle Seiten wieder einblenden
+    if (pageSet) {
+      for (const entry of pageEntriesRef.current) {
+        entry.wrapper.style.display = '';
+      }
+    }
   }, [renderPage]);
-  handlePrintRef.current = handlePrint;
+  handlePrintRef.current = () => handlePrint();
+
+  const handlePrintRange = useCallback(() => {
+    if (!printRange.trim()) { handlePrint(); setShowPrintDialog(false); return; }
+    // Seitenbereich parsen: "1-3, 5, 7-9" → Set
+    const pages = new Set<number>();
+    for (const part of printRange.split(',')) {
+      const trimmed = part.trim();
+      const rangeMatch = trimmed.match(/^(\d+)\s*-\s*(\d+)$/);
+      if (rangeMatch) {
+        const from = parseInt(rangeMatch[1]);
+        const to = parseInt(rangeMatch[2]);
+        for (let i = from; i <= to && i <= totalPages; i++) pages.add(i);
+      } else {
+        const num = parseInt(trimmed);
+        if (num >= 1 && num <= totalPages) pages.add(num);
+      }
+    }
+    if (pages.size === 0) { showToast('Ungültiger Seitenbereich', 'error'); return; }
+    handlePrint(pages);
+    setShowPrintDialog(false);
+  }, [printRange, totalPages, handlePrint, showToast]);
 
   const wireAnnotationEvents = useCallback((svg: SVGSVGElement, _canvas: HTMLCanvasElement, pageNum: number) => {
+    // Doppelklick: Text-Annotation bearbeiten
+    svg.addEventListener('dblclick', (e) => {
+      const target = e.target as Element;
+      const annoEl = target.closest('[data-anno-idx]');
+      if (!annoEl) return;
+      const idx = parseInt(annoEl.getAttribute('data-anno-idx') || '-1');
+      if (idx < 0) return;
+      const anno = annotationsRef.current[idx];
+      if (!anno || anno.type !== 'text') return;
+      e.preventDefault();
+      e.stopPropagation();
+      // Kommentar-Popover im Bearbeitungsmodus öffnen + Text laden
+      setCommentTextRef.current(anno.text || '');
+      setCommentPopoverRef.current({ x: e.clientX, y: e.clientY, svgX: anno.rect.x1, svgY: anno.rect.y1, page: pageNum, editIdx: idx });
+    });
+
     svg.addEventListener('mousedown', (e) => {
-      // Im Select-Modus: Annotation-Klick erkennen
+      // Bild-Einfügen-Modus: Klick platziert das Bild
+      if (showImageInsertRef.current) {
+        e.preventDefault();
+        e.stopPropagation();
+        const rect = svg.getBoundingClientRect();
+        placeImageOnPageRef.current(pageNum, e.clientX - rect.left, e.clientY - rect.top);
+        return;
+      }
+      // Im Select-Modus: Annotation-Klick erkennen + Drag starten
       if (currentToolRef.current === 'select') {
         const target = e.target as Element;
         const annoEl = target.closest('[data-anno-idx]');
@@ -563,9 +689,17 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
           const idx = parseInt(annoEl.getAttribute('data-anno-idx') || '-1');
           if (idx >= 0) {
             setSelectedAnnoIdx(idx);
-            // Visuelles Feedback
             svg.querySelectorAll('.anno-selected').forEach(el => el.classList.remove('anno-selected'));
             annoEl.classList.add('anno-selected');
+            // Drag starten
+            const anno = annotationsRef.current[idx];
+            if (anno?.rect) {
+              const svgRect = svg.getBoundingClientRect();
+              draggingAnnoRef.current = {
+                idx, startX: e.clientX - svgRect.left, startY: e.clientY - svgRect.top,
+                origRect: { ...anno.rect },
+              };
+            }
           }
         } else {
           setSelectedAnnoIdx(null);
@@ -581,6 +715,25 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
     });
 
     svg.addEventListener('mousemove', (e) => {
+      // Annotation-Drag im Select-Modus
+      if (draggingAnnoRef.current && currentToolRef.current === 'select') {
+        const svgRect = svg.getBoundingClientRect();
+        const s = scaleRef.current;
+        const dx = (e.clientX - svgRect.left - draggingAnnoRef.current.startX) / s;
+        const dy = (e.clientY - svgRect.top - draggingAnnoRef.current.startY) / s;
+        const orig = draggingAnnoRef.current.origRect;
+        const idx = draggingAnnoRef.current.idx;
+        const anno = annotationsRef.current[idx];
+        if (anno) {
+          anno.rect = {
+            x1: orig.x1 + dx, y1: orig.y1 + dy,
+            x2: orig.x2 + dx, y2: orig.y2 + dy,
+          };
+          // Ink-Pfade ebenfalls verschieben — werden beim endgültigen Setzen berechnet
+          renderAnnotationsForPage(anno.page + 1);
+        }
+        return;
+      }
       if (!drawingRef.current) return;
       const rect = svg.getBoundingClientRect();
       const point = { x: e.clientX - rect.left, y: e.clientY - rect.top };
@@ -611,6 +764,23 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
     });
 
     svg.addEventListener('mouseup', (e) => {
+      // Annotation-Drag beenden
+      if (draggingAnnoRef.current) {
+        const svgRect = svg.getBoundingClientRect();
+        const s = scaleRef.current;
+        const dx = (e.clientX - svgRect.left - draggingAnnoRef.current.startX) / s;
+        const dy = (e.clientY - svgRect.top - draggingAnnoRef.current.startY) / s;
+        if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+          // Tatsächlich verschoben — als Undo-Aktion registrieren
+          const idx = draggingAnnoRef.current.idx;
+          const orig = draggingAnnoRef.current.origRect;
+          pushUndo(annotationsRef.current.map((a, i) => i === idx ? { ...a, rect: orig } : a));
+          setAnnotations([...annotationsRef.current]); // State aktualisieren
+          setUnsavedChanges(true);
+        }
+        draggingAnnoRef.current = null;
+        return;
+      }
       if (!drawingRef.current) return;
       drawingRef.current = false;
       const rect = svg.getBoundingClientRect();
@@ -858,6 +1028,38 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
     }
   }, [filePath, totalPages, showToast]);
 
+  const extractPages = useCallback(async (pageNum: number) => {
+    try {
+      const defaultName = filePath.replace(/\.pdf$/i, `_seite${pageNum}.pdf`);
+      const result = await api.showSaveDialog({
+        title: 'Seite extrahieren und speichern unter...',
+        defaultPath: defaultName,
+        filters: [{ name: 'PDF', extensions: ['pdf'] }],
+      });
+      if (!result || result.canceled || !result.path) return;
+      await api.pdfExtractPages(filePath, result.path, [pageNum - 1]);
+      showToast(`Seite ${pageNum} extrahiert: ${result.path.split(/[\\/]/).pop()}`, 'success');
+    } catch (err: any) {
+      showToast('Extrahieren fehlgeschlagen: ' + err.message, 'error');
+    }
+  }, [filePath, showToast]);
+
+  const insertBlankPage = useCallback(async (afterPageNum: number) => {
+    try {
+      await api.pdfInsertBlankPage(filePath, filePath, afterPageNum - 1);
+      setAnnotations([]);
+      undoStackRef.current = [];
+      redoStackRef.current = [];
+      setSelectedAnnoIdx(null);
+      setUnsavedChanges(false);
+      setLoaded(false);
+      setTimeout(() => setLoaded(true), 100);
+      showToast(`Leere Seite nach Seite ${afterPageNum} eingefügt`, 'success');
+    } catch (err: any) {
+      showToast('Einfügen fehlgeschlagen: ' + err.message, 'error');
+    }
+  }, [filePath, showToast]);
+
   const showPageContextMenu = useCallback((e: MouseEvent, pageNum: number) => {
     document.querySelectorAll('.pdf-page-context-menu').forEach(el => el.remove());
     const menu = document.createElement('div');
@@ -865,6 +1067,8 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
     menu.innerHTML = `
       <button data-action="rotate-cw">Seite drehen (90\u00B0)</button>
       <button data-action="rotate-ccw">Seite drehen (-90\u00B0)</button>
+      <button data-action="extract">Seite extrahieren</button>
+      <button data-action="insert-blank">Leere Seite einfügen (danach)</button>
       <button data-action="delete">Seite löschen</button>
     `;
     menu.style.left = Math.min(e.clientX, window.innerWidth - 200) + 'px';
@@ -875,8 +1079,10 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
     document.addEventListener('click', cleanup, { once: true });
     menu.querySelector('[data-action="rotate-cw"]')!.addEventListener('click', () => { cleanup(); rotatePage(pageNum, 90); });
     menu.querySelector('[data-action="rotate-ccw"]')!.addEventListener('click', () => { cleanup(); rotatePage(pageNum, 270); });
+    menu.querySelector('[data-action="extract"]')!.addEventListener('click', () => { cleanup(); extractPages(pageNum); });
+    menu.querySelector('[data-action="insert-blank"]')!.addEventListener('click', () => { cleanup(); insertBlankPage(pageNum); });
     menu.querySelector('[data-action="delete"]')!.addEventListener('click', () => { cleanup(); deletePage(pageNum); });
-  }, [rotatePage, deletePage]);
+  }, [rotatePage, deletePage, extractPages, insertBlankPage]);
 
   const getVisiblePage = useCallback((): number => {
     const container = pagesContainerRef.current;
@@ -891,24 +1097,209 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
   }, []);
 
   const submitComment = useCallback(() => {
-    if (!commentPopover || !commentText.trim()) { setCommentPopover(null); return; }
-    // SVG-relative Koordinaten wurden bereits beim Klick berechnet (scroll-sicher)
-    const x = commentPopover.svgX;
-    const y = commentPopover.svgY;
-    addAnnotation({
-      type: 'text', page: commentPopover.page - 1,
-      rect: { x1: x, y1: y, x2: x + 24, y2: y + 24 },
-      text: commentText.trim(), color: annoColor,
-    });
+    if (!commentPopover || !commentText.trim()) { setCommentPopover(null); setCommentText(''); return; }
+
+    if (commentPopover.editIdx !== undefined) {
+      // Bestehende Annotation bearbeiten
+      pushUndo(annotationsRef.current);
+      setAnnotations(prev => prev.map((a, i) =>
+        i === commentPopover.editIdx ? { ...a, text: commentText.trim() } : a
+      ));
+      setUnsavedChanges(true);
+    } else {
+      // Neue Annotation erstellen
+      const x = commentPopover.svgX;
+      const y = commentPopover.svgY;
+      addAnnotation({
+        type: 'text', page: commentPopover.page - 1,
+        rect: { x1: x, y1: y, x2: x + 24, y2: y + 24 },
+        text: commentText.trim(), color: annoColor,
+      });
+    }
     setTimeout(() => renderAnnotationsForPage(commentPopover.page), 50);
     setCommentPopover(null);
     setCommentText('');
-  }, [commentPopover, commentText, annoColor, addAnnotation, renderAnnotationsForPage]);
+  }, [commentPopover, commentText, annoColor, addAnnotation, pushUndo, renderAnnotationsForPage]);
 
   const cancelComment = useCallback(() => {
     setCommentPopover(null);
     setCommentText('');
   }, []);
+
+  const performSearch = useCallback(async (query: string) => {
+    if (!query.trim() || !pdfDocRef.current) { setSearchResults([]); setSearchCurrentIdx(0); return; }
+    const q = query.toLowerCase();
+    const results: { page: number; matchIdx: number }[] = [];
+    for (let p = 1; p <= totalPages; p++) {
+      const page = await pdfDocRef.current.getPage(p);
+      const tc = await page.getTextContent();
+      const pageText = tc.items.map((item: any) => item.str || '').join(' ').toLowerCase();
+      let idx = 0;
+      let matchNum = 0;
+      while ((idx = pageText.indexOf(q, idx)) !== -1) {
+        results.push({ page: p, matchIdx: matchNum++ });
+        idx += q.length;
+      }
+    }
+    setSearchResults(results);
+    setSearchCurrentIdx(0);
+    if (results.length > 0) scrollToPage(results[0].page);
+    // Treffer visuell hervorheben im TextLayer
+    highlightSearchInTextLayers(query);
+  }, [totalPages, scrollToPage]);
+
+  const highlightSearchInTextLayers = useCallback((query: string) => {
+    // Bestehende Highlights entfernen
+    document.querySelectorAll('.pdf-search-highlight').forEach(el => el.remove());
+    if (!query.trim()) return;
+    const q = query.toLowerCase();
+    for (const entry of pageEntriesRef.current) {
+      const spans = entry.textLayerDiv.querySelectorAll('span');
+      for (const span of spans) {
+        const text = span.textContent || '';
+        const lowerText = text.toLowerCase();
+        let idx = 0;
+        while ((idx = lowerText.indexOf(q, idx)) !== -1) {
+          // Highlight-Overlay für den gefundenen Text erstellen
+          const range = document.createRange();
+          try {
+            range.setStart(span.firstChild!, idx);
+            range.setEnd(span.firstChild!, idx + q.length);
+            const rects = range.getClientRects();
+            const parentRect = entry.textLayerDiv.getBoundingClientRect();
+            for (const r of rects) {
+              const hl = document.createElement('div');
+              hl.className = 'pdf-search-highlight';
+              hl.style.left = (r.left - parentRect.left) + 'px';
+              hl.style.top = (r.top - parentRect.top) + 'px';
+              hl.style.width = r.width + 'px';
+              hl.style.height = r.height + 'px';
+              entry.textLayerDiv.appendChild(hl);
+            }
+          } catch { /* Range-Fehler ignorieren */ }
+          idx += q.length;
+        }
+      }
+    }
+  }, []);
+
+  const searchNext = useCallback(() => {
+    if (searchResults.length === 0) return;
+    const next = (searchCurrentIdx + 1) % searchResults.length;
+    setSearchCurrentIdx(next);
+    scrollToPage(searchResults[next].page);
+  }, [searchResults, searchCurrentIdx, scrollToPage]);
+
+  const searchPrev = useCallback(() => {
+    if (searchResults.length === 0) return;
+    const prev = (searchCurrentIdx - 1 + searchResults.length) % searchResults.length;
+    setSearchCurrentIdx(prev);
+    scrollToPage(searchResults[prev].page);
+  }, [searchResults, searchCurrentIdx, scrollToPage]);
+
+  const closeSearch = useCallback(() => {
+    setShowSearch(false);
+    setSearchQuery('');
+    setSearchResults([]);
+    setSearchCurrentIdx(0);
+    document.querySelectorAll('.pdf-search-highlight').forEach(el => el.remove());
+  }, []);
+
+  const submitPassword = useCallback(async () => {
+    if (!passwordPrompt || !passwordText) return;
+    try {
+      const pdfjsLib = await loadPdfjs();
+      const pdfDoc = await pdfjsLib.getDocument({ data: passwordPrompt.data, password: passwordText }).promise;
+      pdfDocRef.current = pdfDoc;
+      setTotalPages(pdfDoc.numPages);
+      setAnnotations([]);
+      undoStackRef.current = [];
+      redoStackRef.current = [];
+      setSelectedAnnoIdx(null);
+      setUnsavedChanges(false);
+      setScale(1.0);
+      setCurrentTool('select');
+      setCurrentPage(1);
+      const info = await api.pdfGetInfo(filePath);
+      const parts = [`${info.pageCount} Seiten`];
+      if (info.title) parts.push(info.title);
+      if (info.author) parts.push(`von ${info.author}`);
+      if (!info.isTextSearchable) parts.push('OCR empfohlen');
+      setInfoText(parts.join(' \u2022 '));
+      setLoaded(true);
+      setError('');
+      setPasswordPrompt(null);
+      setPasswordText('');
+    } catch (err: any) {
+      if (err?.name === 'PasswordException') {
+        showToast('Falsches Passwort', 'error');
+      } else {
+        setError(err.message);
+        setPasswordPrompt(null);
+        setPasswordText('');
+      }
+    }
+  }, [passwordPrompt, passwordText, filePath, showToast]);
+
+  const startImageInsert = useCallback(async () => {
+    try {
+      const result = await api.showSaveDialog({
+        title: 'Bild auswählen', open: true,
+        filters: [{ name: 'Bilder', extensions: ['png', 'jpg', 'jpeg', 'bmp', 'gif', 'webp'] }],
+      });
+      if (!result || result.canceled || !result.path) return;
+      // Bild als Base64 lesen
+      const binResult = await api.readFileBinary(result.path);
+      if ((binResult as any).error) throw new Error((binResult as any).error);
+      const base64 = `data:image/png;base64,${(binResult as any).data}`;
+      setImageInsertData({ base64, name: result.path.split(/[\\/]/).pop() || 'Bild' });
+      setShowImageInsert(true);
+      showToast('Klicke auf die Seite um das Bild zu platzieren', 'info');
+    } catch (err: any) {
+      showToast('Bild laden fehlgeschlagen: ' + err.message, 'error');
+    }
+  }, [showToast]);
+
+  const placeImageOnPage = useCallback(async (pageNum: number, x: number, y: number) => {
+    if (!imageInsertData || !filePath) return;
+    const s = scaleRef.current;
+    // Bild standardmäßig 150x150 PDF-Punkte (kann später skaliert werden)
+    const imgSize = 150;
+    const rect = { x1: x / s, y1: y / s, x2: (x / s) + imgSize, y2: (y / s) + imgSize };
+    try {
+      await api.pdfAddImage(filePath, filePath, pageNum - 1, imageInsertData.base64, rect);
+      setShowImageInsert(false);
+      setImageInsertData(null);
+      // PDF neu laden um das eingefügte Bild zu sehen
+      setLoaded(false);
+      setTimeout(() => setLoaded(true), 100);
+      showToast('Bild eingefügt', 'success');
+    } catch (err: any) {
+      showToast('Bild einfügen fehlgeschlagen: ' + err.message, 'error');
+    }
+  }, [imageInsertData, filePath, showToast]);
+  useEffect(() => { placeImageOnPageRef.current = placeImageOnPage; }, [placeImageOnPage]);
+
+  const handleThumbDrop = useCallback(async (fromIdx: number, toIdx: number) => {
+    if (fromIdx === toIdx) return;
+    // Neue Reihenfolge berechnen
+    const order = Array.from({ length: totalPages }, (_, i) => i);
+    const [moved] = order.splice(fromIdx, 1);
+    order.splice(toIdx, 0, moved);
+    try {
+      await api.pdfReorderPages(filePath, filePath, order);
+      setAnnotations([]);
+      undoStackRef.current = [];
+      redoStackRef.current = [];
+      setSelectedAnnoIdx(null);
+      setUnsavedChanges(false);
+      setLoaded(false);
+      setTimeout(() => setLoaded(true), 100);
+      showToast(`Seite ${fromIdx + 1} verschoben`, 'success');
+    } catch (err: any) {
+      showToast('Umsortieren fehlgeschlagen: ' + err.message, 'error');
+    }
+  }, [filePath, totalPages, showToast]);
 
   const handleGotoPage = useCallback(() => {
     const num = parseInt(gotoPageText);
@@ -946,20 +1337,59 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
           <span className="pdf-editor-separator" />
           <button className="pdf-editor-btn" onClick={save} title="Speichern (Strg+S)">Speichern</button>
           <button className="pdf-editor-btn" onClick={exportAs} title="Als Kopie speichern...">Exportieren</button>
-          <button className="pdf-editor-btn" onClick={handlePrint} title="Drucken (Strg+P)">Drucken</button>
+          <button className="pdf-editor-btn" onClick={() => setShowPrintDialog(true)} title="Drucken (Strg+P)">Drucken</button>
           <button className="pdf-editor-btn" onClick={() => setShowOcr(true)} title="OCR-Texterkennung">OCR</button>
+          <button className="pdf-editor-btn" onClick={startImageInsert} title="Bild auf Seite einfügen">Bild einfügen</button>
           <button className="pdf-editor-btn" onClick={() => { setMergeFiles([filePath]); setShowMerge(true); }} title="PDF zusammenfügen">Zusammenfügen</button>
+          {bookmarks.length > 0 && <button className={`pdf-editor-btn ${showBookmarks ? 'active' : ''}`} onClick={() => setShowBookmarks(b => !b)} title="Inhaltsverzeichnis">Lesezeichen</button>}
           {!onClose && <button className="pdf-editor-btn" onClick={detachWindow} title="In eigenem Fenster öffnen">Fenster lösen</button>}
         </div>
       </div>
 
+      {showSearch && (
+        <div className="pdf-search-bar">
+          <input type="text" className="pdf-search-input" value={searchQuery} autoFocus
+            placeholder="Im Dokument suchen..."
+            onChange={e => { setSearchQuery(e.target.value); performSearch(e.target.value); }}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && !e.shiftKey) searchNext();
+              if (e.key === 'Enter' && e.shiftKey) searchPrev();
+              if (e.key === 'Escape') closeSearch();
+              e.stopPropagation();
+            }}
+          />
+          <span className="pdf-search-count">
+            {searchResults.length > 0 ? `${searchCurrentIdx + 1}/${searchResults.length}` : searchQuery ? '0 Treffer' : ''}
+          </span>
+          <button className="pdf-editor-btn" onClick={searchPrev} disabled={searchResults.length === 0} title="Vorheriger Treffer (Shift+Enter)">{'\u25B2'}</button>
+          <button className="pdf-editor-btn" onClick={searchNext} disabled={searchResults.length === 0} title="Nächster Treffer (Enter)">{'\u25BC'}</button>
+          <button className="pdf-editor-btn" onClick={closeSearch} title="Suche schließen (Esc)">{'\u2715'}</button>
+        </div>
+      )}
+
       <div className="pdf-editor-body">
         <div className="pdf-editor-thumbnails">
-          {Array.from({ length: totalPages }, (_, i) => (
-            <div key={i} className={`pdf-thumb ${currentPage === i + 1 ? 'pdf-thumb-active' : ''}`} onClick={() => scrollToPage(i + 1)}>
-              <span>{i + 1}</span>
+          {showBookmarks && bookmarks.length > 0 ? (
+            <div className="pdf-bookmarks-panel">
+              <BookmarkTree bookmarks={bookmarks} onNavigate={(page) => { if (page !== null && page !== undefined) scrollToPage(page + 1); }} />
             </div>
-          ))}
+          ) : (
+            Array.from({ length: totalPages }, (_, i) => (
+              <div key={i}
+                className={`pdf-thumb ${currentPage === i + 1 ? 'pdf-thumb-active' : ''} ${thumbDragIdx === i ? 'pdf-thumb-dragging' : ''} ${thumbDropIdx === i ? 'pdf-thumb-drop-target' : ''}`}
+                draggable
+                onClick={() => scrollToPage(i + 1)}
+                onDragStart={() => setThumbDragIdx(i)}
+                onDragOver={(e) => { e.preventDefault(); setThumbDropIdx(i); }}
+                onDragLeave={() => setThumbDropIdx(null)}
+                onDrop={() => { if (thumbDragIdx !== null) handleThumbDrop(thumbDragIdx, i); setThumbDragIdx(null); setThumbDropIdx(null); }}
+                onDragEnd={() => { setThumbDragIdx(null); setThumbDropIdx(null); }}
+              >
+                <ThumbCanvas pdfDoc={pdfDocRef.current} pageNum={i + 1} />
+                <span className="pdf-thumb-num">{i + 1}</span>
+              </div>
+            ))
+          )}
         </div>
         <div className="pdf-editor-pages" ref={pagesContainerRef}>
           {!loaded && !error && <div className="loading-spinner" />}
@@ -1037,6 +1467,30 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
         />
       )}
 
+      {/* Druck-Dialog */}
+      {showPrintDialog && (
+        <div className="pdf-editor-dialog-overlay">
+          <div className="pdf-editor-dialog">
+            <h3>Drucken</h3>
+            <p>Seitenbereich eingeben oder leer lassen für alle Seiten.</p>
+            <input type="text" className="pdf-print-range-input" value={printRange} autoFocus
+              placeholder={`z.B. 1-3, 5, 7-${totalPages}`}
+              onChange={e => setPrintRange(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') handlePrintRange();
+                if (e.key === 'Escape') setShowPrintDialog(false);
+                e.stopPropagation();
+              }}
+            />
+            <div className="pdf-editor-dialog-btns">
+              <button className="pdf-editor-btn" onClick={handlePrintRange}>Drucken</button>
+              <button className="pdf-editor-btn" onClick={() => { handlePrint(); setShowPrintDialog(false); }}>Alle Seiten drucken</button>
+              <button className="pdf-editor-btn" onClick={() => setShowPrintDialog(false)}>Abbrechen</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Merge Dialog */}
       {showMerge && (
         <MergeDialog
@@ -1049,6 +1503,15 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
           }}
           onMerge={handleMerge}
           onClose={() => { setShowMerge(false); setMergeFiles([]); }}
+          onReorder={(from, to) => {
+            setMergeFiles(prev => {
+              const next = [...prev];
+              const [item] = next.splice(from, 1);
+              next.splice(to, 0, item);
+              return next;
+            });
+          }}
+          onRemoveFile={(idx) => setMergeFiles(prev => prev.filter((_, i) => i !== idx))}
         />
       )}
 
@@ -1076,8 +1539,68 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
           </div>
         </div>
       )}
+
+      {/* Passwort-Dialog für geschützte PDFs */}
+      {passwordPrompt && (
+        <div className="pdf-editor-dialog-overlay">
+          <div className="pdf-editor-dialog">
+            <h3>Passwortgeschützte PDF</h3>
+            <p>Diese PDF-Datei ist passwortgeschützt. Bitte Passwort eingeben:</p>
+            <input type="password" className="pdf-password-input" value={passwordText} autoFocus
+              placeholder="Passwort eingeben..."
+              onChange={e => setPasswordText(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') submitPassword();
+                if (e.key === 'Escape') { setPasswordPrompt(null); setPasswordText(''); setError('PDF ist passwortgeschützt'); }
+                e.stopPropagation();
+              }}
+            />
+            <div className="pdf-editor-dialog-btns">
+              <button className="pdf-editor-btn" onClick={submitPassword}>Öffnen</button>
+              <button className="pdf-editor-btn" onClick={() => { setPasswordPrompt(null); setPasswordText(''); setError('PDF ist passwortgeschützt'); }}>Abbrechen</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
+}
+
+function BookmarkTree({ bookmarks, onNavigate }: { bookmarks: any[]; onNavigate: (page: number | null) => void }) {
+  return (
+    <ul className="pdf-bookmark-list">
+      {bookmarks.map((bm, i) => (
+        <li key={i}>
+          <button className="pdf-bookmark-item" onClick={() => onNavigate(bm.page)} title={bm.page !== null ? `Seite ${bm.page + 1}` : ''}>
+            {bm.title || '(Ohne Titel)'}
+          </button>
+          {bm.children && bm.children.length > 0 && (
+            <BookmarkTree bookmarks={bm.children} onNavigate={onNavigate} />
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function ThumbCanvas({ pdfDoc, pageNum }: { pdfDoc: any; pageNum: number }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    if (!pdfDoc || !canvasRef.current) return;
+    let cancelled = false;
+    (async () => {
+      const page = await pdfDoc.getPage(pageNum);
+      if (cancelled) return;
+      const vp = page.getViewport({ scale: 0.2 });
+      const canvas = canvasRef.current!;
+      canvas.width = vp.width;
+      canvas.height = vp.height;
+      const ctx = canvas.getContext('2d')!;
+      await page.render({ canvasContext: ctx, viewport: vp }).promise;
+    })();
+    return () => { cancelled = true; };
+  }, [pdfDoc, pageNum]);
+  return <canvas ref={canvasRef} className="pdf-thumb-canvas" />;
 }
 
 function OcrDialog({ onClose, onRun, progress }: {
@@ -1110,20 +1633,30 @@ function OcrDialog({ onClose, onRun, progress }: {
   );
 }
 
-function MergeDialog({ files, onAddFile, onMerge, onClose }: {
+function MergeDialog({ files, onAddFile, onMerge, onClose, onReorder, onRemoveFile }: {
   files: string[];
   onAddFile: () => void;
   onMerge: () => void;
   onClose: () => void;
+  onReorder: (from: number, to: number) => void;
+  onRemoveFile: (index: number) => void;
 }) {
   return (
     <div className="pdf-editor-dialog-overlay">
       <div className="pdf-editor-dialog">
         <h3>PDFs zusammenfügen</h3>
-        <p>Wähle weitere PDFs die an das aktuelle Dokument angehängt werden sollen.</p>
+        <p>Reihenfolge festlegen und zusammenfügen. Das erste Dokument ist die aktuelle PDF.</p>
         <div className="merge-file-list">
-          {files.slice(1).map((f, i) => (
-            <div key={i} className="merge-file-item">{f.split(/[\\/]/).pop()}</div>
+          {files.map((f, i) => (
+            <div key={i} className="merge-file-item">
+              <span className="merge-file-num">{i + 1}.</span>
+              <span className="merge-file-name" title={f}>{f.split(/[\\/]/).pop()}</span>
+              <span className="merge-file-actions">
+                <button className="merge-file-btn" disabled={i === 0} onClick={() => onReorder(i, i - 1)} title="Nach oben">{'\u25B2'}</button>
+                <button className="merge-file-btn" disabled={i === files.length - 1} onClick={() => onReorder(i, i + 1)} title="Nach unten">{'\u25BC'}</button>
+                <button className="merge-file-btn merge-file-btn-remove" onClick={() => onRemoveFile(i)} title="Entfernen">{'\u2715'}</button>
+              </span>
+            </div>
           ))}
         </div>
         <div className="pdf-editor-dialog-btns">

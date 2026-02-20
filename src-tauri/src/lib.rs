@@ -384,6 +384,11 @@ pub fn run() {
             commands::pdf_rotate_page,
             commands::pdf_delete_pages,
             commands::pdf_merge,
+            commands::pdf_extract_pages,
+            commands::pdf_insert_blank_page,
+            commands::pdf_get_bookmarks,
+            commands::pdf_add_image,
+            commands::pdf_reorder_pages,
             commands::open_pdf_window,
             // Scan History (Delta-Scan)
             commands::save_scan_snapshot,

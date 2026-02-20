@@ -302,6 +302,16 @@ export const pdfDeletePages = (filePath: string, outputPath: string, pageNums: n
   invoke<any>('pdf_delete_pages', { filePath, outputPath, pageNums });
 export const pdfMerge = (filePaths: string[], outputPath: string) =>
   invoke<any>('pdf_merge', { filePaths, outputPath });
+export const pdfExtractPages = (filePath: string, outputPath: string, pages: number[]) =>
+  invoke<any>('pdf_extract_pages', { filePath, outputPath, pages });
+export const pdfInsertBlankPage = (filePath: string, outputPath: string, afterPage: number, width?: number, height?: number) =>
+  invoke<any>('pdf_insert_blank_page', { filePath, outputPath, afterPage, width: width || 0, height: height || 0 });
+export const pdfGetBookmarks = (filePath: string) =>
+  invoke<any[]>('pdf_get_bookmarks', { filePath });
+export const pdfAddImage = (filePath: string, outputPath: string, pageNum: number, imageBase64: string, rect: { x1: number; y1: number; x2: number; y2: number }) =>
+  invoke<any>('pdf_add_image', { filePath, outputPath, pageNum, imageBase64, rect });
+export const pdfReorderPages = (filePath: string, outputPath: string, order: number[]) =>
+  invoke<any>('pdf_reorder_pages', { filePath, outputPath, order });
 export const openPdfWindow = (filePath: string) =>
   invoke<any>('open_pdf_window', { filePath });
 
