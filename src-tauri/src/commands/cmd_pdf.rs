@@ -177,6 +177,7 @@ pub async fn pdf_save_annotations(
     file_path: String,
     output_path: String,
     annotations: Vec<AnnotationData>,
+    clear_pages: Option<Vec<u32>>,
 ) -> Result<Value, String> {
     validate_path(&output_path)?;
     let fp = file_path.clone();
@@ -189,9 +190,16 @@ pub async fn pdf_save_annotations(
 
         // Bestehende Annotationen von betroffenen Seiten entfernen,
         // damit wiederholtes Speichern keine Duplikate erzeugt.
+        // Enthält sowohl Seiten mit aktuellen Annotationen als auch
+        // explizit per clear_pages angeforderte Seiten (für Undo-Fall).
         let mut cleared_pages = std::collections::HashSet::new();
         for anno in &annotations {
             cleared_pages.insert(anno.page as u16);
+        }
+        if let Some(ref extra) = clear_pages {
+            for &p in extra {
+                cleared_pages.insert(p as u16);
+            }
         }
         for &page_idx in &cleared_pages {
             if let Ok(mut page) = doc.pages().get(page_idx) {
@@ -451,6 +459,17 @@ pub async fn pdf_add_text_layer(
                 Ok(p) => p,
                 Err(_) => continue,
             };
+
+            // Bestehende FreeText-Annotationen (von vorherigem OCR-Lauf) entfernen,
+            // damit wiederholtes OCR keine Duplikate erzeugt.
+            let anno_count = page.annotations().len();
+            for i in (0..anno_count).rev() {
+                if let Ok(existing) = page.annotations().get(i) {
+                    if existing.annotation_type() == PdfPageAnnotationType::FreeText {
+                        let _ = page.annotations_mut().delete_annotation(existing);
+                    }
+                }
+            }
 
             let page_height = page.height().value;
 

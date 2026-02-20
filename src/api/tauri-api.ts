@@ -290,8 +290,8 @@ export const captureScreenshot = () => invoke<any>('capture_screenshot');
 export const pdfGetInfo = (filePath: string) => invoke<any>('pdf_get_info', { filePath });
 export const pdfGetAnnotations = (filePath: string, pageNum: number) =>
   invoke<any[]>('pdf_get_annotations', { filePath, pageNum });
-export const pdfSaveAnnotations = (filePath: string, outputPath: string, annotations: any[]) =>
-  invoke<any>('pdf_save_annotations', { filePath, outputPath, annotations });
+export const pdfSaveAnnotations = (filePath: string, outputPath: string, annotations: any[], clearPages?: number[]) =>
+  invoke<any>('pdf_save_annotations', { filePath, outputPath, annotations, clearPages });
 export const pdfOcrPage = (imageBase64: string, language?: string) =>
   invoke<any>('pdf_ocr_page', { imageBase64, language });
 export const pdfAddTextLayer = (filePath: string, outputPath: string, ocrResults: any[]) =>

@@ -726,6 +726,97 @@ PDF-Editor hatte nach initialer Implementierung keine Grundfunktionen die JEDER 
 
 ---
 
+#### #96 — PDF-Koordinatensystem: Y-Achse invertiert zwischen Frontend und Backend
+`2026-02-20`
+
+**Betroffen:** `pdf_save_annotations` und `pdf_get_annotations` in `cmd_pdf.rs`.
+
+**Symptom:** Kommentare und Markierungen werden an falscher Position gespeichert. Beim Öffnen in einem externen PDF-Editor (Adobe, Foxit) erscheinen Annotationen gespiegelt/verschoben.
+
+**Ursache:** Frontend (pdf.js) verwendet Koordinatensystem mit Ursprung oben-links (Y wächst nach unten). PDF-Standard verwendet Ursprung unten-links (Y wächst nach oben). Backend hat Koordinaten 1:1 durchgereicht ohne Transformation.
+
+**Lösung:** In `pdf_save_annotations`: `let pdf_bottom = page_height - rect.y2; let pdf_top = page_height - rect.y1;` vor `PdfRect::new_from_values(pdf_bottom, rect.x1, pdf_top, rect.x2)`. In `pdf_get_annotations`: umgekehrte Transformation beim Lesen.
+
+**Lehre:** Bei JEDEM PDF-Feature das Koordinaten verwendet: Frontend-Koordinaten (top-left origin) ≠ PDF-Koordinaten (bottom-left origin). Die Transformation `pdf_y = page_height - frontend_y` ist IMMER nötig in beide Richtungen.
+
+---
+
+#### #97 — PDF: Annotationen duplizieren sich bei jedem Speichern
+`2026-02-20`
+
+**Symptom:** Nach 3x Speichern hat jede Annotation 3 Kopien in der PDF-Datei.
+
+**Ursache:** Backend öffnete die PDF-Datei (die bereits gespeicherte Annotationen enthält) und fügte ALLE in-memory Annotationen erneut hinzu. Keine Deduplizierung.
+
+**Lösung:** Vor dem Hinzufügen neuer Annotationen: alle bestehenden Annotationen auf den betroffenen Seiten löschen (`page.annotations_mut().delete_annotation()`), dann die aktuellen Annotationen frisch einfügen.
+
+**Lehre:** Beim Speichern von Annotationen in PDFs: Entweder (a) nur NEUE Annotationen hinzufügen (Diff-basiert) oder (b) ALLE bestehenden entfernen und komplett neu schreiben. Option (b) ist einfacher und zuverlässiger.
+
+---
+
+#### #98 — OCR-Koordinaten: Skalierungsfaktor nicht rückgerechnet
+`2026-02-20`
+
+**Symptom:** OCR-Textlayer-Koordinaten sind um Faktor 3 verschoben.
+
+**Ursache:** Frontend rendert PDF-Seiten für OCR mit `scale = 3.0` (höhere Auflösung = bessere Texterkennung). Die zurückgegebenen Pixel-Koordinaten wurden direkt als PDF-Punkte verwendet, ohne durch 3.0 zu dividieren.
+
+**Lösung:** Alle OCR-Wort-Koordinaten (x, y, width, height) durch `OCR_SCALE` (3.0) dividieren bevor sie als Annotationen verwendet werden.
+
+**Lehre:** Wenn eine Rendering-Pipeline einen Skalierungsfaktor verwendet, MÜSSEN alle resultierenden Koordinaten zurückskaliert werden. `pixel_coord / scale = pdf_point`.
+
+---
+
+#### #99 — PDF: Rotation/Löschung invalidiert in-memory Annotationen
+`2026-02-20`
+
+**Symptom:** Nach Seitenrotation oder -löschung zeigen Annotationen auf falsche Positionen oder nicht-existente Seiten.
+
+**Ursache:** Rotation ändert Seitenabmessungen (Breite↔Höhe), alle Y-Koordinaten der Annotationen sind dann falsch. Löschung verschiebt Seitennummern — Annotation für Seite 3 zeigt nach Löschen von Seite 2 auf Seite 4.
+
+**Lösung:** Bei Rotation und Löschung: Warnung anzeigen wenn Annotationen existieren, bei Bestätigung alle Annotationen zurücksetzen (State + Undo/Redo-Stacks leeren).
+
+**Lehre:** Strukturelle PDF-Operationen (Rotation, Löschung, Einfügen) invalidieren IMMER den Annotations-State. Entweder Annotationen transformieren oder verwerfen — nie stillschweigend inkonsistent lassen.
+
+---
+
+#### #100 — Kommentar-Popover: Position verschiebt sich bei Scroll
+`2026-02-20`
+
+**Symptom:** Wenn der User zwischen mousedown und Kommentar-Eingabe scrollt, wird der Kommentar an falscher Position platziert.
+
+**Ursache:** `commentPopover.x/y` speicherte `e.clientX/Y` (Viewport-relativ). Die SVG-relative Position wurde erst bei `submitComment` berechnet — wenn der User zwischendurch scrollte, stimmte die Umrechnung nicht mehr.
+
+**Lösung:** SVG-relative Koordinaten (`svgX`, `svgY`) werden sofort bei `mouseup` berechnet und im Popover-State gespeichert. `submitComment` verwendet diese vorberechneten Koordinaten.
+
+**Lehre:** Bei zweistufigen UI-Interaktionen (Klick → Eingabe → Bestätigung) MÜSSEN die Ziel-Koordinaten beim ERSTEN Schritt fixiert werden, nicht beim letzten. Viewport-relative Koordinaten sind instabil bei Scroll/Resize.
+
+---
+
+#### #101 — pdfium-render 0.8: InkAnnotation hat keine Stroke-Path-API
+`2026-02-20`
+
+**Symptom:** Freihand-Zeichnungen (Ink-Annotationen) werden als farbige Rechtecke gespeichert statt als Strichpfade.
+
+**Ursache:** pdfium-render 0.8 bietet `PdfPageInkAnnotation` ohne `set_stroke_points()` oder `set_stroke_width()`. Nur Bounding-Box und Farbe können gesetzt werden. Die InkList-Daten (die eigentlichen Pfadpunkte) sind nicht über die Rust-API zugänglich.
+
+**Status:** Bekannte Limitation der Bibliothek. Ink-Annotationen werden als farbige Bounds gespeichert. Für echte Strichpfade wäre eine direkte PDFium C-API-Bindung oder eine neuere Version von pdfium-render nötig.
+
+**Lehre:** Vor der Implementierung eines Features die API-Dokumentation der verwendeten Bibliothek VOLLSTÄNDIG prüfen. Nicht annehmen dass "InkAnnotation" automatisch Stroke-Daten unterstützt.
+
+---
+
+#### #102 — PDF: Ungespeicherte Änderungen gehen verloren beim Öffnen neuer Datei
+`2026-02-20`
+
+**Symptom:** Benutzer öffnet neue PDF → alle ungespeicherten Annotationen der vorherigen PDF sind weg, ohne Warnung.
+
+**Lösung:** `pendingPdfPath`-useEffect prüft ob ungespeicherte Annotationen existieren. Falls ja: Bestätigungsdialog ("Ungespeicherte Änderungen. Trotzdem wechseln?"). Nur bei Bestätigung wird die neue PDF geladen.
+
+**Lehre:** JEDE Aktion die den aktuellen Arbeitskontext zerstört (neue Datei öffnen, Tab wechseln, App schliessen) MUSS prüfen ob ungespeicherte Änderungen existieren. Datenverlust ohne Warnung ist ein kritischer UX-Bug.
+
+---
+
 <br>
 
 ## Terminal

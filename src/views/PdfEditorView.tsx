@@ -190,6 +190,12 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
     if (!filePath) return;
     let cancelled = false;
 
+    // Altes PDF-Dokument freigeben (Worker-Threads, Canvas-Daten)
+    if (pdfDocRef.current) {
+      pdfDocRef.current.destroy().catch(() => {});
+      pdfDocRef.current = null;
+    }
+
     (async () => {
       try {
         const pdfjsLib = await loadPdfjs();
@@ -225,7 +231,14 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
       }
     })();
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      // Bei Unmount/Cleanup das Dokument freigeben
+      if (pdfDocRef.current) {
+        pdfDocRef.current.destroy().catch(() => {});
+        pdfDocRef.current = null;
+      }
+    };
   }, [filePath]);
 
   // Render pages after loading
@@ -624,9 +637,18 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
   }, [currentTool, annotations]);
 
   const save = useCallback(async () => {
-    if (!filePath || annotationsRef.current.length === 0) return;
+    if (!filePath) return;
+    const annots = annotationsRef.current;
+    // Alle je annotierten Seiten sammeln (aktuelle + Undo-History)
+    // damit auch Seiten bereinigt werden, deren Annotationen per Undo entfernt wurden
+    const pagesToClear = new Set<number>();
+    for (const a of annots) pagesToClear.add(a.page);
+    for (const prev of undoStackRef.current) {
+      for (const a of prev) pagesToClear.add(a.page);
+    }
+    if (annots.length === 0 && pagesToClear.size === 0) return;
     try {
-      await api.pdfSaveAnnotations(filePath, filePath, annotationsRef.current);
+      await api.pdfSaveAnnotations(filePath, filePath, annots, Array.from(pagesToClear));
       setUnsavedChanges(false);
       showToast('PDF gespeichert', 'success');
     } catch (err: any) {
