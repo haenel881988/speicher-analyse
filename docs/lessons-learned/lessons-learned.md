@@ -639,6 +639,17 @@ F5 muss "Smart Reload" ausführen: sessionStorage-State speichern + `location.re
 
 ---
 
+#### #89 — React: Context-Wert als abgeleiteter Wert = Race Condition
+`2026-02-20`
+
+`const filePath = pendingPdfPath || propFilePath` — abgeleiteter Wert aus Context. Wenn ein useEffect den Context leert (`setPendingPdfPath(null)`), wird `filePath` bei Re-Render zu `''`. Das triggert den Cleanup des PDF-Lade-useEffects (`cancelled = true`), der die laufende Lade-Operation abbricht.
+
+**Lösung:** Context-Wert sofort in lokalen `useState` übernehmen (`setActivePdfPath(pendingPdfPath)`), dann Context leeren. Der lokale State bleibt stabil über Re-Renders.
+
+**Lehre:** Werte die aus dem globalen Context "konsumiert" und dann gelöscht werden, MÜSSEN in lokalen State kopiert werden. Abgeleitete Werte (`const x = ctx.y || fallback`) sind fragil wenn `ctx.y` asynchron gelöscht wird — sie verändern sich zwischen Renders und brechen useEffect-Dependencies.
+
+---
+
 <br>
 
 ## Terminal
