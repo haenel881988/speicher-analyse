@@ -147,6 +147,7 @@ export const findEmptyFolders = (dirPath: string, maxDepth?: number) =>
 export const copyToClipboard = (text: string) => invoke<void>('copy_to_clipboard', { text });
 export const openInTerminal = (dirPath: string) => invoke<void>('open_in_terminal', { dirPath });
 export const openWithDialog = (filePath: string) => invoke<void>('open_with_dialog', { filePath });
+export const editInEditor = (filePath: string) => invoke<void>('edit_in_editor', { filePath });
 
 // === Admin ===
 export const isAdmin = () => invoke<boolean>('is_admin');

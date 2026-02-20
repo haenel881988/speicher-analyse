@@ -779,3 +779,16 @@ pub async fn open_with_dialog(file_path: String) -> Result<Value, String> {
     Ok(json!({ "success": true }))
 }
 
+#[tauri::command]
+pub async fn edit_in_editor(file_path: String) -> Result<Value, String> {
+    let safe_path = file_path.replace("'", "''");
+    // Try VS Code first, fall back to Notepad
+    let script = format!(
+        r#"$codePath = Get-Command code -ErrorAction SilentlyContinue
+if ($codePath) {{ Start-Process code -ArgumentList '"{}"' }} else {{ Start-Process notepad.exe -ArgumentList '"{}"' }}"#,
+        safe_path, safe_path
+    );
+    crate::ps::run_ps(&script).await?;
+    Ok(json!({ "success": true }))
+}
+

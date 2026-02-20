@@ -3182,6 +3182,15 @@ textarea::placeholder {
     color: rgba(255, 255, 255, 0.7);
 }
 
+.ctx-item-bold {
+    font-weight: 600;
+}
+
+.ctx-item-active {
+    color: var(--accent);
+    font-weight: 600;
+}
+
 .ctx-item-danger {
     color: var(--danger);
 }

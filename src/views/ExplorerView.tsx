@@ -311,6 +311,9 @@ export default function ExplorerView() {
       case 'open-with':
         if (singlePath) api.openWithDialog(singlePath);
         break;
+      case 'edit':
+        if (singlePath) api.editInEditor(singlePath);
+        break;
       case 'open-in-explorer':
         if (singlePath) api.showInExplorer(singlePath);
         break;
@@ -439,6 +442,39 @@ export default function ExplorerView() {
         } catch (err: any) { showToast('Fehler: ' + err.message, 'error'); }
         break;
       }
+      case 'paste-into':
+        if (clipboard && clipboard.paths.length > 0 && entry?.isDirectory) {
+          try {
+            if (clipboard.cut) {
+              await api.move(clipboard.paths, entry.path);
+              setClipboard(null);
+            } else {
+              await api.copy(clipboard.paths, entry.path);
+            }
+            showToast(`${clipboard.paths.length} Element(e) in "${entry.name}" eingefügt`, 'info');
+            refresh();
+          } catch (err: any) { showToast('Fehler: ' + err.message, 'error'); }
+        }
+        break;
+      case 'refresh':
+        refresh();
+        break;
+      case 'folder-properties':
+        if (currentPath) {
+          try {
+            const props = await api.fileProperties(currentPath);
+            const general = props.general || props;
+            const msg = [
+              `Name: ${general.name || currentPath.split('\\').filter(Boolean).pop() || ''}`,
+              `Pfad: ${general.path || currentPath}`,
+              general.created ? `Erstellt: ${new Date(general.created).toLocaleString('de-DE')}` : '',
+              general.modified ? `Geändert: ${new Date(general.modified).toLocaleString('de-DE')}` : '',
+              `Typ: Ordner`,
+            ].filter(Boolean).join('\n');
+            api.showConfirmDialog({ title: 'Ordner-Eigenschaften', message: msg, okLabel: 'OK' });
+          } catch (err: any) { showToast('Fehler: ' + err.message, 'error'); }
+        }
+        break;
     }
   }, [ctxMenu, selectedPaths, currentPath, clipboard, navigateTo, handleDelete, refresh, showToast]);
 
@@ -856,25 +892,38 @@ export default function ExplorerView() {
         const entry = ctxMenu.entry;
         const multi = selectedPaths.size > 1;
         const isDir = entry?.isDirectory;
-        const isArchive = entry && entry.extension.toLowerCase() === '.zip';
-        const isExecutable = entry && ['.exe', '.msi', '.bat', '.cmd', '.ps1'].includes(entry.extension.toLowerCase());
+        const ext = entry?.extension?.toLowerCase() || '';
+        const isArchive = ext === '.zip';
+        const isExecutable = ['.exe', '.msi', '.bat', '.cmd', '.ps1'].includes(ext);
+        const isTextFile = ['.txt', '.log', '.md', '.json', '.xml', '.csv', '.ini', '.cfg', '.yaml', '.yml',
+          '.bat', '.cmd', '.ps1', '.py', '.js', '.ts', '.jsx', '.tsx', '.html', '.htm', '.css', '.scss',
+          '.java', '.c', '.cpp', '.h', '.cs', '.rb', '.go', '.rs', '.php', '.sql', '.sh', '.toml', '.env',
+          '.gitignore', '.editorconfig', '.properties', '.conf', '.reg'].includes(ext);
         const hasTag = entry ? !!dirTags[entry.path] : false;
         return (
           <div className="explorer-ctx-menu" style={{ left: ctxMenu.x, top: ctxMenu.y }} onClick={e => e.stopPropagation()}>
             {entry ? (
               <>
-                <button className="ctx-item" onClick={() => ctxAction('open')}>
-                  {isDir ? 'Öffnen' : 'Öffnen'}
-                </button>
+                <button className="ctx-item ctx-item-bold" onClick={() => ctxAction('open')}>Öffnen</button>
                 {!isDir && <button className="ctx-item" onClick={() => ctxAction('open-with')}>Öffnen mit...</button>}
+                {(isTextFile || (!isDir && ext === '')) && (
+                  <button className="ctx-item" onClick={() => ctxAction('edit')}>Bearbeiten</button>
+                )}
                 {isExecutable && (
                   <button className="ctx-item" onClick={() => ctxAction('run-as-admin')}>Als Administrator ausführen</button>
                 )}
+                <div className="ctx-separator" />
                 <button className="ctx-item" onClick={() => ctxAction('open-in-explorer')}>Im Explorer anzeigen</button>
                 <button className="ctx-item" onClick={() => ctxAction('open-terminal')}>Terminal hier öffnen</button>
                 <div className="ctx-separator" />
                 <button className="ctx-item" onClick={() => ctxAction('cut')}>Ausschneiden <span className="ctx-shortcut">Strg+X</span></button>
                 <button className="ctx-item" onClick={() => ctxAction('copy-files')}>Kopieren <span className="ctx-shortcut">Strg+C</span></button>
+                {clipboard && clipboard.paths.length > 0 && (
+                  <button className="ctx-item" onClick={() => ctxAction(isDir ? 'paste-into' : 'paste')}>
+                    {isDir ? 'Hier einfügen' : 'Einfügen'} <span className="ctx-shortcut">Strg+V</span>
+                  </button>
+                )}
+                <div className="ctx-separator" />
                 <button className="ctx-item" onClick={() => ctxAction('copy-path')}>Pfad kopieren</button>
                 {!multi && <button className="ctx-item" onClick={() => ctxAction('rename')}>Umbenennen <span className="ctx-shortcut">F2</span></button>}
                 <div className="ctx-separator" />
@@ -909,14 +958,36 @@ export default function ExplorerView() {
               </>
             ) : (
               <>
+                <div className="ctx-submenu-trigger">
+                  <button className="ctx-item">Ansicht ›</button>
+                  <div className="ctx-submenu">
+                    <button className="ctx-item" onClick={() => { /* Platzhalter für Ansicht-Modi */ }}>Details</button>
+                  </div>
+                </div>
+                <div className="ctx-submenu-trigger">
+                  <button className="ctx-item">Sortieren nach ›</button>
+                  <div className="ctx-submenu">
+                    <button className={`ctx-item ${sortCol === 'name' ? 'ctx-item-active' : ''}`} onClick={() => { setCtxMenu(null); handleSort('name'); }}>Name</button>
+                    <button className={`ctx-item ${sortCol === 'size' ? 'ctx-item-active' : ''}`} onClick={() => { setCtxMenu(null); handleSort('size'); }}>Größe</button>
+                    <button className={`ctx-item ${sortCol === 'type' ? 'ctx-item-active' : ''}`} onClick={() => { setCtxMenu(null); handleSort('type'); }}>Typ</button>
+                    <button className={`ctx-item ${sortCol === 'modified' ? 'ctx-item-active' : ''}`} onClick={() => { setCtxMenu(null); handleSort('modified'); }}>Änderungsdatum</button>
+                  </div>
+                </div>
+                <button className="ctx-item" onClick={() => ctxAction('refresh')}>Aktualisieren <span className="ctx-shortcut">F5</span></button>
+                <div className="ctx-separator" />
                 <button className="ctx-item" onClick={() => ctxAction('new-folder')}>Neuer Ordner</button>
                 <button className="ctx-item" onClick={() => ctxAction('new-textfile')}>Neues Textdokument</button>
                 <div className="ctx-separator" />
                 {clipboard && clipboard.paths.length > 0 && (
-                  <button className="ctx-item" onClick={() => ctxAction('paste')}>Einfügen <span className="ctx-shortcut">Strg+V</span></button>
+                  <>
+                    <button className="ctx-item" onClick={() => ctxAction('paste')}>Einfügen <span className="ctx-shortcut">Strg+V</span></button>
+                    <div className="ctx-separator" />
+                  </>
                 )}
                 <button className="ctx-item" onClick={() => ctxAction('open-terminal')}>Terminal hier öffnen</button>
                 <button className="ctx-item" onClick={() => ctxAction('open-in-explorer')}>Im Explorer öffnen</button>
+                <div className="ctx-separator" />
+                <button className="ctx-item" onClick={() => ctxAction('folder-properties')}>Eigenschaften</button>
               </>
             )}
           </div>

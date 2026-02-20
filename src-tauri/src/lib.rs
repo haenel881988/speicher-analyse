@@ -270,6 +270,7 @@ pub fn run() {
             commands::copy_to_clipboard,
             commands::open_in_terminal,
             commands::open_with_dialog,
+            commands::edit_in_editor,
             // Admin
             commands::is_admin,
             commands::restart_as_admin,
