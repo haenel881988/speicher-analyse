@@ -24,10 +24,12 @@ interface Annotation {
 
 interface PageEntry {
   canvas: HTMLCanvasElement;
+  textLayerDiv: HTMLDivElement;
   svg: SVGSVGElement;
   wrapper: HTMLDivElement;
   pageNum: number;
   rendered: boolean;
+  textLayerObj?: any; // TextLayer instance for cleanup
 }
 
 // Lazy pdf.js loader — Worker aus public/ (statisch, ohne Vite-Transformation)
@@ -60,12 +62,20 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
   const [scale, setScale] = useState(1.0);
   const [currentTool, setCurrentTool] = useState<'select' | 'highlight' | 'comment' | 'freehand'>('select');
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
+  const [selectedAnnoIdx, setSelectedAnnoIdx] = useState<number | null>(null);
   const [unsavedChanges, setUnsavedChanges] = useState(false);
   const [infoText, setInfoText] = useState('');
   const [showOcr, setShowOcr] = useState(false);
   const [showMerge, setShowMerge] = useState(false);
   const [ocrProgress, setOcrProgress] = useState<{ running: boolean; text: string; percent: number }>({ running: false, text: '', percent: 0 });
   const [mergeFiles, setMergeFiles] = useState<string[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [gotoPageText, setGotoPageText] = useState('');
+  const [showGotoInput, setShowGotoInput] = useState(false);
+
+  // Undo/Redo stacks
+  const undoStackRef = useRef<Annotation[][]>([]);
+  const redoStackRef = useRef<Annotation[][]>([]);
 
   const pdfDocRef = useRef<any>(null);
   const pageEntriesRef = useRef<PageEntry[]>([]);
@@ -84,6 +94,62 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
   useEffect(() => { currentToolRef.current = currentTool; }, [currentTool]);
 
   const fileName = filePath.split(/[\\/]/).pop() || 'PDF';
+
+  // --- Undo/Redo ---
+  const pushUndo = useCallback((prevAnnotations: Annotation[]) => {
+    undoStackRef.current = [...undoStackRef.current, prevAnnotations];
+    redoStackRef.current = []; // Redo leeren bei neuer Aktion
+  }, []);
+
+  const undo = useCallback(() => {
+    if (undoStackRef.current.length === 0) return;
+    const prev = undoStackRef.current[undoStackRef.current.length - 1];
+    undoStackRef.current = undoStackRef.current.slice(0, -1);
+    redoStackRef.current = [...redoStackRef.current, annotationsRef.current];
+    setAnnotations(prev);
+    setSelectedAnnoIdx(null);
+    setUnsavedChanges(prev.length > 0);
+    // Re-render all pages that have annotations
+    setTimeout(() => {
+      for (let i = 0; i < pageEntriesRef.current.length; i++) {
+        renderAnnotationsForPage(i + 1);
+      }
+    }, 30);
+  }, []);
+
+  const redo = useCallback(() => {
+    if (redoStackRef.current.length === 0) return;
+    const next = redoStackRef.current[redoStackRef.current.length - 1];
+    redoStackRef.current = redoStackRef.current.slice(0, -1);
+    undoStackRef.current = [...undoStackRef.current, annotationsRef.current];
+    setAnnotations(next);
+    setSelectedAnnoIdx(null);
+    setUnsavedChanges(next.length > 0);
+    setTimeout(() => {
+      for (let i = 0; i < pageEntriesRef.current.length; i++) {
+        renderAnnotationsForPage(i + 1);
+      }
+    }, 30);
+  }, []);
+
+  const addAnnotation = useCallback((anno: Annotation) => {
+    pushUndo(annotationsRef.current);
+    setAnnotations(prev => [...prev, anno]);
+    setUnsavedChanges(true);
+  }, [pushUndo]);
+
+  const deleteSelectedAnnotation = useCallback(() => {
+    if (selectedAnnoIdx === null) return;
+    pushUndo(annotationsRef.current);
+    setAnnotations(prev => prev.filter((_, i) => i !== selectedAnnoIdx));
+    setSelectedAnnoIdx(null);
+    setUnsavedChanges(true);
+    setTimeout(() => {
+      for (let i = 0; i < pageEntriesRef.current.length; i++) {
+        renderAnnotationsForPage(i + 1);
+      }
+    }, 30);
+  }, [selectedAnnoIdx, pushUndo]);
 
   // Load PDF when filePath changes
   useEffect(() => {
@@ -106,9 +172,13 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
         pdfDocRef.current = pdfDoc;
         setTotalPages(pdfDoc.numPages);
         setAnnotations([]);
+        undoStackRef.current = [];
+        redoStackRef.current = [];
+        setSelectedAnnoIdx(null);
         setUnsavedChanges(false);
         setScale(1.0);
         setCurrentTool('select');
+        setCurrentPage(1);
 
         const info = await api.pdfGetInfo(filePath);
         const parts = [`${info.pageCount} Seiten`];
@@ -138,7 +208,6 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
   useEffect(() => {
     if (!loaded) return;
     for (const entry of pageEntriesRef.current) entry.rendered = false;
-    // Re-trigger intersection observer
     if (intersectionObRef.current) {
       for (const entry of pageEntriesRef.current) {
         intersectionObRef.current.unobserve(entry.wrapper);
@@ -147,17 +216,88 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
     }
   }, [scale, loaded]);
 
-  // Ctrl+S handler
+  // --- Keyboard Shortcuts ---
   useEffect(() => {
+    if (!loaded) return;
     const handler = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.key === 's' && loaded) {
+      // Ignore when typing in inputs
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
+
+      if (e.ctrlKey && e.key === 's') {
         e.preventDefault();
         save();
+      } else if (e.ctrlKey && e.key === 'z') {
+        e.preventDefault();
+        undo();
+      } else if (e.ctrlKey && (e.key === 'y' || (e.shiftKey && e.key === 'Z'))) {
+        e.preventDefault();
+        redo();
+      } else if (e.ctrlKey && e.key === 'p') {
+        e.preventDefault();
+        window.print();
+      } else if (e.key === '+' || e.key === '=' || (e.ctrlKey && e.key === '+')) {
+        e.preventDefault();
+        setScale(s => Math.min(s + 0.25, 3.0));
+      } else if (e.key === '-' || (e.ctrlKey && e.key === '-')) {
+        e.preventDefault();
+        setScale(s => Math.max(s - 0.25, 0.25));
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        if (showOcr) { setShowOcr(false); setOcrProgress({ running: false, text: '', percent: 0 }); }
+        else if (showMerge) { setShowMerge(false); setMergeFiles([]); }
+        else if (currentTool !== 'select') setCurrentTool('select');
+        else if (selectedAnnoIdx !== null) setSelectedAnnoIdx(null);
+      } else if (e.key === 'Delete' && selectedAnnoIdx !== null) {
+        e.preventDefault();
+        deleteSelectedAnnotation();
+      } else if (e.key === 'PageDown') {
+        e.preventDefault();
+        scrollToPage(Math.min(currentPage + 1, totalPages));
+      } else if (e.key === 'PageUp') {
+        e.preventDefault();
+        scrollToPage(Math.max(currentPage - 1, 1));
+      } else if (e.key === 'Home' && e.ctrlKey) {
+        e.preventDefault();
+        scrollToPage(1);
+      } else if (e.key === 'End' && e.ctrlKey) {
+        e.preventDefault();
+        scrollToPage(totalPages);
       }
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [loaded, annotations, filePath]);
+  }, [loaded, annotations, filePath, currentTool, selectedAnnoIdx, showOcr, showMerge, currentPage, totalPages, undo, redo, deleteSelectedAnnotation]);
+
+  // --- Ctrl+Mausrad Zoom ---
+  useEffect(() => {
+    const container = pagesContainerRef.current;
+    if (!container || !loaded) return;
+    const handler = (e: WheelEvent) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      if (e.deltaY < 0) setScale(s => Math.min(s + 0.1, 3.0));
+      else setScale(s => Math.max(s - 0.1, 0.25));
+    };
+    container.addEventListener('wheel', handler, { passive: false });
+    return () => container.removeEventListener('wheel', handler);
+  }, [loaded]);
+
+  // --- Track current visible page on scroll ---
+  useEffect(() => {
+    const container = pagesContainerRef.current;
+    if (!container || !loaded) return;
+    const handler = () => {
+      const page = getVisiblePage();
+      setCurrentPage(page);
+    };
+    container.addEventListener('scroll', handler, { passive: true });
+    return () => container.removeEventListener('scroll', handler);
+  }, [loaded]);
+
+  const scrollToPage = useCallback((pageNum: number) => {
+    const entry = pageEntriesRef.current[pageNum - 1];
+    if (entry) entry.wrapper.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
 
   const renderAllPages = useCallback(() => {
     const container = pagesContainerRef.current;
@@ -187,6 +327,11 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
       canvas.className = 'pdf-page-canvas';
       wrapper.appendChild(canvas);
 
+      // Text-Layer für Textauswahl (zwischen Canvas und SVG)
+      const textLayerDiv = document.createElement('div');
+      textLayerDiv.className = 'textLayer';
+      wrapper.appendChild(textLayerDiv);
+
       const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
       svg.classList.add('pdf-anno-overlay');
       wrapper.appendChild(svg);
@@ -204,7 +349,7 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
       wireAnnotationEvents(svg, canvas, i);
       container.appendChild(wrapper);
 
-      const entry: PageEntry = { canvas, svg, wrapper, pageNum: i, rendered: false };
+      const entry: PageEntry = { canvas, textLayerDiv, svg, wrapper, pageNum: i, rendered: false };
       pageEntriesRef.current.push(entry);
       intersectionObRef.current!.observe(wrapper);
     }
@@ -214,15 +359,13 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
       pageEntriesRef.current[i].rendered = true;
       renderPage(i + 1);
     }
-
-    // Render thumbnails
-    renderThumbnails();
   }, [totalPages]);
 
   const renderPage = useCallback(async (pageNum: number) => {
     const entry = pageEntriesRef.current[pageNum - 1];
     if (!entry || !pdfDocRef.current) return;
 
+    const pdfjsLib = await loadPdfjs();
     const page = await pdfDocRef.current.getPage(pageNum);
     const viewport = page.getViewport({ scale: scaleRef.current });
 
@@ -234,12 +377,29 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
 
     const ctx = entry.canvas.getContext('2d')!;
     await page.render({ canvasContext: ctx, viewport }).promise;
-    renderAnnotationsForPage(pageNum);
-  }, []);
 
-  const renderThumbnails = useCallback(() => {
-    // Thumbnails are rendered in JSX below, but we need canvas rendering
-    // This is handled by the thumbnail list in the JSX
+    // Text-Layer rendern (für Textauswahl/Kopieren)
+    if (entry.textLayerObj) entry.textLayerObj.cancel();
+    entry.textLayerDiv.innerHTML = '';
+    entry.textLayerDiv.style.width = viewport.width + 'px';
+    entry.textLayerDiv.style.height = viewport.height + 'px';
+    // CSS-Variable für die Textskalierung (von pdf.js erwartet)
+    entry.textLayerDiv.style.setProperty('--total-scale-factor', String(scaleRef.current));
+
+    try {
+      const textContent = await page.getTextContent();
+      const textLayer = new pdfjsLib.TextLayer({
+        textContentSource: textContent,
+        container: entry.textLayerDiv,
+        viewport,
+      });
+      entry.textLayerObj = textLayer;
+      await textLayer.render();
+    } catch {
+      // Text-Layer fehlgeschlagen — kein Problem, PDF bleibt nutzbar
+    }
+
+    renderAnnotationsForPage(pageNum);
   }, []);
 
   const renderAnnotationsForPage = useCallback((pageNum: number) => {
@@ -252,6 +412,7 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
 
     const pageAnnos = annotationsRef.current.filter(a => a.page === pageNum - 1);
     for (const anno of pageAnnos) {
+      const annoGlobalIdx = annotationsRef.current.indexOf(anno);
       if (anno.type === 'highlight' && anno.rect) {
         const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
         rect.classList.add('anno-render');
@@ -261,10 +422,14 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
         rect.setAttribute('height', String((anno.rect.y2 - anno.rect.y1) * s));
         rect.setAttribute('fill', (anno.color || '#FFFF00') + '40');
         rect.setAttribute('stroke', 'none');
+        rect.setAttribute('data-anno-idx', String(annoGlobalIdx));
+        rect.style.cursor = 'pointer';
         svg.appendChild(rect);
       } else if (anno.type === 'text' && anno.rect) {
         const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         g.classList.add('anno-render');
+        g.setAttribute('data-anno-idx', String(annoGlobalIdx));
+        g.style.cursor = 'pointer';
         const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
         circle.setAttribute('cx', String(anno.rect.x1 * s + 12));
         circle.setAttribute('cy', String(anno.rect.y1 * s + 12));
@@ -296,6 +461,10 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
           polyline.setAttribute('stroke-width', String(anno.width || 2));
           polyline.setAttribute('stroke-linecap', 'round');
           polyline.setAttribute('stroke-linejoin', 'round');
+          polyline.setAttribute('data-anno-idx', String(annoGlobalIdx));
+          polyline.style.cursor = 'pointer';
+          // Breiterer Klickbereich für dünne Linien
+          polyline.setAttribute('stroke-opacity', '1');
           svg.appendChild(polyline);
         }
       }
@@ -304,7 +473,26 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
 
   const wireAnnotationEvents = useCallback((svg: SVGSVGElement, _canvas: HTMLCanvasElement, pageNum: number) => {
     svg.addEventListener('mousedown', (e) => {
-      if (currentToolRef.current === 'select') return;
+      // Im Select-Modus: Annotation-Klick erkennen
+      if (currentToolRef.current === 'select') {
+        const target = e.target as Element;
+        const annoEl = target.closest('[data-anno-idx]');
+        if (annoEl) {
+          e.preventDefault();
+          e.stopPropagation();
+          const idx = parseInt(annoEl.getAttribute('data-anno-idx') || '-1');
+          if (idx >= 0) {
+            setSelectedAnnoIdx(idx);
+            // Visuelles Feedback
+            svg.querySelectorAll('.anno-selected').forEach(el => el.classList.remove('anno-selected'));
+            annoEl.classList.add('anno-selected');
+          }
+        } else {
+          setSelectedAnnoIdx(null);
+          svg.querySelectorAll('.anno-selected').forEach(el => el.classList.remove('anno-selected'));
+        }
+        return;
+      }
       e.preventDefault();
       drawingRef.current = true;
       const rect = svg.getBoundingClientRect();
@@ -352,39 +540,55 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
       if (currentToolRef.current === 'highlight' && drawStartRef.current) {
         const r = normalizeRect(drawStartRef.current, endPoint);
         if (r.x2 - r.x1 > 5 && r.y2 - r.y1 > 3) {
-          setAnnotations(prev => [...prev, {
+          addAnnotation({
             type: 'highlight', page: pageNum - 1,
             rect: { x1: r.x1 / s, y1: r.y1 / s, x2: r.x2 / s, y2: r.y2 / s },
             color: '#FFFF00',
-          }]);
-          setUnsavedChanges(true);
+          });
         }
       } else if (currentToolRef.current === 'comment') {
         const text = prompt('Kommentar eingeben:');
         if (text) {
-          setAnnotations(prev => [...prev, {
+          addAnnotation({
             type: 'text', page: pageNum - 1,
             rect: { x1: endPoint.x / s, y1: endPoint.y / s, x2: (endPoint.x + 24) / s, y2: (endPoint.y + 24) / s },
             text, color: '#FFD700',
-          }]);
-          setUnsavedChanges(true);
+          });
         }
       } else if (currentToolRef.current === 'freehand' && currentPathRef.current.length > 2) {
         const scaledPath = currentPathRef.current.map(p => ({ x: p.x / s, y: p.y / s }));
         const bounds = pathBounds(scaledPath);
-        setAnnotations(prev => [...prev, {
+        addAnnotation({
           type: 'ink', page: pageNum - 1, rect: bounds,
           paths: [scaledPath], color: '#FF0000', width: 2,
-        }]);
-        setUnsavedChanges(true);
+        });
       }
 
       svg.querySelectorAll('.temp-draw').forEach(el => el.remove());
-      // Re-render annotations after state update
       setTimeout(() => renderAnnotationsForPage(pageNum), 50);
       currentPathRef.current = [];
     });
-  }, [renderAnnotationsForPage]);
+  }, [renderAnnotationsForPage, addAnnotation]);
+
+  // SVG pointer-events: nur aktiv wenn Annotations-Werkzeug gewählt
+  // Im Select-Modus: SVG nur für Annotation-Klicks, TextLayer für Textauswahl
+  useEffect(() => {
+    for (const entry of pageEntriesRef.current) {
+      if (currentTool === 'select') {
+        // SVG nur für Klicks auf bestehende Annotationen sichtbar
+        // TextLayer liegt darunter und erlaubt Textauswahl
+        entry.svg.style.pointerEvents = 'none';
+        entry.svg.querySelectorAll('.anno-render').forEach(el => {
+          (el as HTMLElement).style.pointerEvents = 'auto';
+        });
+        entry.textLayerDiv.style.pointerEvents = 'auto';
+      } else {
+        // Annotations-Werkzeug aktiv: SVG fängt alle Events
+        entry.svg.style.pointerEvents = 'auto';
+        entry.textLayerDiv.style.pointerEvents = 'none';
+      }
+    }
+  }, [currentTool, annotations]);
 
   const save = useCallback(async () => {
     if (!filePath || annotationsRef.current.length === 0) return;
@@ -427,10 +631,6 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
       showToast('Export fehlgeschlagen: ' + err.message, 'error');
     }
   }, [filePath, showToast]);
-
-  const handlePrint = useCallback(() => {
-    window.print();
-  }, []);
 
   const detachWindow = useCallback(async () => {
     if (!filePath) return;
@@ -554,6 +754,15 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
     return 1;
   }, []);
 
+  const handleGotoPage = useCallback(() => {
+    const num = parseInt(gotoPageText);
+    if (num >= 1 && num <= totalPages) {
+      scrollToPage(num);
+      setShowGotoInput(false);
+      setGotoPageText('');
+    }
+  }, [gotoPageText, totalPages, scrollToPage]);
+
   if (!filePath) {
     return (
       <div className="tool-placeholder">
@@ -563,22 +772,25 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
   }
 
   const tools = [
-    { id: 'select' as const, label: 'Auswählen' },
-    { id: 'highlight' as const, label: 'Markieren' },
-    { id: 'comment' as const, label: 'Kommentar' },
-    { id: 'freehand' as const, label: 'Freihand' },
+    { id: 'select' as const, label: 'Auswählen', shortcut: '' },
+    { id: 'highlight' as const, label: 'Markieren', shortcut: '' },
+    { id: 'comment' as const, label: 'Kommentar', shortcut: '' },
+    { id: 'freehand' as const, label: 'Freihand', shortcut: '' },
   ];
 
   return (
     <div className="pdf-editor">
       <div className="pdf-editor-toolbar">
         <button className="pdf-editor-btn pdf-editor-back" onClick={handleClose}>{'\u2190'} Zurück</button>
-        <span className="pdf-editor-filename">{fileName}</span>
+        <span className="pdf-editor-filename">{fileName}{unsavedChanges ? ' *' : ''}</span>
         <span className="pdf-editor-info">{infoText}</span>
         <div className="pdf-editor-toolbar-right">
-          <button className="pdf-editor-btn" onClick={save} title="Speichern (Ctrl+S)">Speichern</button>
+          <button className="pdf-editor-btn" onClick={undo} disabled={undoStackRef.current.length === 0} title="Rückgängig (Strg+Z)">Rückgängig</button>
+          <button className="pdf-editor-btn" onClick={redo} disabled={redoStackRef.current.length === 0} title="Wiederherstellen (Strg+Y)">Wiederherstellen</button>
+          <span className="pdf-editor-separator" />
+          <button className="pdf-editor-btn" onClick={save} title="Speichern (Strg+S)">Speichern</button>
           <button className="pdf-editor-btn" onClick={exportAs} title="Als Kopie speichern...">Exportieren</button>
-          <button className="pdf-editor-btn" onClick={handlePrint} title="PDF drucken">Drucken</button>
+          <button className="pdf-editor-btn" onClick={() => window.print()} title="Drucken (Strg+P)">Drucken</button>
           <button className="pdf-editor-btn" onClick={() => setShowOcr(true)} title="OCR-Texterkennung">OCR</button>
           <button className="pdf-editor-btn" onClick={() => { setMergeFiles([filePath]); setShowMerge(true); }} title="PDF zusammenfügen">Zusammenfügen</button>
           {!onClose && <button className="pdf-editor-btn" onClick={detachWindow} title="In eigenem Fenster öffnen">Fenster lösen</button>}
@@ -588,9 +800,7 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
       <div className="pdf-editor-body">
         <div className="pdf-editor-thumbnails">
           {Array.from({ length: totalPages }, (_, i) => (
-            <div key={i} className="pdf-thumb" onClick={() => {
-              pageEntriesRef.current[i]?.wrapper.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }}>
+            <div key={i} className={`pdf-thumb ${currentPage === i + 1 ? 'pdf-thumb-active' : ''}`} onClick={() => scrollToPage(i + 1)}>
               <span>{i + 1}</span>
             </div>
           ))}
@@ -606,10 +816,36 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
           <button key={t.id} className={`pdf-editor-tool ${currentTool === t.id ? 'active' : ''}`}
             onClick={() => setCurrentTool(t.id)}>{t.label}</button>
         ))}
+        {selectedAnnoIdx !== null && (
+          <>
+            <span className="pdf-editor-separator" />
+            <button className="pdf-editor-btn pdf-editor-btn-danger" onClick={deleteSelectedAnnotation} title="Ausgewählte Annotation löschen (Entf)">Annotation löschen</button>
+          </>
+        )}
         <span className="pdf-editor-separator" />
-        <button className="pdf-editor-btn" onClick={() => setScale(s => Math.max(s - 0.25, 0.25))}>{'\u2212'}</button>
+        <button className="pdf-editor-btn" onClick={() => setScale(s => Math.max(s - 0.25, 0.25))} title="Verkleinern (-)">{'\u2212'}</button>
         <span className="pdf-editor-zoom-info">{Math.round(scale * 100)}%</span>
-        <button className="pdf-editor-btn" onClick={() => setScale(s => Math.min(s + 0.25, 3.0))}>+</button>
+        <button className="pdf-editor-btn" onClick={() => setScale(s => Math.min(s + 0.25, 3.0))} title="Vergrößern (+)">+</button>
+        <span className="pdf-editor-separator" />
+        {/* Seitenanzeige + Navigation */}
+        <button className="pdf-editor-btn" onClick={() => scrollToPage(Math.max(currentPage - 1, 1))} disabled={currentPage <= 1} title="Vorherige Seite (Bild hoch)">{'\u25C0'}</button>
+        {showGotoInput ? (
+          <input type="text" className="pdf-editor-goto-input" value={gotoPageText} autoFocus
+            placeholder={String(currentPage)} size={3}
+            onChange={e => setGotoPageText(e.target.value.replace(/\D/g, ''))}
+            onKeyDown={e => {
+              if (e.key === 'Enter') handleGotoPage();
+              if (e.key === 'Escape') { setShowGotoInput(false); setGotoPageText(''); }
+              e.stopPropagation();
+            }}
+            onBlur={() => { setShowGotoInput(false); setGotoPageText(''); }}
+          />
+        ) : (
+          <span className="pdf-editor-page-info" onClick={() => setShowGotoInput(true)} title="Klicken um zu einer Seite zu springen">
+            Seite {currentPage} von {totalPages}
+          </span>
+        )}
+        <button className="pdf-editor-btn" onClick={() => scrollToPage(Math.min(currentPage + 1, totalPages))} disabled={currentPage >= totalPages} title="Nächste Seite (Bild runter)">{'\u25B6'}</button>
       </div>
 
       {/* OCR Dialog */}
