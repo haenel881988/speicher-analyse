@@ -142,7 +142,7 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
     redoStackRef.current = [...redoStackRef.current, annotationsRef.current];
     setAnnotations(prev);
     setSelectedAnnoIdx(null);
-    setUnsavedChanges(prev.length > 0);
+    setUnsavedChanges(true); // Konservativ: Undo ändert immer den Zustand gegenüber letztem Speichern
     // Re-render all pages that have annotations
     setTimeout(() => {
       for (let i = 0; i < pageEntriesRef.current.length; i++) {
@@ -158,7 +158,7 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
     undoStackRef.current = [...undoStackRef.current, annotationsRef.current];
     setAnnotations(next);
     setSelectedAnnoIdx(null);
-    setUnsavedChanges(next.length > 0);
+    setUnsavedChanges(true); // Konservativ: Redo ändert immer den Zustand gegenüber letztem Speichern
     setTimeout(() => {
       for (let i = 0; i < pageEntriesRef.current.length; i++) {
         renderAnnotationsForPage(i + 1);
@@ -698,7 +698,13 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
       });
       if (!result || result.canceled || !result.path) return;
       const outputPath = result.path;
-      await api.pdfSaveAnnotations(filePath, outputPath, annotationsRef.current);
+      // Dirty pages sammeln (wie bei save), damit Export den aktuellen Editor-Zustand widerspiegelt
+      const pagesToClear = new Set<number>();
+      for (const a of annotationsRef.current) pagesToClear.add(a.page);
+      for (const prev of undoStackRef.current) {
+        for (const a of prev) pagesToClear.add(a.page);
+      }
+      await api.pdfSaveAnnotations(filePath, outputPath, annotationsRef.current, Array.from(pagesToClear));
       showToast('PDF exportiert: ' + outputPath.split(/[\\/]/).pop(), 'success');
     } catch (err: any) {
       showToast('Export fehlgeschlagen: ' + err.message, 'error');
@@ -846,8 +852,8 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
       <button data-action="rotate-ccw">Seite drehen (-90\u00B0)</button>
       <button data-action="delete">Seite löschen</button>
     `;
-    menu.style.left = e.clientX + 'px';
-    menu.style.top = e.clientY + 'px';
+    menu.style.left = Math.min(e.clientX, window.innerWidth - 200) + 'px';
+    menu.style.top = Math.min(e.clientY, window.innerHeight - 100) + 'px';
     document.body.appendChild(menu);
 
     const cleanup = () => menu.remove();
