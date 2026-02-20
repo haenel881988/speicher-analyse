@@ -72,9 +72,7 @@ function AppInner() {
           ctx.setCurrentPath(progress.current_path);
           ctx.setLastScanProgress(progress);
 
-          const driveLetter = progress.current_path.substring(0, 3).toUpperCase();
           setSelectedDrive(prev => {
-            // Find matching drive
             return prev || progress.current_path.substring(0, 3);
           });
 

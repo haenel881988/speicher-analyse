@@ -55,7 +55,12 @@ export default function UndoLogView() {
   }, [showToast, loadEntries]);
 
   const handleClear = useCallback(async () => {
-    if (!confirm('Gesamtes Aktionsprotokoll leeren? Dies kann nicht rückgängig gemacht werden.')) return;
+    const confirmed = await api.showConfirmDialog({
+      type: 'warning', title: 'Protokoll leeren',
+      message: 'Gesamtes Aktionsprotokoll leeren? Dies kann nicht rückgängig gemacht werden.',
+      buttons: ['Abbrechen', 'Leeren'], defaultId: 0,
+    });
+    if (confirmed.response !== 1) return;
     try {
       await api.clearUndoLog();
       setEntries([]);

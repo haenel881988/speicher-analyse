@@ -82,7 +82,6 @@ export default function DuplicatesView() {
   const deleteSelected = useCallback(async () => {
     if (checked.size === 0) { showToast('Keine Dateien ausgewählt', 'info'); return; }
     const paths = [...checked];
-    const sampleSize = results?.groups[0]?.size || 0;
     const result = await api.showConfirmDialog({
       type: 'warning', title: 'Duplikate löschen',
       message: `${paths.length} Duplikat(e) in den Papierkorb verschieben?`,

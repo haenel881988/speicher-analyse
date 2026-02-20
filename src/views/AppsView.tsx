@@ -115,7 +115,12 @@ function OverviewTab({ showToast }: { showToast: (msg: string, type?: any) => vo
 
   const handleUninstall = useCallback(async (prog: Program) => {
     if (!prog.uninstallString) { showToast('Kein Deinstallationsbefehl vorhanden', 'error'); return; }
-    if (!confirm(`"${prog.name}" wirklich deinstallieren?`)) return;
+    const confirmed = await api.showConfirmDialog({
+      type: 'warning', title: 'Deinstallieren',
+      message: `"${prog.name}" wirklich deinstallieren?`,
+      buttons: ['Abbrechen', 'Deinstallieren'], defaultId: 0,
+    });
+    if (confirmed.response !== 1) return;
     try {
       await api.uninstallSoftware(prog.uninstallString, prog.name);
       showToast(`"${prog.name}" wird deinstalliert...`, 'info');
@@ -341,7 +346,12 @@ function CleanupTab({ showToast }: { showToast: (msg: string, type?: any) => voi
   const handleClean = useCallback(async () => {
     const paths = Array.from(selected);
     if (paths.length === 0) return;
-    if (!confirm(`${paths.length} Cache-Verzeichnisse leeren?`)) return;
+    const confirmed = await api.showConfirmDialog({
+      type: 'warning', title: 'Cache leeren',
+      message: `${paths.length} Cache-Verzeichnisse leeren?`,
+      buttons: ['Abbrechen', 'Leeren'], defaultId: 0,
+    });
+    if (confirmed.response !== 1) return;
     try {
       const result = await api.cleanAppCache(paths);
       showToast(`${result.cleaned} Cache-Verzeichnisse geleert`, 'success');
@@ -421,8 +431,8 @@ function ToolsTab({ showToast }: { showToast: (msg: string, type?: any) => void 
         defaultPath: result.defaultName,
       });
       if (!saveResult || saveResult.canceled) return;
-      const outputPath = saveResult.path || saveResult;
-      if (typeof outputPath !== 'string') return;
+      const outputPath = saveResult.path;
+      if (!outputPath) return;
       await api.writeFileContent(outputPath, result.content);
       showToast(`Exportiert als ${format.toUpperCase()}: ${outputPath.split(/[\\/]/).pop()}`, 'success');
     } catch (err: any) {

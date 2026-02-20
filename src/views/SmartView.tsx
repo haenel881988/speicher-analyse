@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import * as api from '../api/tauri-api';
-import { escapeHtml } from '../utils/escape';
+
 
 function formatHours(hours: number | null): string {
   if (hours == null) return '-';

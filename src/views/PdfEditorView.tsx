@@ -396,8 +396,15 @@ export default function PdfEditorView({ filePath = '', onClose }: { filePath?: s
     }
   }, [filePath, showToast]);
 
-  const handleClose = useCallback(() => {
-    if (unsavedChanges && !confirm('Ungespeicherte Änderungen verwerfen?')) return;
+  const handleClose = useCallback(async () => {
+    if (unsavedChanges) {
+      const confirmed = await api.showConfirmDialog({
+        type: 'warning', title: 'Änderungen verwerfen?',
+        message: 'Es gibt ungespeicherte Änderungen. Wirklich schließen?',
+        buttons: ['Abbrechen', 'Verwerfen'], defaultId: 0,
+      });
+      if (confirmed.response !== 1) return;
+    }
     if (onClose) onClose();
     else setActiveTab('explorer');
   }, [unsavedChanges, onClose, setActiveTab]);
@@ -411,9 +418,8 @@ export default function PdfEditorView({ filePath = '', onClose }: { filePath?: s
         defaultPath: defaultName,
         filters: [{ name: 'PDF', extensions: ['pdf'] }],
       });
-      if (!result || result.canceled) return;
-      const outputPath = result.path || result;
-      if (typeof outputPath !== 'string') return;
+      if (!result || result.canceled || !result.path) return;
+      const outputPath = result.path;
       await api.pdfSaveAnnotations(filePath, outputPath, annotationsRef.current);
       showToast('PDF exportiert: ' + outputPath.split(/[\\/]/).pop(), 'success');
     } catch (err: any) {
@@ -500,7 +506,12 @@ export default function PdfEditorView({ filePath = '', onClose }: { filePath?: s
 
   const deletePage = useCallback(async (pageNum: number) => {
     if (totalPages <= 1) { showToast('Die letzte Seite kann nicht gelöscht werden.', 'error'); return; }
-    if (!confirm(`Seite ${pageNum} wirklich löschen? Dies kann nicht rückgängig gemacht werden.`)) return;
+    const confirmed = await api.showConfirmDialog({
+      type: 'warning', title: 'Seite löschen',
+      message: `Seite ${pageNum} wirklich löschen? Dies kann nicht rückgängig gemacht werden.`,
+      buttons: ['Abbrechen', 'Löschen'], defaultId: 0,
+    });
+    if (confirmed.response !== 1) return;
     try {
       await api.pdfDeletePages(filePath, filePath, [pageNum - 1]);
       setLoaded(false);
@@ -615,8 +626,8 @@ export default function PdfEditorView({ filePath = '', onClose }: { filePath?: s
           files={mergeFiles}
           onAddFile={async () => {
             try {
-              const result = await api.showSaveDialog({ title: 'PDF auswählen', filters: [{ name: 'PDF', extensions: ['pdf'] }], directory: false });
-              if (result) setMergeFiles(prev => [...prev, result]);
+              const result = await api.showSaveDialog({ title: 'PDF auswählen', filters: [{ name: 'PDF', extensions: ['pdf'] }] });
+              if (result && !result.canceled && result.path) setMergeFiles(prev => [...prev, result.path]);
             } catch { /* Cancelled */ }
           }}
           onMerge={handleMerge}
