@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import * as api from '../api/tauri-api';
 import { useAppContext } from '../context/AppContext';
 import { formatBytes, parseSize } from '../utils/format';
@@ -100,13 +100,17 @@ export default function DuplicatesView() {
     }
   }, [checked, results, showToast]);
 
-  const checkedSize = [...checked].reduce((sum, path) => {
-    if (!results) return sum;
+  const checkedSize = useMemo(() => {
+    if (!results || checked.size === 0) return 0;
+    // Build path→size lookup for O(1) access instead of O(N*M) nested loop
+    const pathSizeMap = new Map<string, number>();
     for (const g of results.groups) {
-      if (g.files.some(f => f.path === path)) return sum + g.size;
+      for (const f of g.files) pathSizeMap.set(f.path, g.size);
     }
+    let sum = 0;
+    for (const path of checked) sum += pathSizeMap.get(path) || 0;
     return sum;
-  }, 0);
+  }, [checked, results]);
 
   const progressPct = progress && progress.totalToHash > 0
     ? (progress.filesHashed / progress.totalToHash * 100) : 0;

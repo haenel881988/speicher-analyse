@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import * as api from '../api/tauri-api';
 import { useAppContext } from '../context/AppContext';
 import { formatBytes, formatNumber } from '../utils/format';
@@ -153,7 +153,7 @@ export default function TreeView() {
   }, [rows]);
 
   // Breadcrumb
-  const breadcrumbParts = (() => {
+  const breadcrumbParts = useMemo(() => {
     if (!rootPath) return [];
     const isWindows = rootPath.includes('\\');
     const sep = isWindows ? '\\' : '/';
@@ -163,7 +163,7 @@ export default function TreeView() {
       buildPath += s + (i === 0 && isWindows ? '\\' : sep);
       return { name: s, path: buildPath };
     });
-  })();
+  }, [rootPath]);
 
   return (
     <>

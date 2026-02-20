@@ -62,6 +62,7 @@ export default function ExplorerView() {
   const lastClickedRef = useRef<string | null>(null);
   const deepSearchUnlistenRef = useRef<Array<() => void>>([]);
   const dirCacheRef = useRef<Map<string, { data: any; time: number }>>(new Map());
+  const navGenerationRef = useRef(0);
   const columnWidthsRef = useRef<Record<string, number>>(
     (() => { try { const s = localStorage.getItem('explorer-col-widths-default'); return s ? JSON.parse(s) : {}; } catch { return {}; } })()
   );
@@ -97,20 +98,34 @@ export default function ExplorerView() {
     setLoading(true);
     setErrorText('');
 
+    // Generation counter to prevent stale async results from overwriting newer navigation
+    const generation = ++navGenerationRef.current;
+
     // Check cache
     const cached = dirCacheRef.current.get(dirPath);
     const now = Date.now();
     let result;
-    if (cached && (now - cached.time) < 5000) {
-      result = cached.data;
-    } else {
-      result = await api.listDirectory(dirPath);
-      dirCacheRef.current.set(dirPath, { data: result, time: now });
-      if (dirCacheRef.current.size > 10) {
-        const oldest = dirCacheRef.current.keys().next().value;
-        if (oldest) dirCacheRef.current.delete(oldest);
+    try {
+      if (cached && (now - cached.time) < 5000) {
+        result = cached.data;
+      } else {
+        result = await api.listDirectory(dirPath);
+        dirCacheRef.current.set(dirPath, { data: result, time: now });
+        if (dirCacheRef.current.size > 10) {
+          const oldest = dirCacheRef.current.keys().next().value;
+          if (oldest) dirCacheRef.current.delete(oldest);
+        }
       }
+    } catch (err: any) {
+      if (generation !== navGenerationRef.current) return;
+      setErrorText(err.message || 'Verzeichnis konnte nicht geladen werden');
+      setEntries([]);
+      setLoading(false);
+      return;
     }
+
+    // Stale navigation — a newer navigateTo was called while we awaited
+    if (generation !== navGenerationRef.current) return;
 
     if (result.error) {
       setErrorText(result.error);
@@ -123,6 +138,7 @@ export default function ExplorerView() {
     // Load file tags
     let tags: Record<string, any> = {};
     try { tags = await api.getTagsForDirectory(dirPath); } catch {}
+    if (generation !== navGenerationRef.current) return;
     setDirTags(tags);
 
     // Enrich folder sizes from scan data
@@ -133,6 +149,7 @@ export default function ExplorerView() {
       if (folderPaths.length > 0) {
         try {
           const data = await api.getFolderSizesBulk(currentScanId, folderPaths, dirPath);
+          if (generation !== navGenerationRef.current) return;
           if (data?.folders) {
             fSizes = data.folders;
             pSize = data.parent?.size || 0;
@@ -143,6 +160,7 @@ export default function ExplorerView() {
         } catch {}
       }
     }
+    if (generation !== navGenerationRef.current) return;
     setFolderSizes(fSizes);
     setParentFolderSize(pSize);
 
@@ -584,10 +602,14 @@ export default function ExplorerView() {
     try { sourcePaths = JSON.parse(e.dataTransfer.getData('text/plain')); } catch { return; }
     sourcePaths = sourcePaths.filter(p => p !== targetPath);
     if (!sourcePaths.length) return;
-    if (e.ctrlKey) await api.copy(sourcePaths, targetPath);
-    else await api.move(sourcePaths, targetPath);
-    refresh();
-  }, [refresh]);
+    try {
+      if (e.ctrlKey) await api.copy(sourcePaths, targetPath);
+      else await api.move(sourcePaths, targetPath);
+      refresh();
+    } catch (err: any) {
+      showToast('Fehler: ' + (err.message || 'Verschieben/Kopieren fehlgeschlagen'), 'error');
+    }
+  }, [refresh, showToast]);
 
   const formatDateTime = (ms: number) => {
     if (!ms) return '-';

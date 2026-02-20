@@ -36,36 +36,43 @@ function AppInner() {
     setStubToastCallback((msg, type) => ctx.showToast(msg, type as any));
   }, [ctx.showToast]);
 
-  // Load drives on mount
+  // Load drives, capabilities, battery, session — all in parallel for faster startup
   useEffect(() => {
     (async () => {
-      try {
-        const drives = await api.getDrives();
+      const [drivesResult, capsResult, batteryResult, sessionResult] = await Promise.allSettled([
+        api.getDrives(),
+        api.getSystemCapabilities(),
+        api.getBatteryStatus(),
+        api.getRestoredSession(),
+      ]);
+
+      // Drives
+      if (drivesResult.status === 'fulfilled') {
+        const drives = drivesResult.value;
         ctx.setDrives(drives);
         const cDrive = drives.find((d: any) => d.mountpoint.toUpperCase().startsWith('C'));
         if (cDrive) setSelectedDrive(cDrive.mountpoint);
-      } catch { /* ignore */ }
+      }
 
       // System capabilities
-      try {
-        const caps = await api.getSystemCapabilities();
-        ctx.setCapabilities(caps);
-      } catch { /* ignore */ }
+      if (capsResult.status === 'fulfilled') {
+        ctx.setCapabilities(capsResult.value);
+      }
 
       // Battery monitoring
-      try {
-        const status = await api.getBatteryStatus();
+      if (batteryResult.status === 'fulfilled') {
+        const status = batteryResult.value;
         if (status.hasBattery === false) {
           ctx.setBatteryInfo({ onBattery: false, percentage: null, isCharging: false });
         } else {
           updateBattery();
           batteryIntervalRef.current = setInterval(updateBattery, 30000);
         }
-      } catch { /* ignore */ }
+      }
 
       // Session restore
-      try {
-        const restored = await api.getRestoredSession();
+      if (sessionResult.status === 'fulfilled') {
+        const restored = sessionResult.value;
         if (restored?.sessions?.length > 0) {
           const progress = restored.sessions[0];
           ctx.setScanId(progress.scan_id);
@@ -82,8 +89,8 @@ function AppInner() {
             'success'
           );
         }
-      } catch (err) {
-        console.error('[Session] Restore FEHLER:', err);
+      } else {
+        console.error('[Session] Restore FEHLER:', sessionResult.reason);
       }
     })();
 

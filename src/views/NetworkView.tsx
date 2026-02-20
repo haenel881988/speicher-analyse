@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import * as api from '../api/tauri-api';
 import { useAppContext } from '../context/AppContext';
 
@@ -365,7 +365,7 @@ export default function NetworkView() {
   }, [loaded, activeSubTab, renderSparklines]);
 
   // Filter groups
-  const getFilteredGroups = useCallback((): ConnectionGroup[] => {
+  const filteredGroups = useMemo((): ConnectionGroup[] => {
     let groups = [...groupedData];
     groups.sort((a, b) => {
       const aIdle = a.processName.toLowerCase() === 'idle' || (a.states.TimeWait === a.connectionCount);
@@ -424,7 +424,7 @@ export default function NetworkView() {
   const trackerCount = groupedData.filter(g => g.hasTrackers).length;
   const highRiskCount = groupedData.filter(g => g.hasHighRisk).length;
   const showToolbar = activeSubTab === 'connections' || activeSubTab === 'livefeed';
-  const filteredGroups = getFilteredGroups();
+  // filteredGroups is computed via useMemo above
 
   const recStatus = recordingStatus;
   const recElapsed = recStatus?.elapsedSeconds || 0;

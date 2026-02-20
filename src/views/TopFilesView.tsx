@@ -58,7 +58,7 @@ export default function TopFilesView() {
     });
   }, [files, sortCol, sortAsc]);
 
-  const totalSize = files.reduce((sum, f) => sum + f.size, 0);
+  const totalSize = useMemo(() => files.reduce((sum, f) => sum + f.size, 0), [files]);
 
   return (
     <>
