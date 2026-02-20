@@ -54,6 +54,9 @@ export default function ExplorerView() {
   const [findingEmpty, setFindingEmpty] = useState(false);
   const [renamePath, setRenamePath] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; entry: FileEntry | null } | null>(null);
+  const [newFolderName, setNewFolderName] = useState<string | null>(null);
+  const [moveTarget, setMoveTarget] = useState<string | null>(null);
 
   const lastClickedRef = useRef<string | null>(null);
   const dirCacheRef = useRef<Map<string, { data: any; time: number }>>(new Map());
@@ -307,6 +310,143 @@ export default function ExplorerView() {
     setRenamePath(null);
   }, [renamePath, renameValue, entries, refresh]);
 
+  // Close context menu on click anywhere or Escape
+  useEffect(() => {
+    if (!ctxMenu) return;
+    const close = () => setCtxMenu(null);
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
+    document.addEventListener('click', close);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('click', close); document.removeEventListener('keydown', onKey); };
+  }, [ctxMenu]);
+
+  const handleContextMenu = useCallback((e: React.MouseEvent, entry: FileEntry | null) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // If right-clicking an unselected entry, select only that entry
+    if (entry && !selectedPaths.has(entry.path)) {
+      setSelectedPaths(new Set([entry.path]));
+    }
+    setCtxMenu({ x: e.clientX, y: e.clientY, entry });
+  }, [selectedPaths]);
+
+  const ctxAction = useCallback(async (action: string) => {
+    setCtxMenu(null);
+    const paths = [...selectedPaths];
+    const entry = ctxMenu?.entry;
+    const singlePath = entry?.path || paths[0];
+
+    switch (action) {
+      case 'open':
+        if (entry?.isDirectory) navigateTo(entry.path);
+        else if (singlePath) api.openFile(singlePath);
+        break;
+      case 'open-with':
+        if (singlePath) api.openWithDialog(singlePath);
+        break;
+      case 'open-in-explorer':
+        if (singlePath) api.showInExplorer(singlePath);
+        break;
+      case 'open-terminal':
+        if (singlePath) api.openInTerminal(entry?.isDirectory ? singlePath : currentPath);
+        break;
+      case 'copy-path':
+        if (singlePath) { api.copyToClipboard(singlePath); showToast('Pfad kopiert', 'info'); }
+        break;
+      case 'rename':
+        if (entry) { setRenamePath(entry.path); setRenameValue(entry.name); }
+        break;
+      case 'trash':
+        await handleDelete(false);
+        break;
+      case 'delete-permanent':
+        await handleDelete(true);
+        break;
+      case 'new-folder':
+        setNewFolderName('');
+        break;
+      case 'move-to': {
+        const result = await api.showSaveDialog({ title: 'Zielordner wählen', directory: true });
+        if (result && typeof result === 'string') {
+          try {
+            await api.move(paths, result);
+            showToast(`${paths.length} Element(e) verschoben`, 'info');
+            refresh();
+          } catch (err: any) { showToast('Fehler: ' + err.message, 'error'); }
+        }
+        break;
+      }
+      case 'copy-to': {
+        const result = await api.showSaveDialog({ title: 'Zielordner wählen', directory: true });
+        if (result && typeof result === 'string') {
+          try {
+            await api.copy(paths, result);
+            showToast(`${paths.length} Element(e) kopiert`, 'info');
+          } catch (err: any) { showToast('Fehler: ' + err.message, 'error'); }
+        }
+        break;
+      }
+      case 'create-zip':
+        try {
+          await api.createArchive(paths);
+          showToast('ZIP erstellt', 'info');
+          refresh();
+        } catch (err: any) { showToast('Fehler: ' + err.message, 'error'); }
+        break;
+      case 'extract':
+        if (singlePath) {
+          try {
+            await api.extractArchive(singlePath);
+            showToast('Archiv entpackt', 'info');
+            refresh();
+          } catch (err: any) { showToast('Fehler: ' + err.message, 'error'); }
+        }
+        break;
+      case 'properties':
+        if (singlePath) {
+          try {
+            const props = await api.fileProperties(singlePath);
+            const general = props.general || props;
+            const msg = [
+              `Name: ${general.name || entry?.name || ''}`,
+              `Pfad: ${general.path || singlePath}`,
+              `Größe: ${formatBytes(general.size || entry?.size || 0)}`,
+              general.created ? `Erstellt: ${new Date(general.created).toLocaleString('de-DE')}` : '',
+              general.modified ? `Geändert: ${new Date(general.modified).toLocaleString('de-DE')}` : '',
+              general.isDirectory ? `Typ: Ordner` : `Typ: ${general.extension || entry?.extension || '-'}`,
+            ].filter(Boolean).join('\n');
+            api.showConfirmDialog({ title: 'Eigenschaften', message: msg, okLabel: 'OK' });
+          } catch (err: any) { showToast('Fehler: ' + err.message, 'error'); }
+        }
+        break;
+      case 'run-as-admin':
+        if (singlePath) api.runAsAdmin(singlePath);
+        break;
+      case 'tag-red': case 'tag-orange': case 'tag-yellow': case 'tag-green': case 'tag-blue': case 'tag-purple':
+        if (singlePath) {
+          const color = action.replace('tag-', '');
+          try { await api.setFileTag(singlePath, color, ''); refresh(); } catch {}
+        }
+        break;
+      case 'tag-remove':
+        if (singlePath) {
+          try { await api.removeFileTag(singlePath); refresh(); } catch {}
+        }
+        break;
+    }
+  }, [ctxMenu, selectedPaths, currentPath, navigateTo, handleDelete, refresh, showToast]);
+
+  const handleNewFolder = useCallback(async () => {
+    if (newFolderName === null) return;
+    const name = newFolderName.trim();
+    if (!name) { setNewFolderName(null); return; }
+    try {
+      await api.createFolder(currentPath, name);
+      refresh();
+    } catch (err: any) { showToast('Fehler: ' + err.message, 'error'); }
+    setNewFolderName(null);
+  }, [newFolderName, currentPath, refresh, showToast]);
+
   const findEmptyFolders = useCallback(async () => {
     setFindingEmpty(true);
     try {
@@ -544,6 +684,7 @@ export default function ExplorerView() {
 
         {/* File List */}
         <div className="explorer-file-list" ref={fileListRef}
+          onContextMenu={e => { if (!(e.target as HTMLElement).closest('tr[data-path]')) handleContextMenu(e, null); }}
           onDragOver={e => { if (!(e.target as HTMLElement).closest('tr[data-path]')) { e.preventDefault(); e.dataTransfer.dropEffect = e.ctrlKey ? 'copy' : 'move'; } }}
           onDrop={e => { if (!(e.target as HTMLElement).closest('tr[data-path]')) handleDrop(e, currentPath); }}>
           {loading ? (
@@ -590,6 +731,7 @@ export default function ExplorerView() {
                       className={`${isSelected ? 'selected' : ''} ${sizeClass} ${isTemp ? 'explorer-temp-file' : ''} ${isEmpty ? 'explorer-empty-folder' : ''}`}
                       onClick={e => selectRow(entry.path, e)}
                       onDoubleClick={() => handleDoubleClick(entry)}
+                      onContextMenu={e => handleContextMenu(e, entry)}
                       draggable onDragStart={e => handleDragStart(e, entry.path)}
                       onDragOver={entry.isDirectory ? e => { e.preventDefault(); e.dataTransfer.dropEffect = e.ctrlKey ? 'copy' : 'move'; (e.currentTarget as HTMLElement).classList.add('drag-over'); } : undefined}
                       onDragLeave={entry.isDirectory ? e => (e.currentTarget as HTMLElement).classList.remove('drag-over') : undefined}
@@ -643,6 +785,92 @@ export default function ExplorerView() {
           )}
         </div>
       </div>
+
+      {/* Context Menu */}
+      {ctxMenu && (() => {
+        const entry = ctxMenu.entry;
+        const multi = selectedPaths.size > 1;
+        const isDir = entry?.isDirectory;
+        const isArchive = entry && /\.(zip|7z|rar|tar|gz|bz2)$/i.test(entry.extension);
+        const hasTag = entry ? !!dirTags[entry.path] : false;
+        return (
+          <div className="explorer-ctx-menu" style={{ left: ctxMenu.x, top: ctxMenu.y }} onClick={e => e.stopPropagation()}>
+            {entry ? (
+              <>
+                <button className="ctx-item" onClick={() => ctxAction('open')}>
+                  {isDir ? 'Öffnen' : 'Öffnen'}
+                </button>
+                {!isDir && <button className="ctx-item" onClick={() => ctxAction('open-with')}>Öffnen mit...</button>}
+                {!isDir && entry.extension === '.exe' && (
+                  <button className="ctx-item" onClick={() => ctxAction('run-as-admin')}>Als Administrator ausführen</button>
+                )}
+                <button className="ctx-item" onClick={() => ctxAction('open-in-explorer')}>Im Explorer anzeigen</button>
+                <button className="ctx-item" onClick={() => ctxAction('open-terminal')}>Terminal hier öffnen</button>
+                <div className="ctx-separator" />
+                <button className="ctx-item" onClick={() => ctxAction('copy-path')}>Pfad kopieren</button>
+                {!multi && <button className="ctx-item" onClick={() => ctxAction('rename')}>Umbenennen <span className="ctx-shortcut">F2</span></button>}
+                <div className="ctx-separator" />
+                <button className="ctx-item" onClick={() => ctxAction('move-to')}>Verschieben nach...</button>
+                <button className="ctx-item" onClick={() => ctxAction('copy-to')}>Kopieren nach...</button>
+                <div className="ctx-separator" />
+                <button className="ctx-item" onClick={() => ctxAction('create-zip')}>Als ZIP komprimieren</button>
+                {isArchive && <button className="ctx-item" onClick={() => ctxAction('extract')}>Archiv entpacken</button>}
+                <div className="ctx-separator" />
+                {!multi && (
+                  <div className="ctx-submenu-trigger">
+                    <button className="ctx-item">Tag setzen ›</button>
+                    <div className="ctx-submenu">
+                      {['red', 'orange', 'yellow', 'green', 'blue', 'purple'].map(c => (
+                        <button key={c} className="ctx-item ctx-tag-item" onClick={() => ctxAction('tag-' + c)}>
+                          <span className="ctx-tag-dot" style={{ background: TAG_COLORS[c]?.hex || '#888' }} />
+                          {TAG_COLORS[c]?.label || c}
+                        </button>
+                      ))}
+                      {hasTag && <>
+                        <div className="ctx-separator" />
+                        <button className="ctx-item" onClick={() => ctxAction('tag-remove')}>Tag entfernen</button>
+                      </>}
+                    </div>
+                  </div>
+                )}
+                <div className="ctx-separator" />
+                <button className="ctx-item" onClick={() => ctxAction('trash')}>In Papierkorb <span className="ctx-shortcut">Entf</span></button>
+                <button className="ctx-item ctx-item-danger" onClick={() => ctxAction('delete-permanent')}>Endgültig löschen <span className="ctx-shortcut">Shift+Entf</span></button>
+                <div className="ctx-separator" />
+                {!multi && <button className="ctx-item" onClick={() => ctxAction('properties')}>Eigenschaften</button>}
+              </>
+            ) : (
+              <>
+                <button className="ctx-item" onClick={() => ctxAction('new-folder')}>Neuer Ordner</button>
+                <div className="ctx-separator" />
+                <button className="ctx-item" onClick={() => ctxAction('open-terminal')}>Terminal hier öffnen</button>
+                <button className="ctx-item" onClick={() => ctxAction('open-in-explorer')}>Im Explorer öffnen</button>
+              </>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* New Folder Dialog */}
+      {newFolderName !== null && (
+        <div className="explorer-new-folder-overlay" onClick={() => setNewFolderName(null)}>
+          <div className="explorer-new-folder-dialog" onClick={e => e.stopPropagation()}>
+            <h3>Neuer Ordner</h3>
+            <input type="text" value={newFolderName} autoFocus placeholder="Ordnername..."
+              aria-label="Neuer Ordnername"
+              onChange={e => setNewFolderName(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') handleNewFolder();
+                if (e.key === 'Escape') setNewFolderName(null);
+              }}
+            />
+            <div className="explorer-new-folder-actions">
+              <button onClick={() => setNewFolderName(null)}>Abbrechen</button>
+              <button className="primary" onClick={handleNewFolder}>Erstellen</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
