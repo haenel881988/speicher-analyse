@@ -337,7 +337,13 @@ export default function ExplorerView() {
         if (singlePath) api.openInTerminal(entry?.isDirectory ? singlePath : currentPath);
         break;
       case 'copy-path':
-        if (singlePath) { api.copyToClipboard(singlePath); showToast('Pfad kopiert', 'info'); }
+        if (paths.length > 1) {
+          api.copyToClipboard(paths.join('\n'));
+          showToast(`${paths.length} Pfade kopiert`, 'info');
+        } else if (singlePath) {
+          api.copyToClipboard(singlePath);
+          showToast('Pfad kopiert', 'info');
+        }
         break;
       case 'rename':
         if (entry) { setRenamePath(entry.path); setRenameValue(entry.name); }
@@ -440,17 +446,23 @@ export default function ExplorerView() {
       case 'run-as-admin':
         if (singlePath) api.runAsAdmin(singlePath);
         break;
-      case 'tag-red': case 'tag-orange': case 'tag-yellow': case 'tag-green': case 'tag-blue': case 'tag-purple':
-        if (singlePath) {
-          const color = action.replace('tag-', '');
-          try { await api.setFileTag(singlePath, color, ''); refresh(); } catch {}
+      case 'tag-red': case 'tag-orange': case 'tag-yellow': case 'tag-green': case 'tag-blue': case 'tag-purple': {
+        const color = action.replace('tag-', '');
+        const tagPaths = paths.length > 0 ? paths : (singlePath ? [singlePath] : []);
+        for (const tp of tagPaths) {
+          try { await api.setFileTag(tp, color, ''); } catch {}
         }
+        if (tagPaths.length > 0) refresh();
         break;
-      case 'tag-remove':
-        if (singlePath) {
-          try { await api.removeFileTag(singlePath); refresh(); } catch {}
+      }
+      case 'tag-remove': {
+        const removePaths = paths.length > 0 ? paths : (singlePath ? [singlePath] : []);
+        for (const tp of removePaths) {
+          try { await api.removeFileTag(tp); } catch {}
         }
+        if (removePaths.length > 0) refresh();
         break;
+      }
       case 'cut':
         if (paths.length > 0) {
           setClipboard({ paths, cut: true });
@@ -1049,26 +1061,22 @@ export default function ExplorerView() {
                     <button className="ctx-item" onClick={() => ctxAction('extract-to')}>Entpacken nach...</button>
                   </>
                 )}
-                {!multi && (
-                  <>
-                    <div className="ctx-separator" />
-                    <div className="ctx-submenu-trigger">
-                      <button className="ctx-item">Tag setzen ›</button>
-                      <div className="ctx-submenu">
-                        {['red', 'orange', 'yellow', 'green', 'blue', 'purple'].map(c => (
-                          <button key={c} className="ctx-item ctx-tag-item" onClick={() => ctxAction('tag-' + c)}>
-                            <span className="ctx-tag-dot" style={{ background: TAG_COLORS[c]?.hex || '#888' }} />
-                            {TAG_COLORS[c]?.label || c}
-                          </button>
-                        ))}
-                        {hasTag && <>
-                          <div className="ctx-separator" />
-                          <button className="ctx-item" onClick={() => ctxAction('tag-remove')}>Tag entfernen</button>
-                        </>}
-                      </div>
-                    </div>
-                  </>
-                )}
+                <div className="ctx-separator" />
+                <div className="ctx-submenu-trigger">
+                  <button className="ctx-item">Tag setzen ›</button>
+                  <div className="ctx-submenu">
+                    {['red', 'orange', 'yellow', 'green', 'blue', 'purple'].map(c => (
+                      <button key={c} className="ctx-item ctx-tag-item" onClick={() => ctxAction('tag-' + c)}>
+                        <span className="ctx-tag-dot" style={{ background: TAG_COLORS[c]?.hex || '#888' }} />
+                        {TAG_COLORS[c]?.label || c}
+                      </button>
+                    ))}
+                    {hasTag && <>
+                      <div className="ctx-separator" />
+                      <button className="ctx-item" onClick={() => ctxAction('tag-remove')}>Tag entfernen</button>
+                    </>}
+                  </div>
+                </div>
                 <div className="ctx-separator" />
                 <button className="ctx-item" onClick={() => ctxAction('trash')}>In Papierkorb <span className="ctx-shortcut">Entf</span></button>
                 <button className="ctx-item ctx-item-danger" onClick={() => ctxAction('delete-permanent')}>Endgültig löschen <span className="ctx-shortcut">Shift+Entf</span></button>
