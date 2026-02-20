@@ -27,7 +27,7 @@ const COLUMNS = [
 ];
 
 export default function ExplorerView() {
-  const { currentScanId, showToast, setActiveTab, setPendingPdfPath, setPropertiesPath } = useAppContext();
+  const { currentScanId, showToast, setActiveTab, setPendingPdfPath, setPropertiesPath, fileClipboard, setFileClipboard } = useAppContext();
   const [currentPath, setCurrentPath] = useState('');
   const [entries, setEntries] = useState<FileEntry[]>([]);
   const [filteredEntries, setFilteredEntries] = useState<FileEntry[] | null>(null);
@@ -56,7 +56,9 @@ export default function ExplorerView() {
   const [renameValue, setRenameValue] = useState('');
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; entry: FileEntry | null } | null>(null);
   const [newFolderName, setNewFolderName] = useState<string | null>(null);
-  const [clipboard, setClipboard] = useState<{ paths: string[]; cut: boolean } | null>(null);
+  // Clipboard is now in AppContext (fileClipboard/setFileClipboard) to survive tab switches
+  const clipboard = fileClipboard;
+  const setClipboard = setFileClipboard;
 
   const lastClickedRef = useRef<string | null>(null);
   const deepSearchUnlistenRef = useRef<Array<() => void>>([]);

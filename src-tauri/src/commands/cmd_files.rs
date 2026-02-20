@@ -106,7 +106,32 @@ pub async fn file_move(source_paths: Vec<String>, dest_dir: String) -> Result<Va
     for src in &source_paths {
         let name = Path::new(src).file_name().unwrap_or_default();
         let dest = Path::new(&dest_dir).join(name);
-        tokio::fs::rename(src, &dest).await.map_err(|e| e.to_string())?;
+        // Try rename first (fast, same-volume). Fall back to copy+delete for cross-volume moves.
+        match tokio::fs::rename(src, &dest).await {
+            Ok(_) => {},
+            Err(_) => {
+                let src_path = Path::new(src);
+                if src_path.is_dir() {
+                    // Recursive directory copy + delete
+                    for entry in walkdir::WalkDir::new(src_path).into_iter().filter_map(|e| e.ok()) {
+                        let rel = entry.path().strip_prefix(src_path).unwrap_or(entry.path());
+                        let target = dest.join(rel);
+                        if entry.file_type().is_dir() {
+                            tokio::fs::create_dir_all(&target).await.map_err(|e| e.to_string())?;
+                        } else {
+                            if let Some(parent) = target.parent() {
+                                tokio::fs::create_dir_all(parent).await.map_err(|e| e.to_string())?;
+                            }
+                            tokio::fs::copy(entry.path(), &target).await.map_err(|e| e.to_string())?;
+                        }
+                    }
+                    tokio::fs::remove_dir_all(src_path).await.map_err(|e| e.to_string())?;
+                } else {
+                    tokio::fs::copy(src, &dest).await.map_err(|e| e.to_string())?;
+                    tokio::fs::remove_file(src).await.map_err(|e| e.to_string())?;
+                }
+            }
+        }
     }
     Ok(json!({ "success": true }))
 }

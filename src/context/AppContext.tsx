@@ -19,6 +19,11 @@ export interface ScanProgress {
   errors_count?: number;
 }
 
+export interface FileClipboard {
+  paths: string[];
+  cut: boolean;
+}
+
 interface AppState {
   drives: Drive[];
   currentScanId: string | null;
@@ -31,6 +36,7 @@ interface AppState {
   theme: string;
   pendingPdfPath: string | null;
   propertiesPath: string | null;
+  fileClipboard: FileClipboard | null;
 }
 
 interface AppContextType extends AppState {
@@ -45,6 +51,7 @@ interface AppContextType extends AppState {
   setTheme: (theme: string) => void;
   setPendingPdfPath: (path: string | null) => void;
   setPropertiesPath: (path: string | null) => void;
+  setFileClipboard: (clipboard: FileClipboard | null) => void;
   showToast: (message: string, type?: 'success' | 'error' | 'info' | 'warning') => void;
 }
 
@@ -75,6 +82,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     theme: localStorage.getItem('speicher-analyse-theme') || 'dark',
     pendingPdfPath: null,
     propertiesPath: null,
+    fileClipboard: null,
   });
 
   const setDrives = useCallback((drives: Drive[]) =>
@@ -99,6 +107,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setState(s => ({ ...s, pendingPdfPath })), []);
   const setPropertiesPath = useCallback((propertiesPath: string | null) =>
     setState(s => ({ ...s, propertiesPath })), []);
+  const setFileClipboard = useCallback((fileClipboard: FileClipboard | null) =>
+    setState(s => ({ ...s, fileClipboard })), []);
 
   const showToast = useCallback((message: string, type: string = 'info') => {
     if (toastCallback) toastCallback(message, type);
@@ -118,6 +128,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setTheme,
       setPendingPdfPath,
       setPropertiesPath,
+      setFileClipboard,
       showToast,
     }}>
       {children}
