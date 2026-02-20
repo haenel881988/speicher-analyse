@@ -103,10 +103,13 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
   const [showGotoInput, setShowGotoInput] = useState(false);
   const [annoColor, setAnnoColor] = useState('#FFFF00');
   const [strokeWidth, setStrokeWidth] = useState(2);
-  const [commentPopover, setCommentPopover] = useState<{ x: number; y: number; svgX: number; svgY: number; page: number; editIdx?: number; mode?: 'comment' | 'textbox' } | null>(null);
+  const [commentPopover, setCommentPopover] = useState<{ x: number; y: number; svgX: number; svgY: number; page: number; editIdx?: number } | null>(null);
   const [commentText, setCommentText] = useState('');
   const [textFontSize, setTextFontSize] = useState(14);
   const [textFontFamily, setTextFontFamily] = useState('system-ui, sans-serif');
+  // Inline-Editor: Textarea direkt auf der PDF-Seite (kein Popup!)
+  const [inlineEditor, setInlineEditor] = useState<{ page: number; svgX: number; svgY: number; editIdx?: number } | null>(null);
+  const [inlineText, setInlineText] = useState('');
   const [shapeFilled, setShapeFilled] = useState(false);
   const [activeStamp, setActiveStamp] = useState<StampType>('approved');
   const [showSignaturePad, setShowSignaturePad] = useState(false);
@@ -116,6 +119,7 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
   const [pendingSignature, setPendingSignature] = useState<Point[][] | null>(null);
   const [showShapePicker, setShowShapePicker] = useState(false);
   const [showStampPicker, setShowStampPicker] = useState(false);
+  const [showInsertMenu, setShowInsertMenu] = useState(false);
   const [watermark, setWatermark] = useState<{ text: string; fontSize: number; color: string; opacity: number; rotation: number } | null>(null);
   const [showWatermarkDialog, setShowWatermarkDialog] = useState(false);
   const [passwordPrompt, setPasswordPrompt] = useState<{ data: Uint8Array } | null>(null);
@@ -154,7 +158,13 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
   const pendingSignatureRef = useRef<Point[][] | null>(null);
   const activeStampRef = useRef<StampType>('approved');
   const watermarkRef = useRef<{ text: string; fontSize: number; color: string; opacity: number; rotation: number } | null>(null);
-  const setCommentPopoverRef = useRef((_v: { x: number; y: number; svgX: number; svgY: number; page: number; editIdx?: number; mode?: 'comment' | 'textbox' } | null) => {});
+  const setCommentPopoverRef = useRef((_v: { x: number; y: number; svgX: number; svgY: number; page: number; editIdx?: number } | null) => {});
+  const setInlineEditorRef = useRef((_v: { page: number; svgX: number; svgY: number; editIdx?: number } | null) => {});
+  setInlineEditorRef.current = setInlineEditor;
+  const setInlineTextRef = useRef((_v: string) => {});
+  setInlineTextRef.current = setInlineText;
+  const textFontSizeRef = useRef(14);
+  const textFontFamilyRef = useRef('system-ui, sans-serif');
   setCommentPopoverRef.current = setCommentPopover;
   const setCommentTextRef = useRef((_v: string) => {});
   setCommentTextRef.current = setCommentText;
@@ -170,6 +180,8 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
   useEffect(() => { strokeWidthRef.current = strokeWidth; }, [strokeWidth]);
   useEffect(() => { showImageInsertRef.current = showImageInsert; }, [showImageInsert]);
   useEffect(() => { shapeFilledRef.current = shapeFilled; }, [shapeFilled]);
+  useEffect(() => { textFontSizeRef.current = textFontSize; }, [textFontSize]);
+  useEffect(() => { textFontFamilyRef.current = textFontFamily; }, [textFontFamily]);
   useEffect(() => { pendingSignatureRef.current = pendingSignature; }, [pendingSignature]);
   useEffect(() => { activeStampRef.current = activeStamp; }, [activeStamp]);
   useEffect(() => { watermarkRef.current = watermark; }, [watermark]);
@@ -871,9 +883,15 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
       if (!anno || (anno.type !== 'text' && anno.type !== 'freetext')) return;
       e.preventDefault();
       e.stopPropagation();
-      // Kommentar-Popover im Bearbeitungsmodus öffnen + Text laden
-      setCommentTextRef.current(anno.text || '');
-      setCommentPopoverRef.current({ x: e.clientX, y: e.clientY, svgX: anno.rect.x1, svgY: anno.rect.y1, page: pageNum, editIdx: idx, mode: anno.type === 'freetext' ? 'textbox' : 'comment' });
+      if (anno.type === 'freetext') {
+        // Inline bearbeiten — direkt auf der Seite
+        setInlineTextRef.current(anno.text || '');
+        setInlineEditorRef.current({ page: pageNum, svgX: anno.rect.x1, svgY: anno.rect.y1, editIdx: idx });
+      } else {
+        // Kommentar-Popover (kleines Notiz-Icon — Popover ist hier sinnvoll)
+        setCommentTextRef.current(anno.text || '');
+        setCommentPopoverRef.current({ x: e.clientX, y: e.clientY, svgX: anno.rect.x1, svgY: anno.rect.y1, page: pageNum, editIdx: idx });
+      }
     });
 
     svg.addEventListener('mousedown', (e) => {
@@ -1054,14 +1072,15 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
         const s = scaleRef.current;
         const svgX = (e.clientX - svgRect.left) / s;
         const svgY = (e.clientY - svgRect.top) / s;
-        setCommentPopoverRef.current({ x: e.clientX, y: e.clientY, svgX, svgY, page: pageNum, mode: 'comment' });
+        setCommentPopoverRef.current({ x: e.clientX, y: e.clientY, svgX, svgY, page: pageNum });
       } else if (currentToolRef.current === 'textbox') {
-        // Frei-Text: Popover mit Schriftgröße öffnen
+        // Inline-Editor direkt auf der Seite — kein Popup!
         const svgRect = svg.getBoundingClientRect();
         const s = scaleRef.current;
         const svgX = (e.clientX - svgRect.left) / s;
         const svgY = (e.clientY - svgRect.top) / s;
-        setCommentPopoverRef.current({ x: e.clientX, y: e.clientY, svgX, svgY, page: pageNum, mode: 'textbox' });
+        setInlineTextRef.current('');
+        setInlineEditorRef.current({ page: pageNum, svgX, svgY });
       } else if (currentToolRef.current === 'freehand' && currentPathRef.current.length > 2) {
         const scaledPath = currentPathRef.current.map(p => ({ x: p.x / s, y: p.y / s }));
         const bounds = pathBounds(scaledPath);
@@ -1395,41 +1414,50 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
     return 1;
   }, []);
 
+  // Inline-Editor abschließen → Annotation erstellen/aktualisieren
+  const finalizeInlineEditor = useCallback(() => {
+    if (!inlineEditor || !inlineText.trim()) { setInlineEditor(null); setInlineText(''); return; }
+    const { page, svgX, svgY, editIdx } = inlineEditor;
+    const lines = inlineText.trim().split('\n');
+    const fs = textFontSize;
+    const ff = textFontFamily;
+    const textWidth = Math.max(...lines.map(l => l.length)) * fs * 0.55 + 12;
+    const textHeight = lines.length * fs * 1.3 + 8;
+
+    if (editIdx !== undefined) {
+      // Bestehende Freetext-Annotation bearbeiten
+      pushUndo(annotationsRef.current);
+      setAnnotations(prev => prev.map((a, i) => {
+        if (i !== editIdx) return a;
+        return { ...a, text: inlineText.trim(), fontSize: fs, fontFamily: ff, color: annoColor,
+          rect: { x1: a.rect.x1, y1: a.rect.y1, x2: a.rect.x1 + Math.max(textWidth, 50), y2: a.rect.y1 + Math.max(textHeight, fs + 8) } };
+      }));
+      setUnsavedChanges(true);
+    } else {
+      // Neue Freetext-Annotation
+      addAnnotation({
+        type: 'freetext', page: page - 1,
+        rect: { x1: svgX, y1: svgY, x2: svgX + Math.max(textWidth, 50), y2: svgY + Math.max(textHeight, fs + 8) },
+        text: inlineText.trim(), color: annoColor, fontSize: fs, fontFamily: ff,
+      });
+    }
+    setTimeout(() => renderAnnotationsForPage(page), 50);
+    setInlineEditor(null);
+    setInlineText('');
+  }, [inlineEditor, inlineText, textFontSize, textFontFamily, annoColor, addAnnotation, pushUndo, renderAnnotationsForPage]);
+
   const submitComment = useCallback(() => {
     if (!commentPopover || !commentText.trim()) { setCommentPopover(null); setCommentText(''); return; }
 
     if (commentPopover.editIdx !== undefined) {
-      // Bestehende Annotation bearbeiten
+      // Bestehenden Kommentar bearbeiten
       pushUndo(annotationsRef.current);
-      setAnnotations(prev => prev.map((a, i) => {
-        if (i !== commentPopover.editIdx) return a;
-        if (a.type === 'freetext') {
-          // Freetext: Text, Schriftgröße, Schriftart und Rect aktualisieren
-          const lines = commentText.trim().split('\n');
-          const fs = textFontSize;
-          const textWidth = Math.max(...lines.map(l => l.length)) * fs * 0.55 + 12;
-          const textHeight = lines.length * fs * 1.3 + 8;
-          return { ...a, text: commentText.trim(), fontSize: fs, fontFamily: textFontFamily, color: annoColor,
-            rect: { x1: a.rect.x1, y1: a.rect.y1, x2: a.rect.x1 + Math.max(textWidth, 50), y2: a.rect.y1 + Math.max(textHeight, fs + 8) } };
-        }
-        return { ...a, text: commentText.trim() };
-      }));
+      setAnnotations(prev => prev.map((a, i) =>
+        i === commentPopover.editIdx ? { ...a, text: commentText.trim() } : a
+      ));
       setUnsavedChanges(true);
-    } else if (commentPopover.mode === 'textbox') {
-      // Frei-Text-Annotation erstellen (sichtbarer Text auf der Seite)
-      const x = commentPopover.svgX;
-      const y = commentPopover.svgY;
-      const lines = commentText.trim().split('\n');
-      const fs = textFontSize;
-      const textWidth = Math.max(...lines.map(l => l.length)) * fs * 0.55 + 12;
-      const textHeight = lines.length * fs * 1.3 + 8;
-      addAnnotation({
-        type: 'freetext', page: commentPopover.page - 1,
-        rect: { x1: x, y1: y, x2: x + Math.max(textWidth, 50), y2: y + Math.max(textHeight, fs + 8) },
-        text: commentText.trim(), color: annoColor, fontSize: fs, fontFamily: textFontFamily,
-      });
     } else {
-      // Kommentar-Annotation erstellen (Bubble mit Tooltip)
+      // Neuen Kommentar erstellen (Bubble mit Tooltip)
       const x = commentPopover.svgX;
       const y = commentPopover.svgY;
       addAnnotation({
@@ -1441,7 +1469,7 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
     setTimeout(() => renderAnnotationsForPage(commentPopover.page), 50);
     setCommentPopover(null);
     setCommentText('');
-  }, [commentPopover, commentText, annoColor, textFontSize, textFontFamily, addAnnotation, pushUndo, renderAnnotationsForPage]);
+  }, [commentPopover, commentText, annoColor, addAnnotation, pushUndo, renderAnnotationsForPage]);
 
   const cancelComment = useCallback(() => {
     setCommentPopover(null);
@@ -1739,7 +1767,7 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
         {/* Formen-Picker */}
         <div className="pdf-tool-dropdown-wrap">
           <button className={`pdf-editor-tool ${currentTool.startsWith('shape-') ? 'active' : ''}`}
-            onClick={() => setShowShapePicker(p => !p)} title="Formen">
+            onClick={() => { setShowShapePicker(p => !p); setShowInsertMenu(false); }} title="Formen">
             <span className="pdf-tool-icon">{'\u25A1'}</span>
             <span className="pdf-tool-label">Formen {'\u25BE'}</span>
           </button>
@@ -1751,46 +1779,41 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
                   <span>{st.icon}</span> {st.label}
                 </button>
               ))}
+            </div>
+          )}
+        </div>
+        {/* Einfügen-Dropdown: Stempel, Signatur, Wasserzeichen */}
+        <div className="pdf-tool-dropdown-wrap">
+          <button className={`pdf-editor-tool ${currentTool === 'stamp' || currentTool === 'signature' ? 'active' : ''}`}
+            onClick={() => { setShowInsertMenu(p => !p); setShowShapePicker(false); }} title="Einfügen">
+            <span className="pdf-tool-icon">+</span>
+            <span className="pdf-tool-label">Einfügen {'\u25BE'}</span>
+          </button>
+          {showInsertMenu && (
+            <div className="pdf-tool-dropdown">
+              <div className="pdf-tool-dropdown-header">Stempel</div>
+              {STAMPS.map(st => (
+                <button key={st.id} className={`pdf-tool-dropdown-item ${currentTool === 'stamp' && activeStamp === st.id ? 'active' : ''}`}
+                  onClick={() => { setActiveStamp(st.id); setCurrentTool('stamp'); setShowInsertMenu(false); }}>
+                  {st.label}
+                </button>
+              ))}
               <span className="pdf-editor-separator" />
-              <button className={`pdf-tool-dropdown-item ${shapeFilled ? 'active' : ''}`}
-                onClick={() => setShapeFilled(f => !f)}>
-                {shapeFilled ? '\u25A0 Gefüllt' : '\u25A1 Nur Umriss'}
+              <button className="pdf-tool-dropdown-item"
+                onClick={() => {
+                  if (pendingSignature) { setCurrentTool('signature'); }
+                  else { setShowSignaturePad(true); }
+                  setShowInsertMenu(false);
+                }}>
+                {'\u270D'} Unterschrift
+              </button>
+              <button className="pdf-tool-dropdown-item"
+                onClick={() => { setShowWatermarkDialog(true); setShowInsertMenu(false); }}>
+                {'\uD83D\uDCA7'} Wasserzeichen
               </button>
             </div>
           )}
         </div>
-        {/* Stempel-Picker */}
-        <div className="pdf-tool-dropdown-wrap">
-          <button className={`pdf-editor-tool ${currentTool === 'stamp' ? 'active' : ''}`}
-            onClick={() => setShowStampPicker(p => !p)} title="Stempel">
-            <span className="pdf-tool-icon">{'\u2713'}</span>
-            <span className="pdf-tool-label">Stempel {'\u25BE'}</span>
-          </button>
-          {showStampPicker && (
-            <div className="pdf-tool-dropdown">
-              {STAMPS.map(st => (
-                <button key={st.id} className={`pdf-tool-dropdown-item ${activeStamp === st.id ? 'active' : ''}`}
-                  onClick={() => { setActiveStamp(st.id); setCurrentTool('stamp'); setShowStampPicker(false); }}>
-                  {st.label}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-        {/* Signatur */}
-        <button className={`pdf-editor-tool ${currentTool === 'signature' ? 'active' : ''}`}
-          onClick={() => {
-            if (pendingSignature) { setCurrentTool('signature'); }
-            else { setShowSignaturePad(true); }
-          }} title="Unterschrift">
-          <span className="pdf-tool-icon">{'\u270D'}</span>
-          <span className="pdf-tool-label">Signatur</span>
-        </button>
-        {/* Wasserzeichen */}
-        <button className="pdf-editor-tool" onClick={() => setShowWatermarkDialog(true)} title="Wasserzeichen">
-          <span className="pdf-tool-icon">{'\uD83D\uDCA7'}</span>
-          <span className="pdf-tool-label">Wasserzeichen</span>
-        </button>
         <span className="pdf-editor-separator" />
         {/* Farbe — für alle Zeichenwerkzeuge */}
         {(currentTool === 'highlight' || currentTool === 'freehand' || currentTool === 'textbox' || currentTool === 'comment' || currentTool.startsWith('shape-') || currentTool === 'stamp') && (
@@ -1811,6 +1834,25 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
                 onClick={() => setStrokeWidth(w)} title={`${w}px`}>
                 <span className="pdf-stroke-preview" style={{ height: w }} />
               </button>
+            ))}
+            {currentTool.startsWith('shape-') && (
+              <button className={`pdf-editor-btn pdf-fill-toggle ${shapeFilled ? 'active' : ''}`}
+                onClick={() => setShapeFilled(f => !f)} title={shapeFilled ? 'Gefüllt' : 'Nur Umriss'}>
+                {shapeFilled ? '\u25A0' : '\u25A1'}
+              </button>
+            )}
+            <span className="pdf-editor-separator" />
+          </>
+        )}
+        {/* Schrift-Optionen — Text-Tool */}
+        {currentTool === 'textbox' && !inlineEditor && (
+          <>
+            <select className="pdf-font-select pdf-font-select-toolbar" title="Schriftart" value={textFontFamily} onChange={e => setTextFontFamily(e.target.value)}>
+              {FONTS.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
+            </select>
+            {[10, 14, 18, 24].map(fs => (
+              <button key={fs} className={`pdf-font-size-btn ${textFontSize === fs ? 'active' : ''}`}
+                onClick={() => setTextFontSize(fs)}>{fs}</button>
             ))}
             <span className="pdf-editor-separator" />
           </>
@@ -1902,49 +1944,73 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
         />
       )}
 
-      {/* Comment Popover — Viewport-Clamping */}
+      {/* Kommentar-Popover (nur für Kommentar-Notizen) */}
       {commentPopover && (
         <div className="pdf-comment-popover" style={{
           left: Math.min(commentPopover.x, window.innerWidth - 280),
-          top: Math.min(commentPopover.y, window.innerHeight - (commentPopover.mode === 'textbox' ? 180 : 120)),
+          top: Math.min(commentPopover.y, window.innerHeight - 120),
         }}>
-          {commentPopover.mode === 'textbox' && (
-            <>
-              <div className="pdf-popover-font-row">
-                <label className="pdf-popover-font-label">Schrift:</label>
-                <select className="pdf-font-select" title="Schriftart" value={textFontFamily} onChange={e => setTextFontFamily(e.target.value)}>
-                  {FONTS.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
-                </select>
-              </div>
-              <div className="pdf-popover-font-row">
-                <label className="pdf-popover-font-label">Größe:</label>
-                {[10, 12, 14, 18, 24, 32].map(fs => (
-                  <button key={fs} type="button" className={`pdf-font-size-btn ${textFontSize === fs ? 'active' : ''}`}
-                    onClick={() => setTextFontSize(fs)}>{fs}</button>
-                ))}
-              </div>
-            </>
-          )}
           <textarea
             className="pdf-comment-textarea"
             value={commentText}
             onChange={e => setCommentText(e.target.value)}
             autoFocus
-            placeholder={commentPopover.mode === 'textbox' ? 'Text eingeben...' : 'Kommentar eingeben...'}
+            placeholder="Kommentar eingeben..."
             onKeyDown={e => {
-              if (e.key === 'Enter' && !e.shiftKey && commentPopover.mode !== 'textbox') { e.preventDefault(); submitComment(); }
-              if (e.key === 'Enter' && e.ctrlKey) { e.preventDefault(); submitComment(); }
+              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitComment(); }
               if (e.key === 'Escape') cancelComment();
               e.stopPropagation();
             }}
           />
-          {commentPopover.mode === 'textbox' && (
-            <div className="pdf-popover-hint">Strg+Enter zum Bestätigen, Shift+Enter für neue Zeile</div>
-          )}
           <div className="pdf-comment-popover-btns">
             <button className="pdf-editor-btn" onClick={submitComment}>OK</button>
             <button className="pdf-editor-btn" onClick={cancelComment}>Abbrechen</button>
           </div>
+        </div>
+      )}
+
+      {/* Inline-Text-Editor — direkt auf der PDF-Seite (kein Popup!) */}
+      {inlineEditor && (
+        <div className="pdf-inline-editor-overlay">
+          <div className="pdf-inline-editor-bar">
+            <select className="pdf-font-select" title="Schriftart" value={textFontFamily} onChange={e => setTextFontFamily(e.target.value)}>
+              {FONTS.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
+            </select>
+            {[10, 12, 14, 18, 24, 32].map(fs => (
+              <button key={fs} type="button" className={`pdf-font-size-btn ${textFontSize === fs ? 'active' : ''}`}
+                onClick={() => setTextFontSize(fs)}>{fs}</button>
+            ))}
+            {ANNO_COLORS.map(c => (
+              <button key={c.hex} className={`pdf-color-swatch pdf-color-swatch-sm ${annoColor === c.hex ? 'active' : ''}`}
+                style={{ background: c.hex }} title={c.label}
+                onClick={() => setAnnoColor(c.hex)} />
+            ))}
+            <span className="pdf-editor-separator" />
+            <button className="pdf-editor-btn" onClick={finalizeInlineEditor}>Fertig</button>
+            <button className="pdf-editor-btn" onClick={() => { setInlineEditor(null); setInlineText(''); }}>Abbrechen</button>
+          </div>
+          <textarea
+            className="pdf-inline-textarea"
+            value={inlineText}
+            onChange={e => setInlineText(e.target.value)}
+            autoFocus
+            placeholder="Text eingeben..."
+            style={{
+              position: 'absolute',
+              left: inlineEditor.svgX * scale + (pageEntriesRef.current[inlineEditor.page - 1]?.wrapper.offsetLeft || 0),
+              top: inlineEditor.svgY * scale + (pageEntriesRef.current[inlineEditor.page - 1]?.wrapper.offsetTop || 0),
+              fontSize: textFontSize * scale,
+              fontFamily: textFontFamily,
+              color: annoColor,
+              minWidth: 120 * scale,
+              minHeight: (textFontSize * 1.5 + 8) * scale,
+            }}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && e.ctrlKey) { e.preventDefault(); finalizeInlineEditor(); }
+              if (e.key === 'Escape') { setInlineEditor(null); setInlineText(''); }
+              e.stopPropagation();
+            }}
+          />
         </div>
       )}
 
