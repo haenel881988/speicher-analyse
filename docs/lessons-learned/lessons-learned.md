@@ -650,6 +650,20 @@ F5 muss "Smart Reload" ausführen: sessionStorage-State speichern + `location.re
 
 ---
 
+#### #90 — Kontextmenü: Einzelwert-Logik bei Mehrfachauswahl + falsche Feature-Suggestion
+`2026-02-20`
+
+Zwei Fehler-Klassen in einem:
+
+1. **Einzelwert-Logik bei Mehrfachauswahl:** `case 'extract'` verwendete `singlePath` — bei 3 ausgewählten ZIPs wurde nur 1 entpackt. Gleiche Kategorie wie #7 (ganzheitlich prüfen).
+2. **Feature-Lüge:** Frontend listete `.7z`, `.rar`, `.tar.gz` als `isArchive` — Backend unterstützt nur `.zip` (`Expand-Archive`). Suggerierte Funktionalität die nicht existiert.
+
+**Lösung:** (1) Schleife über alle ausgewählten Archiv-Pfade. (2) `isArchive` auf `ext === '.zip'` reduziert. (3) `hasArchiveInSelection` für Mehrfachauswahl. (4) "Entpacken nach..." mit Zielordner-Dialog hinzugefügt.
+
+**Lehre:** Jede Kontextmenü-Aktion MUSS geprüft werden: Funktioniert sie mit 1 Datei? Mit 5? Mit gemischter Auswahl? Und: Frontend darf KEINE Formate/Features suggerieren die das Backend nicht implementiert hat.
+
+---
+
 <br>
 
 ## Terminal
