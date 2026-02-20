@@ -664,6 +664,28 @@ Zwei Fehler-Klassen in einem:
 
 ---
 
+#### #91 — Vite Dev Server injiziert /@vite/client in Worker-Code
+`2026-02-20`
+
+pdf.js Worker wurde per `fetch()` vom Vite Dev Server geholt. Vite transformiert alle `.mjs`-Dateien und injiziert `import "/@vite/client"`. Wenn dieser Code per `Blob`-URL als Worker geladen wird, kann `/@vite/client` nicht aufgelöst werden (Blob-URLs haben keinen Origin). pdf.js fällt auf "Fake Worker" zurück, der ebenfalls scheitert.
+
+**Lösung:** Worker-Datei als statisches Asset in `src/public/` ablegen. Vite serviert Dateien in `public/` ohne jede Transformation. Referenz als `/pdf.worker.min.mjs`.
+
+**Lehre:** Niemals Worker-Code per `fetch()` vom Vite Dev Server holen und in Blob-URLs packen. Vite-Transformationen (HMR, Module-System) brechen in Blob/Worker-Kontexten. Statische Assets in `public/` sind der richtige Weg für Worker-Dateien.
+
+---
+
+#### #92 — Kontextmenü-Aktionen systematisch auf Mehrfachauswahl prüfen
+`2026-02-20`
+
+Erneut `singlePath`-Logik bei Aktionen die für Mehrfachauswahl funktionieren sollten: `copy-path` kopierte nur einen Pfad, Tags wurden nur für eine Datei gesetzt, Tag-Submenu war bei `multi` komplett versteckt. Gleiche Fehlerklasse wie #90.
+
+**Lösung:** Alle Aktionen durchgeprüft und auf `paths`-Array umgestellt. Tag-Submenu jetzt auch bei Mehrfachauswahl sichtbar.
+
+**Lehre:** Bei JEDEM neuen Kontextmenü-Eintrag sofort fragen: "Was passiert bei 1, 5, gemischten Dateien?" Checkliste: (1) Verwendet die Aktion `singlePath` oder `paths`? (2) Ist das UI-Element bei `multi` sichtbar? (3) Iteriert die Logik über alle ausgewählten Dateien?
+
+---
+
 <br>
 
 ## Terminal
