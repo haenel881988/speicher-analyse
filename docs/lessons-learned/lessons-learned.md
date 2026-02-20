@@ -686,6 +686,28 @@ Erneut `singlePath`-Logik bei Aktionen die für Mehrfachauswahl funktionieren so
 
 ---
 
+#### #93 — Kontextmenü: Hintergrund-Rechtsklick-Aktionen müssen currentPath verwenden
+`2026-02-20`
+
+"Im Explorer öffnen" bei Rechtsklick auf den Hintergrund (kein Entry) tat nichts: `singlePath` war `undefined` weil `entry` null und `paths` leer. Auch `handleDelete` hatte kein try/catch, "Neues Textdokument" keine Kollisionserkennung, und das "Ansicht"-Submenü war ein leerer Platzhalter.
+
+**Lösung:** 7 Befunde systematisch behoben: (1) Hintergrund-Aktionen auf `currentPath` fallback, (2) Error-Handling ergänzt, (3) `hasTag` prüft alle selektierten Pfade, (4) Rename-Feedback ergänzt, (5) Dateiname-Kollision mit `(2)`, `(3)`... gelöst, (6) toter Code entfernt, (7) Platzhalter durch funktionalen Toggle ersetzt.
+
+**Lehre:** Kontextmenü hat ZWEI Modi: Entry-Rechtsklick und Hintergrund-Rechtsklick. JEDE Aktion die im Hintergrund-Menü erscheint muss mit `currentPath` arbeiten, nicht mit `singlePath`.
+
+---
+
+#### #94 — PowerShell 5.1: Extension Methods sind KEINE Instanzmethoden
+`2026-02-20`
+
+OCR-Scan schlug fehl weil `$stream.AsRandomAccessStream()` aufgerufen wurde. In PowerShell 5.1 (= `powershell.exe`) sind .NET Extension Methods nicht als Instanzmethoden aufrufbar — sie sind syntaktischer Zucker in C#, nicht in PowerShell. Fehler: "Method invocation failed because [System.IO.FileStream] does not contain a method named 'AsRandomAccessStream'".
+
+**Lösung:** Statt `FileStream` → `AsRandomAccessStream()` direkt WinRT `StorageFile.GetFileFromPathAsync()` → `OpenReadAsync()` verwenden, das eine `IRandomAccessStream` nativ zurückgibt.
+
+**Lehre:** In PowerShell 5.1 IMMER Extension Methods als statische Methoden aufrufen: `[ExtensionClass]::Method($instance)` statt `$instance.Method()`. Oder besser: WinRT-native APIs verwenden die keine Extension Methods brauchen.
+
+---
+
 <br>
 
 ## Terminal
