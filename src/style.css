@@ -4247,6 +4247,108 @@ textarea::placeholder {
     background: var(--bg-hover);
 }
 
+.pdf-tool-icon {
+    font-size: 14px;
+    margin-right: 4px;
+}
+
+.pdf-tool-label {
+    font-size: 11px;
+}
+
+/* Farbauswahl */
+.pdf-color-swatch {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 2px solid var(--border-color);
+    cursor: pointer;
+    padding: 0;
+    flex-shrink: 0;
+    transition: transform 0.1s;
+}
+
+.pdf-color-swatch:hover {
+    transform: scale(1.2);
+}
+
+.pdf-color-swatch.active {
+    border-color: var(--text-primary);
+    box-shadow: 0 0 0 2px var(--bg-primary), 0 0 0 4px var(--accent);
+}
+
+/* Strichstärke */
+.pdf-stroke-btn {
+    width: 28px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--bg-primary);
+    cursor: pointer;
+    padding: 0;
+}
+
+.pdf-stroke-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+}
+
+.pdf-stroke-btn:hover:not(.active) {
+    background: var(--bg-hover);
+}
+
+.pdf-stroke-preview {
+    display: block;
+    width: 16px;
+    background: var(--text-primary);
+    border-radius: 1px;
+}
+
+.pdf-stroke-btn.active .pdf-stroke-preview {
+    background: #fff;
+}
+
+/* Kommentar-Popover */
+.pdf-comment-popover {
+    position: fixed;
+    z-index: 10000;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    min-width: 220px;
+}
+
+.pdf-comment-textarea {
+    width: 100%;
+    min-height: 60px;
+    resize: vertical;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    padding: 6px 8px;
+    font-size: 12px;
+    font-family: inherit;
+    box-sizing: border-box;
+}
+
+.pdf-comment-textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.pdf-comment-popover-btns {
+    display: flex;
+    gap: 6px;
+    margin-top: 6px;
+    justify-content: flex-end;
+}
+
 .pdf-editor-separator {
     width: 1px;
     height: 20px;

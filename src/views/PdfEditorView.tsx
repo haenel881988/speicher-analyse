@@ -10,6 +10,15 @@ const OCR_LANGUAGES = [
   { id: 'ru', label: 'Russisch' },
 ];
 
+const ANNO_COLORS = [
+  { hex: '#FFFF00', label: 'Gelb' },
+  { hex: '#00FF00', label: 'Grün' },
+  { hex: '#00BFFF', label: 'Blau' },
+  { hex: '#FF0000', label: 'Rot' },
+  { hex: '#FF8C00', label: 'Orange' },
+  { hex: '#FF69B4', label: 'Pink' },
+];
+
 interface Point { x: number; y: number; }
 interface Rect { x1: number; y1: number; x2: number; y2: number; }
 interface Annotation {
@@ -72,6 +81,10 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
   const [currentPage, setCurrentPage] = useState(1);
   const [gotoPageText, setGotoPageText] = useState('');
   const [showGotoInput, setShowGotoInput] = useState(false);
+  const [annoColor, setAnnoColor] = useState('#FFFF00');
+  const [strokeWidth, setStrokeWidth] = useState(2);
+  const [commentPopover, setCommentPopover] = useState<{ x: number; y: number; page: number } | null>(null);
+  const [commentText, setCommentText] = useState('');
 
   // Undo/Redo stacks
   const undoStackRef = useRef<Annotation[][]>([]);
@@ -87,11 +100,17 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
   const drawingRef = useRef(false);
   const drawStartRef = useRef<Point | null>(null);
   const currentPathRef = useRef<Point[]>([]);
+  const annoColorRef = useRef('#FFFF00');
+  const strokeWidthRef = useRef(2);
+  const setCommentPopoverRef = useRef((_v: { x: number; y: number; page: number } | null) => {});
+  setCommentPopoverRef.current = setCommentPopover;
 
   // Keep refs in sync
   useEffect(() => { annotationsRef.current = annotations; }, [annotations]);
   useEffect(() => { scaleRef.current = scale; }, [scale]);
   useEffect(() => { currentToolRef.current = currentTool; }, [currentTool]);
+  useEffect(() => { annoColorRef.current = annoColor; }, [annoColor]);
+  useEffect(() => { strokeWidthRef.current = strokeWidth; }, [strokeWidth]);
 
   const fileName = filePath.split(/[\\/]/).pop() || 'PDF';
 
@@ -512,8 +531,8 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
         path.classList.add('temp-draw');
         path.setAttribute('points', currentPathRef.current.map(p => `${p.x},${p.y}`).join(' '));
         path.setAttribute('fill', 'none');
-        path.setAttribute('stroke', '#FF0000');
-        path.setAttribute('stroke-width', '2');
+        path.setAttribute('stroke', annoColorRef.current);
+        path.setAttribute('stroke-width', String(strokeWidthRef.current));
         path.setAttribute('stroke-linecap', 'round');
         svg.appendChild(path);
       } else if (currentToolRef.current === 'highlight' && drawStartRef.current) {
@@ -525,7 +544,7 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
         rectEl.setAttribute('y', String(r.y1));
         rectEl.setAttribute('width', String(r.x2 - r.x1));
         rectEl.setAttribute('height', String(r.y2 - r.y1));
-        rectEl.setAttribute('fill', 'rgba(255, 255, 0, 0.3)');
+        rectEl.setAttribute('fill', annoColorRef.current + '4D');
         svg.appendChild(rectEl);
       }
     });
@@ -543,24 +562,18 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
           addAnnotation({
             type: 'highlight', page: pageNum - 1,
             rect: { x1: r.x1 / s, y1: r.y1 / s, x2: r.x2 / s, y2: r.y2 / s },
-            color: '#FFFF00',
+            color: annoColorRef.current,
           });
         }
       } else if (currentToolRef.current === 'comment') {
-        const text = prompt('Kommentar eingeben:');
-        if (text) {
-          addAnnotation({
-            type: 'text', page: pageNum - 1,
-            rect: { x1: endPoint.x / s, y1: endPoint.y / s, x2: (endPoint.x + 24) / s, y2: (endPoint.y + 24) / s },
-            text, color: '#FFD700',
-          });
-        }
+        // Popover an der Klick-Position öffnen
+        setCommentPopoverRef.current({ x: e.clientX, y: e.clientY, page: pageNum });
       } else if (currentToolRef.current === 'freehand' && currentPathRef.current.length > 2) {
         const scaledPath = currentPathRef.current.map(p => ({ x: p.x / s, y: p.y / s }));
         const bounds = pathBounds(scaledPath);
         addAnnotation({
           type: 'ink', page: pageNum - 1, rect: bounds,
-          paths: [scaledPath], color: '#FF0000', width: 2,
+          paths: [scaledPath], color: annoColorRef.current, width: strokeWidthRef.current,
         });
       }
 
@@ -754,6 +767,32 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
     return 1;
   }, []);
 
+  const submitComment = useCallback(() => {
+    if (!commentPopover || !commentText.trim()) { setCommentPopover(null); return; }
+    const s = scaleRef.current;
+    // Wir brauchen die Position relativ zum SVG — hier approximieren wir via die Popover-Koordinaten
+    // Die Position wird relativ zur Seite berechnet
+    const entry = pageEntriesRef.current[commentPopover.page - 1];
+    if (entry) {
+      const svgRect = entry.svg.getBoundingClientRect();
+      const x = (commentPopover.x - svgRect.left) / s;
+      const y = (commentPopover.y - svgRect.top) / s;
+      addAnnotation({
+        type: 'text', page: commentPopover.page - 1,
+        rect: { x1: x, y1: y, x2: x + 24 / s, y2: y + 24 / s },
+        text: commentText.trim(), color: annoColor,
+      });
+      setTimeout(() => renderAnnotationsForPage(commentPopover.page), 50);
+    }
+    setCommentPopover(null);
+    setCommentText('');
+  }, [commentPopover, commentText, annoColor, addAnnotation, renderAnnotationsForPage]);
+
+  const cancelComment = useCallback(() => {
+    setCommentPopover(null);
+    setCommentText('');
+  }, []);
+
   const handleGotoPage = useCallback(() => {
     const num = parseInt(gotoPageText);
     if (num >= 1 && num <= totalPages) {
@@ -772,10 +811,10 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
   }
 
   const tools = [
-    { id: 'select' as const, label: 'Auswählen', shortcut: '' },
-    { id: 'highlight' as const, label: 'Markieren', shortcut: '' },
-    { id: 'comment' as const, label: 'Kommentar', shortcut: '' },
-    { id: 'freehand' as const, label: 'Freihand', shortcut: '' },
+    { id: 'select' as const, label: 'Auswählen', icon: '\u2B11' },
+    { id: 'highlight' as const, label: 'Markieren', icon: '\uD83D\uDD8D' },
+    { id: 'comment' as const, label: 'Kommentar', icon: '\uD83D\uDCAC' },
+    { id: 'freehand' as const, label: 'Freihand', icon: '\u270F\uFE0F' },
   ];
 
   return (
@@ -814,8 +853,32 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
       <div className="pdf-editor-anno-toolbar">
         {tools.map(t => (
           <button key={t.id} className={`pdf-editor-tool ${currentTool === t.id ? 'active' : ''}`}
-            onClick={() => setCurrentTool(t.id)}>{t.label}</button>
+            onClick={() => setCurrentTool(t.id)} title={t.label}>
+            <span className="pdf-tool-icon">{t.icon}</span>
+            <span className="pdf-tool-label">{t.label}</span>
+          </button>
         ))}
+        {(currentTool === 'highlight' || currentTool === 'freehand') && (
+          <>
+            <span className="pdf-editor-separator" />
+            {ANNO_COLORS.map(c => (
+              <button key={c.hex} className={`pdf-color-swatch ${annoColor === c.hex ? 'active' : ''}`}
+                style={{ background: c.hex }} title={c.label}
+                onClick={() => setAnnoColor(c.hex)} />
+            ))}
+          </>
+        )}
+        {currentTool === 'freehand' && (
+          <>
+            <span className="pdf-editor-separator" />
+            {[1, 2, 4].map(w => (
+              <button key={w} className={`pdf-stroke-btn ${strokeWidth === w ? 'active' : ''}`}
+                onClick={() => setStrokeWidth(w)} title={`${w}px`}>
+                <span className="pdf-stroke-preview" style={{ height: w }} />
+              </button>
+            ))}
+          </>
+        )}
         {selectedAnnoIdx !== null && (
           <>
             <span className="pdf-editor-separator" />
@@ -870,6 +933,28 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
           onMerge={handleMerge}
           onClose={() => { setShowMerge(false); setMergeFiles([]); }}
         />
+      )}
+
+      {/* Comment Popover */}
+      {commentPopover && (
+        <div className="pdf-comment-popover" style={{ left: commentPopover.x, top: commentPopover.y }}>
+          <textarea
+            className="pdf-comment-textarea"
+            value={commentText}
+            onChange={e => setCommentText(e.target.value)}
+            autoFocus
+            placeholder="Kommentar eingeben..."
+            onKeyDown={e => {
+              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitComment(); }
+              if (e.key === 'Escape') cancelComment();
+              e.stopPropagation();
+            }}
+          />
+          <div className="pdf-comment-popover-btns">
+            <button className="pdf-editor-btn" onClick={submitComment}>OK</button>
+            <button className="pdf-editor-btn" onClick={cancelComment}>Abbrechen</button>
+          </div>
+        </div>
       )}
     </div>
   );
