@@ -5,6 +5,7 @@ import { Sidebar } from './components/Sidebar';
 import { TabRouter } from './components/TabRouter';
 import { ProgressBar, StatusBar } from './components/StatusBar';
 import { ToastContainer } from './components/Toast';
+import { PropertiesDialog } from './components/PropertiesDialog';
 import { useTauriEvent } from './hooks/useTauriEvent';
 import * as api from './api/tauri-api';
 import { formatBytes, formatNumber } from './utils/format';
@@ -253,6 +254,9 @@ function AppInner() {
       <ProgressBar scanProgress={scanProgressData} scanComplete={scanCompleteData} scanError={scanErrorData} />
       <StatusBar statusText={statusText} statusLoading={statusLoading} />
       <ToastContainer />
+      {ctx.propertiesPath && (
+        <PropertiesDialog filePath={ctx.propertiesPath} onClose={() => ctx.setPropertiesPath(null)} />
+      )}
       <div id="treemap-tooltip" className="treemap-tooltip" style={{ display: 'none' }}>
         <div className="treemap-tooltip-name" id="tooltip-name" />
         <div className="treemap-tooltip-detail" id="tooltip-detail" />

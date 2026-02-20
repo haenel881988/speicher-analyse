@@ -51,8 +51,15 @@ if(!Uint8Array.fromHex){Uint8Array.fromHex=function(s){const b=new Uint8Array(s.
   return _pdfjsLib;
 }
 
-export default function PdfEditorView({ filePath = '', onClose }: { filePath?: string; onClose?: () => void } = {}) {
-  const { showToast, setActiveTab } = useAppContext();
+export default function PdfEditorView({ filePath: propFilePath = '', onClose }: { filePath?: string; onClose?: () => void } = {}) {
+  const { showToast, setActiveTab, pendingPdfPath, setPendingPdfPath } = useAppContext();
+  // Use pending path from context if available (e.g. from Explorer double-click), otherwise prop
+  const filePath = pendingPdfPath || propFilePath;
+
+  // Clear pending path after consuming it
+  useEffect(() => {
+    if (pendingPdfPath) setPendingPdfPath(null);
+  }, [pendingPdfPath, setPendingPdfPath]);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
   const [totalPages, setTotalPages] = useState(0);

@@ -29,6 +29,8 @@ interface AppState {
   batteryInfo: { onBattery: boolean; percentage: number | null; isCharging: boolean } | null;
   lastScanProgress: ScanProgress | null;
   theme: string;
+  pendingPdfPath: string | null;
+  propertiesPath: string | null;
 }
 
 interface AppContextType extends AppState {
@@ -41,6 +43,8 @@ interface AppContextType extends AppState {
   setBatteryInfo: (info: AppState['batteryInfo']) => void;
   setLastScanProgress: (progress: ScanProgress | null) => void;
   setTheme: (theme: string) => void;
+  setPendingPdfPath: (path: string | null) => void;
+  setPropertiesPath: (path: string | null) => void;
   showToast: (message: string, type?: 'success' | 'error' | 'info' | 'warning') => void;
 }
 
@@ -69,6 +73,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     batteryInfo: null,
     lastScanProgress: null,
     theme: localStorage.getItem('speicher-analyse-theme') || 'dark',
+    pendingPdfPath: null,
+    propertiesPath: null,
   });
 
   const setDrives = useCallback((drives: Drive[]) =>
@@ -89,6 +95,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setState(s => ({ ...s, lastScanProgress })), []);
   const setTheme = useCallback((theme: string) =>
     setState(s => ({ ...s, theme })), []);
+  const setPendingPdfPath = useCallback((pendingPdfPath: string | null) =>
+    setState(s => ({ ...s, pendingPdfPath })), []);
+  const setPropertiesPath = useCallback((propertiesPath: string | null) =>
+    setState(s => ({ ...s, propertiesPath })), []);
 
   const showToast = useCallback((message: string, type: string = 'info') => {
     if (toastCallback) toastCallback(message, type);
@@ -106,6 +116,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setBatteryInfo,
       setLastScanProgress,
       setTheme,
+      setPendingPdfPath,
+      setPropertiesPath,
       showToast,
     }}>
       {children}

@@ -1462,6 +1462,23 @@ textarea::placeholder {
 .props-version-date { font-weight: 600; }
 .props-version-type { color: var(--text-secondary); font-size: 11px; }
 
+/* Properties Dialog: additional classes */
+.props-general-header-inline { display: flex; align-items: center; gap: 14px; border: none; margin: 0; padding: 0; }
+.props-general-icon-emoji { font-size: 32px; line-height: 1; }
+.props-open-with { font-size: 11px; }
+.props-location { font-size: 11px; }
+.props-error { color: var(--danger); padding: 16px; }
+.props-empty { color: var(--text-muted); padding: 16px; text-align: center; }
+.props-info-text { color: var(--text-muted); padding: 8px 0; font-size: 12px; }
+.props-acl-rights { font-size: 10px; font-family: var(--font-mono); }
+.props-acl-empty { text-align: center; color: var(--text-muted); }
+.props-hash-section-inner { border-top: none; margin-top: 0; padding-top: 0; }
+.props-hash-hint { color: var(--text-muted); font-size: 12px; margin-bottom: 12px; }
+.props-hash-item { margin-bottom: 12px; }
+.props-footer { display: flex; justify-content: flex-end; padding: 12px 20px; border-top: 1px solid var(--border); }
+.props-footer-btn { padding: 6px 24px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-sm, 4px); color: var(--text-primary); cursor: pointer; font-size: 12px; transition: background var(--transition); }
+.props-footer-btn:hover { background: var(--bg-hover); }
+
 /* ===== Context Menu ===== */
 .context-menu {
     position: fixed;

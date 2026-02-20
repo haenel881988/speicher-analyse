@@ -27,7 +27,7 @@ const COLUMNS = [
 ];
 
 export default function ExplorerView() {
-  const { currentScanId, showToast } = useAppContext();
+  const { currentScanId, showToast, setActiveTab, setPendingPdfPath, setPropertiesPath } = useAppContext();
   const [currentPath, setCurrentPath] = useState('');
   const [entries, setEntries] = useState<FileEntry[]>([]);
   const [filteredEntries, setFilteredEntries] = useState<FileEntry[] | null>(null);
@@ -258,10 +258,14 @@ export default function ExplorerView() {
   const handleDoubleClick = useCallback((entry: FileEntry) => {
     if (entry.isDirectory) {
       navigateTo(entry.path);
+    } else if (entry.extension?.toLowerCase() === '.pdf') {
+      // PDF → interner PDF-Editor
+      setPendingPdfPath(entry.path);
+      setActiveTab('pdf-editor');
     } else {
       api.openFile(entry.path);
     }
-  }, [navigateTo]);
+  }, [navigateTo, setPendingPdfPath, setActiveTab]);
 
   const handleDelete = useCallback(async (permanent: boolean) => {
     const paths = [...selectedPaths];
@@ -319,6 +323,10 @@ export default function ExplorerView() {
     switch (action) {
       case 'open':
         if (entry?.isDirectory) navigateTo(entry.path);
+        else if (entry?.extension?.toLowerCase() === '.pdf' && singlePath) {
+          setPendingPdfPath(singlePath);
+          setActiveTab('pdf-editor');
+        }
         else if (singlePath) api.openFile(singlePath);
         break;
       case 'open-with':
@@ -388,20 +396,12 @@ export default function ExplorerView() {
         }
         break;
       case 'properties':
+        if (singlePath) setPropertiesPath(singlePath);
+        break;
+      case 'open-in-pdf-editor':
         if (singlePath) {
-          try {
-            const props = await api.fileProperties(singlePath);
-            const general = props.general || props;
-            const msg = [
-              `Name: ${general.name || entry?.name || ''}`,
-              `Pfad: ${general.path || singlePath}`,
-              `Größe: ${formatBytes(general.size || entry?.size || 0)}`,
-              general.created ? `Erstellt: ${new Date(general.created).toLocaleString('de-DE')}` : '',
-              general.modified ? `Geändert: ${new Date(general.modified).toLocaleString('de-DE')}` : '',
-              general.isDirectory ? `Typ: Ordner` : `Typ: ${general.extension || entry?.extension || '-'}`,
-            ].filter(Boolean).join('\n');
-            api.showConfirmDialog({ title: 'Eigenschaften', message: msg, okLabel: 'OK' });
-          } catch (err: any) { showToast('Fehler: ' + err.message, 'error'); }
+          setPendingPdfPath(singlePath);
+          setActiveTab('pdf-editor');
         }
         break;
       case 'run-as-admin':
@@ -473,23 +473,10 @@ export default function ExplorerView() {
         refresh();
         break;
       case 'folder-properties':
-        if (currentPath) {
-          try {
-            const props = await api.fileProperties(currentPath);
-            const general = props.general || props;
-            const msg = [
-              `Name: ${general.name || currentPath.split('\\').filter(Boolean).pop() || ''}`,
-              `Pfad: ${general.path || currentPath}`,
-              general.created ? `Erstellt: ${new Date(general.created).toLocaleString('de-DE')}` : '',
-              general.modified ? `Geändert: ${new Date(general.modified).toLocaleString('de-DE')}` : '',
-              `Typ: Ordner`,
-            ].filter(Boolean).join('\n');
-            api.showConfirmDialog({ title: 'Ordner-Eigenschaften', message: msg, okLabel: 'OK' });
-          } catch (err: any) { showToast('Fehler: ' + err.message, 'error'); }
-        }
+        if (currentPath) setPropertiesPath(currentPath);
         break;
     }
-  }, [ctxMenu, selectedPaths, currentPath, clipboard, navigateTo, handleDelete, refresh, showToast]);
+  }, [ctxMenu, selectedPaths, currentPath, clipboard, navigateTo, handleDelete, refresh, showToast, setPropertiesPath, setPendingPdfPath, setActiveTab]);
 
   const handleNewFolder = useCallback(async () => {
     if (newFolderName === null) return;
@@ -670,17 +657,22 @@ export default function ExplorerView() {
         e.preventDefault();
         handleDelete(e.shiftKey);
       }
-      else if (e.key === 'Enter' && selectedPaths.size > 0) {
+      else if (e.altKey && e.key === 'Enter' && selectedPaths.size > 0) {
+        // Alt+Enter → Eigenschaften (wie Windows Explorer)
+        e.preventDefault();
+        const path = [...selectedPaths][0];
+        setPropertiesPath(path);
+      }
+      else if (e.key === 'Enter' && !e.altKey && selectedPaths.size > 0) {
         e.preventDefault();
         const path = [...selectedPaths][0];
         const entry = entries.find(en => en.path === path);
-        if (entry?.isDirectory) navigateTo(path);
-        else if (entry) api.openFile(path);
+        if (entry) handleDoubleClick(entry);
       }
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [selectedPaths, entries, currentPath, clipboard, showToast, refresh, handleDelete, goBack, goForward, goUp, selectAll, navigateTo]);
+  }, [selectedPaths, entries, currentPath, clipboard, showToast, refresh, handleDelete, handleDoubleClick, goBack, goForward, goUp, selectAll, navigateTo, setPropertiesPath]);
 
   const breadcrumbParts = useMemo(() => {
     if (!currentPath) return [];
@@ -920,6 +912,7 @@ export default function ExplorerView() {
         const isDir = entry?.isDirectory;
         const ext = entry?.extension?.toLowerCase() || '';
         const isArchive = ext === '.zip';
+        const isPdf = ext === '.pdf';
         const isExecutable = ['.exe', '.msi', '.bat', '.cmd', '.ps1'].includes(ext);
         const isTextFile = ['.txt', '.log', '.md', '.json', '.xml', '.csv', '.ini', '.cfg', '.yaml', '.yml',
           '.bat', '.cmd', '.ps1', '.py', '.js', '.ts', '.jsx', '.tsx', '.html', '.htm', '.css', '.scss',
@@ -932,6 +925,9 @@ export default function ExplorerView() {
               <>
                 <button className="ctx-item ctx-item-bold" onClick={() => ctxAction('open')}>Öffnen</button>
                 {!isDir && <button className="ctx-item" onClick={() => ctxAction('open-with')}>Öffnen mit...</button>}
+                {isPdf && (
+                  <button className="ctx-item" onClick={() => ctxAction('open-in-pdf-editor')}>Im PDF-Editor öffnen</button>
+                )}
                 {(isTextFile || (!isDir && ext === '')) && (
                   <button className="ctx-item" onClick={() => ctxAction('edit')}>Bearbeiten</button>
                 )}
@@ -980,7 +976,7 @@ export default function ExplorerView() {
                 <button className="ctx-item" onClick={() => ctxAction('trash')}>In Papierkorb <span className="ctx-shortcut">Entf</span></button>
                 <button className="ctx-item ctx-item-danger" onClick={() => ctxAction('delete-permanent')}>Endgültig löschen <span className="ctx-shortcut">Shift+Entf</span></button>
                 <div className="ctx-separator" />
-                {!multi && <button className="ctx-item" onClick={() => ctxAction('properties')}>Eigenschaften</button>}
+                {!multi && <button className="ctx-item" onClick={() => ctxAction('properties')}>Eigenschaften <span className="ctx-shortcut">Alt+Enter</span></button>}
               </>
             ) : (
               <>
@@ -1013,7 +1009,7 @@ export default function ExplorerView() {
                 <button className="ctx-item" onClick={() => ctxAction('open-terminal')}>Terminal hier öffnen</button>
                 <button className="ctx-item" onClick={() => ctxAction('open-in-explorer')}>Im Explorer öffnen</button>
                 <div className="ctx-separator" />
-                <button className="ctx-item" onClick={() => ctxAction('folder-properties')}>Eigenschaften</button>
+                <button className="ctx-item" onClick={() => ctxAction('folder-properties')}>Eigenschaften <span className="ctx-shortcut">Alt+Enter</span></button>
               </>
             )}
           </div>
