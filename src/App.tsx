@@ -25,11 +25,18 @@ function AppInner() {
   const batteryIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const tabLoadedRef = useRef<Record<string, boolean>>({});
 
-  // Theme — synced to DOM and localStorage via context
+  // Theme — synced to DOM, localStorage, and native window via context
   useEffect(() => {
     document.documentElement.dataset.theme = ctx.theme;
     localStorage.setItem('speicher-analyse-theme', ctx.theme);
     api.setPreference('theme', ctx.theme).catch(() => {});
+    // Native Menüleiste an Theme anpassen (Tauri v2 Window API)
+    try {
+      const win = (window as any).__TAURI__?.window;
+      if (win?.getCurrentWindow) {
+        win.getCurrentWindow().setTheme(ctx.theme === 'dark' ? 'dark' : 'light').catch(() => {});
+      }
+    } catch { /* Tauri API nicht verfügbar */ }
   }, [ctx.theme]);
 
   // Register stub toast callback

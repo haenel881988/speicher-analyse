@@ -21,8 +21,11 @@ const ANNO_COLORS = [
 
 interface Point { x: number; y: number; }
 interface Rect { x1: number; y1: number; x2: number; y2: number; }
+type ShapeType = 'rect' | 'ellipse' | 'line' | 'arrow';
+type StampType = 'approved' | 'confidential' | 'draft' | 'copy' | 'date';
+
 interface Annotation {
-  type: 'highlight' | 'text' | 'ink' | 'freetext';
+  type: 'highlight' | 'text' | 'ink' | 'freetext' | 'shape' | 'stamp' | 'signature';
   page: number;
   rect: Rect;
   color: string;
@@ -30,7 +33,31 @@ interface Annotation {
   paths?: Point[][];
   width?: number;
   fontSize?: number;
+  fontFamily?: string;
+  shapeType?: ShapeType;
+  filled?: boolean;
+  stampType?: StampType;
+  rotation?: number;
 }
+
+const STAMPS: { id: StampType; label: string }[] = [
+  { id: 'approved', label: 'GENEHMIGT' },
+  { id: 'confidential', label: 'VERTRAULICH' },
+  { id: 'draft', label: 'ENTWURF' },
+  { id: 'copy', label: 'KOPIE' },
+  { id: 'date', label: new Date().toLocaleDateString('de-DE') },
+];
+
+const FONTS = [
+  { id: 'system-ui, sans-serif', label: 'Sans-Serif' },
+  { id: 'Georgia, serif', label: 'Serif' },
+  { id: 'Consolas, monospace', label: 'Monospace' },
+  { id: 'Segoe Script, cursive', label: 'Handschrift' },
+  { id: 'Arial, sans-serif', label: 'Arial' },
+  { id: 'Times New Roman, serif', label: 'Times' },
+  { id: 'Verdana, sans-serif', label: 'Verdana' },
+  { id: 'Courier New, monospace', label: 'Courier' },
+];
 
 interface PageEntry {
   canvas: HTMLCanvasElement;
@@ -62,7 +89,7 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
   const [error, setError] = useState('');
   const [totalPages, setTotalPages] = useState(0);
   const [scale, setScale] = useState(1.0);
-  const [currentTool, setCurrentTool] = useState<'select' | 'highlight' | 'comment' | 'freehand' | 'textbox'>('select');
+  const [currentTool, setCurrentTool] = useState<'select' | 'highlight' | 'comment' | 'freehand' | 'textbox' | 'shape-rect' | 'shape-ellipse' | 'shape-line' | 'shape-arrow' | 'stamp' | 'signature'>('select');
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [selectedAnnoIdx, setSelectedAnnoIdx] = useState<number | null>(null);
   const [unsavedChanges, setUnsavedChanges] = useState(false);
@@ -79,6 +106,18 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
   const [commentPopover, setCommentPopover] = useState<{ x: number; y: number; svgX: number; svgY: number; page: number; editIdx?: number; mode?: 'comment' | 'textbox' } | null>(null);
   const [commentText, setCommentText] = useState('');
   const [textFontSize, setTextFontSize] = useState(14);
+  const [textFontFamily, setTextFontFamily] = useState('system-ui, sans-serif');
+  const [shapeFilled, setShapeFilled] = useState(false);
+  const [activeStamp, setActiveStamp] = useState<StampType>('approved');
+  const [showSignaturePad, setShowSignaturePad] = useState(false);
+  const [savedSignatures, setSavedSignatures] = useState<Point[][][]>(() => {
+    try { return JSON.parse(localStorage.getItem('pdf-signatures') || '[]'); } catch { return []; }
+  });
+  const [pendingSignature, setPendingSignature] = useState<Point[][] | null>(null);
+  const [showShapePicker, setShowShapePicker] = useState(false);
+  const [showStampPicker, setShowStampPicker] = useState(false);
+  const [watermark, setWatermark] = useState<{ text: string; fontSize: number; color: string; opacity: number; rotation: number } | null>(null);
+  const [showWatermarkDialog, setShowWatermarkDialog] = useState(false);
   const [passwordPrompt, setPasswordPrompt] = useState<{ data: Uint8Array } | null>(null);
   const [passwordText, setPasswordText] = useState('');
   const [showSearch, setShowSearch] = useState(false);
@@ -111,6 +150,10 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
   const currentPathRef = useRef<Point[]>([]);
   const annoColorRef = useRef('#FFFF00');
   const strokeWidthRef = useRef(2);
+  const shapeFilledRef = useRef(false);
+  const pendingSignatureRef = useRef<Point[][] | null>(null);
+  const activeStampRef = useRef<StampType>('approved');
+  const watermarkRef = useRef<{ text: string; fontSize: number; color: string; opacity: number; rotation: number } | null>(null);
   const setCommentPopoverRef = useRef((_v: { x: number; y: number; svgX: number; svgY: number; page: number; editIdx?: number; mode?: 'comment' | 'textbox' } | null) => {});
   setCommentPopoverRef.current = setCommentPopover;
   const setCommentTextRef = useRef((_v: string) => {});
@@ -126,6 +169,17 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
   useEffect(() => { annoColorRef.current = annoColor; }, [annoColor]);
   useEffect(() => { strokeWidthRef.current = strokeWidth; }, [strokeWidth]);
   useEffect(() => { showImageInsertRef.current = showImageInsert; }, [showImageInsert]);
+  useEffect(() => { shapeFilledRef.current = shapeFilled; }, [shapeFilled]);
+  useEffect(() => { pendingSignatureRef.current = pendingSignature; }, [pendingSignature]);
+  useEffect(() => { activeStampRef.current = activeStamp; }, [activeStamp]);
+  useEffect(() => { watermarkRef.current = watermark; }, [watermark]);
+
+  // Wasserzeichen-Änderung auf alle Seiten propagieren
+  useEffect(() => {
+    for (let i = 0; i < pageEntriesRef.current.length; i++) {
+      if (pageEntriesRef.current[i].rendered) renderAnnotationsForPage(i + 1);
+    }
+  }, [watermark]);
 
   // Consume pending PDF path from context — warnt bei ungespeicherten Änderungen
   useEffect(() => {
@@ -618,7 +672,7 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
           textEl.setAttribute('x', String((anno.rect.x1) * s + 6 * s));
           textEl.setAttribute('y', String((anno.rect.y1) * s + fs + li * lineHeight + 2 * s));
           textEl.setAttribute('font-size', String(fs));
-          textEl.setAttribute('font-family', 'system-ui, -apple-system, sans-serif');
+          textEl.setAttribute('font-family', anno.fontFamily || 'system-ui, -apple-system, sans-serif');
           textEl.setAttribute('fill', anno.color || '#333');
           textEl.textContent = lines[li];
           g.appendChild(textEl);
@@ -640,7 +694,124 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
           polyline.setAttribute('stroke-opacity', '1');
           svg.appendChild(polyline);
         }
+      } else if (anno.type === 'shape' && anno.shapeType && anno.rect) {
+        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        g.classList.add('anno-render');
+        g.setAttribute('data-anno-idx', String(annoGlobalIdx));
+        g.style.cursor = 'pointer';
+        const x1 = anno.rect.x1 * s, y1 = anno.rect.y1 * s;
+        const x2 = anno.rect.x2 * s, y2 = anno.rect.y2 * s;
+        const w = x2 - x1, h = y2 - y1;
+        const color = anno.color || '#FF0000';
+        const sw = String(anno.width || 2);
+        if (anno.shapeType === 'rect') {
+          const r = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+          r.setAttribute('x', String(x1)); r.setAttribute('y', String(y1));
+          r.setAttribute('width', String(w)); r.setAttribute('height', String(h));
+          r.setAttribute('fill', anno.filled ? color + '40' : 'none');
+          r.setAttribute('stroke', color); r.setAttribute('stroke-width', sw);
+          g.appendChild(r);
+        } else if (anno.shapeType === 'ellipse') {
+          const el = document.createElementNS('http://www.w3.org/2000/svg', 'ellipse');
+          el.setAttribute('cx', String(x1 + w / 2)); el.setAttribute('cy', String(y1 + h / 2));
+          el.setAttribute('rx', String(w / 2)); el.setAttribute('ry', String(h / 2));
+          el.setAttribute('fill', anno.filled ? color + '40' : 'none');
+          el.setAttribute('stroke', color); el.setAttribute('stroke-width', sw);
+          g.appendChild(el);
+        } else if (anno.shapeType === 'line') {
+          const ln = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          ln.setAttribute('x1', String(x1)); ln.setAttribute('y1', String(y1));
+          ln.setAttribute('x2', String(x2)); ln.setAttribute('y2', String(y2));
+          ln.setAttribute('stroke', color); ln.setAttribute('stroke-width', sw);
+          ln.setAttribute('stroke-linecap', 'round');
+          g.appendChild(ln);
+        } else if (anno.shapeType === 'arrow') {
+          // Pfeil: Linie + Pfeilspitze
+          const ln = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          ln.setAttribute('x1', String(x1)); ln.setAttribute('y1', String(y1));
+          ln.setAttribute('x2', String(x2)); ln.setAttribute('y2', String(y2));
+          ln.setAttribute('stroke', color); ln.setAttribute('stroke-width', sw);
+          ln.setAttribute('stroke-linecap', 'round');
+          g.appendChild(ln);
+          // Pfeilspitze berechnen
+          const angle = Math.atan2(y2 - y1, x2 - x1);
+          const headLen = 12 * s;
+          const p1x = x2 - headLen * Math.cos(angle - Math.PI / 6);
+          const p1y = y2 - headLen * Math.sin(angle - Math.PI / 6);
+          const p2x = x2 - headLen * Math.cos(angle + Math.PI / 6);
+          const p2y = y2 - headLen * Math.sin(angle + Math.PI / 6);
+          const head = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+          head.setAttribute('points', `${x2},${y2} ${p1x},${p1y} ${p2x},${p2y}`);
+          head.setAttribute('fill', color);
+          g.appendChild(head);
+        }
+        svg.appendChild(g);
+      } else if (anno.type === 'stamp' && anno.stampType && anno.rect) {
+        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        g.classList.add('anno-render');
+        g.setAttribute('data-anno-idx', String(annoGlobalIdx));
+        g.style.cursor = 'pointer';
+        const cx = (anno.rect.x1 + anno.rect.x2) / 2 * s;
+        const cy = (anno.rect.y1 + anno.rect.y2) / 2 * s;
+        const rot = anno.rotation || -15;
+        g.setAttribute('transform', `rotate(${rot} ${cx} ${cy})`);
+        const x1 = anno.rect.x1 * s, y1 = anno.rect.y1 * s;
+        const w = (anno.rect.x2 - anno.rect.x1) * s, h = (anno.rect.y2 - anno.rect.y1) * s;
+        const color = anno.color || '#FF0000';
+        const border = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        border.setAttribute('x', String(x1)); border.setAttribute('y', String(y1));
+        border.setAttribute('width', String(w)); border.setAttribute('height', String(h));
+        border.setAttribute('fill', 'none'); border.setAttribute('stroke', color);
+        border.setAttribute('stroke-width', '3'); border.setAttribute('rx', '4');
+        g.appendChild(border);
+        const stampLabel = STAMPS.find(st => st.id === anno.stampType)?.label || anno.stampType.toUpperCase();
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('x', String(x1 + w / 2)); text.setAttribute('y', String(y1 + h / 2 + 8 * s));
+        text.setAttribute('text-anchor', 'middle'); text.setAttribute('font-size', String(20 * s));
+        text.setAttribute('font-weight', 'bold'); text.setAttribute('fill', color);
+        text.setAttribute('font-family', 'system-ui, sans-serif');
+        text.textContent = stampLabel;
+        g.appendChild(text);
+        svg.appendChild(g);
+      } else if (anno.type === 'signature' && anno.paths) {
+        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        g.classList.add('anno-render');
+        g.setAttribute('data-anno-idx', String(annoGlobalIdx));
+        g.style.cursor = 'pointer';
+        for (const path of anno.paths) {
+          const polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+          polyline.setAttribute('points', path.map(p => `${p.x * s},${p.y * s}`).join(' '));
+          polyline.setAttribute('fill', 'none');
+          polyline.setAttribute('stroke', anno.color || '#000080');
+          polyline.setAttribute('stroke-width', String((anno.width || 2) * s));
+          polyline.setAttribute('stroke-linecap', 'round');
+          polyline.setAttribute('stroke-linejoin', 'round');
+          g.appendChild(polyline);
+        }
+        svg.appendChild(g);
       }
+    }
+
+    // Wasserzeichen auf jeder Seite rendern (halbtransparent, zentriert, rotiert)
+    if (watermarkRef.current && watermarkRef.current.text) {
+      const wm = watermarkRef.current;
+      const wmText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      wmText.classList.add('anno-render');
+      const vw = parseFloat(svg.getAttribute('viewBox')?.split(' ')[2] || '800');
+      const vh = parseFloat(svg.getAttribute('viewBox')?.split(' ')[3] || '600');
+      wmText.setAttribute('x', String(vw / 2));
+      wmText.setAttribute('y', String(vh / 2));
+      wmText.setAttribute('text-anchor', 'middle');
+      wmText.setAttribute('dominant-baseline', 'middle');
+      wmText.setAttribute('font-size', String(wm.fontSize * s));
+      wmText.setAttribute('font-family', 'system-ui, sans-serif');
+      wmText.setAttribute('font-weight', 'bold');
+      wmText.setAttribute('fill', wm.color);
+      wmText.setAttribute('fill-opacity', String(wm.opacity));
+      wmText.setAttribute('transform', `rotate(${wm.rotation} ${vw / 2} ${vh / 2})`);
+      wmText.setAttribute('pointer-events', 'none');
+      wmText.textContent = wm.text;
+      svg.appendChild(wmText);
     }
   }, []);
 
@@ -795,6 +966,51 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
         rectEl.setAttribute('height', String(r.y2 - r.y1));
         rectEl.setAttribute('fill', annoColorRef.current + '4D');
         svg.appendChild(rectEl);
+      } else if (currentToolRef.current.startsWith('shape-') && drawStartRef.current) {
+        const end = currentPathRef.current[currentPathRef.current.length - 1];
+        const r = normalizeRect(drawStartRef.current, end);
+        const shapeType = currentToolRef.current.replace('shape-', '');
+        const color = annoColorRef.current;
+        const sw = String(strokeWidthRef.current);
+        if (shapeType === 'rect') {
+          const el = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+          el.classList.add('temp-draw');
+          el.setAttribute('x', String(r.x1)); el.setAttribute('y', String(r.y1));
+          el.setAttribute('width', String(r.x2 - r.x1)); el.setAttribute('height', String(r.y2 - r.y1));
+          el.setAttribute('fill', shapeFilledRef.current ? color + '40' : 'none');
+          el.setAttribute('stroke', color); el.setAttribute('stroke-width', sw);
+          svg.appendChild(el);
+        } else if (shapeType === 'ellipse') {
+          const w = r.x2 - r.x1, h = r.y2 - r.y1;
+          const el = document.createElementNS('http://www.w3.org/2000/svg', 'ellipse');
+          el.classList.add('temp-draw');
+          el.setAttribute('cx', String(r.x1 + w / 2)); el.setAttribute('cy', String(r.y1 + h / 2));
+          el.setAttribute('rx', String(w / 2)); el.setAttribute('ry', String(h / 2));
+          el.setAttribute('fill', shapeFilledRef.current ? color + '40' : 'none');
+          el.setAttribute('stroke', color); el.setAttribute('stroke-width', sw);
+          svg.appendChild(el);
+        } else if (shapeType === 'line' || shapeType === 'arrow') {
+          const el = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          el.classList.add('temp-draw');
+          el.setAttribute('x1', String(drawStartRef.current.x)); el.setAttribute('y1', String(drawStartRef.current.y));
+          el.setAttribute('x2', String(end.x)); el.setAttribute('y2', String(end.y));
+          el.setAttribute('stroke', color); el.setAttribute('stroke-width', sw);
+          el.setAttribute('stroke-linecap', 'round');
+          svg.appendChild(el);
+          if (shapeType === 'arrow') {
+            const angle = Math.atan2(end.y - drawStartRef.current.y, end.x - drawStartRef.current.x);
+            const headLen = 12;
+            const p1x = end.x - headLen * Math.cos(angle - Math.PI / 6);
+            const p1y = end.y - headLen * Math.sin(angle - Math.PI / 6);
+            const p2x = end.x - headLen * Math.cos(angle + Math.PI / 6);
+            const p2y = end.y - headLen * Math.sin(angle + Math.PI / 6);
+            const head = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+            head.classList.add('temp-draw');
+            head.setAttribute('points', `${end.x},${end.y} ${p1x},${p1y} ${p2x},${p2y}`);
+            head.setAttribute('fill', color);
+            svg.appendChild(head);
+          }
+        }
       }
     });
 
@@ -852,6 +1068,47 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
         addAnnotation({
           type: 'ink', page: pageNum - 1, rect: bounds,
           paths: [scaledPath], color: annoColorRef.current, width: strokeWidthRef.current,
+        });
+      } else if (currentToolRef.current.startsWith('shape-') && drawStartRef.current) {
+        const r = normalizeRect(drawStartRef.current, endPoint);
+        if (r.x2 - r.x1 > 5 && r.y2 - r.y1 > 5) {
+          const shapeType = currentToolRef.current.replace('shape-', '') as ShapeType;
+          addAnnotation({
+            type: 'shape', page: pageNum - 1,
+            rect: { x1: r.x1 / s, y1: r.y1 / s, x2: r.x2 / s, y2: r.y2 / s },
+            color: annoColorRef.current, width: strokeWidthRef.current,
+            shapeType, filled: shapeFilledRef.current,
+          });
+        }
+      } else if (currentToolRef.current === 'stamp') {
+        const svgRect = svg.getBoundingClientRect();
+        const clickX = (e.clientX - svgRect.left) / s;
+        const clickY = (e.clientY - svgRect.top) / s;
+        // Stempel: 120x40 PDF-Punkte
+        addAnnotation({
+          type: 'stamp', page: pageNum - 1,
+          rect: { x1: clickX - 60, y1: clickY - 20, x2: clickX + 60, y2: clickY + 20 },
+          color: annoColorRef.current, stampType: activeStampRef.current, rotation: -15,
+        });
+      } else if (currentToolRef.current === 'signature' && pendingSignatureRef.current) {
+        const svgRect = svg.getBoundingClientRect();
+        const clickX = (e.clientX - svgRect.left) / s;
+        const clickY = (e.clientY - svgRect.top) / s;
+        // Signatur auf 100px Breite skalieren und am Klickpunkt platzieren
+        const sigPaths = pendingSignatureRef.current;
+        const allPts = sigPaths.flat();
+        const bounds = pathBounds(allPts);
+        const bw = bounds.x2 - bounds.x1 || 1;
+        const bh = bounds.y2 - bounds.y1 || 1;
+        const targetW = 100;
+        const sigScale = targetW / bw;
+        const scaledPaths = sigPaths.map(path =>
+          path.map(p => ({ x: clickX + (p.x - bounds.x1) * sigScale, y: clickY + (p.y - bounds.y1) * sigScale }))
+        );
+        const finalBounds = { x1: clickX, y1: clickY, x2: clickX + bw * sigScale, y2: clickY + bh * sigScale };
+        addAnnotation({
+          type: 'signature', page: pageNum - 1, rect: finalBounds,
+          paths: scaledPaths, color: '#000080', width: 2,
         });
       }
 
@@ -1147,12 +1404,12 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
       setAnnotations(prev => prev.map((a, i) => {
         if (i !== commentPopover.editIdx) return a;
         if (a.type === 'freetext') {
-          // Freetext: Text, Schriftgröße und Rect aktualisieren
+          // Freetext: Text, Schriftgröße, Schriftart und Rect aktualisieren
           const lines = commentText.trim().split('\n');
           const fs = textFontSize;
           const textWidth = Math.max(...lines.map(l => l.length)) * fs * 0.55 + 12;
           const textHeight = lines.length * fs * 1.3 + 8;
-          return { ...a, text: commentText.trim(), fontSize: fs, color: annoColor,
+          return { ...a, text: commentText.trim(), fontSize: fs, fontFamily: textFontFamily, color: annoColor,
             rect: { x1: a.rect.x1, y1: a.rect.y1, x2: a.rect.x1 + Math.max(textWidth, 50), y2: a.rect.y1 + Math.max(textHeight, fs + 8) } };
         }
         return { ...a, text: commentText.trim() };
@@ -1169,7 +1426,7 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
       addAnnotation({
         type: 'freetext', page: commentPopover.page - 1,
         rect: { x1: x, y1: y, x2: x + Math.max(textWidth, 50), y2: y + Math.max(textHeight, fs + 8) },
-        text: commentText.trim(), color: annoColor, fontSize: fs,
+        text: commentText.trim(), color: annoColor, fontSize: fs, fontFamily: textFontFamily,
       });
     } else {
       // Kommentar-Annotation erstellen (Bubble mit Tooltip)
@@ -1184,7 +1441,7 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
     setTimeout(() => renderAnnotationsForPage(commentPopover.page), 50);
     setCommentPopover(null);
     setCommentText('');
-  }, [commentPopover, commentText, annoColor, textFontSize, addAnnotation, pushUndo, renderAnnotationsForPage]);
+  }, [commentPopover, commentText, annoColor, textFontSize, textFontFamily, addAnnotation, pushUndo, renderAnnotationsForPage]);
 
   const cancelComment = useCallback(() => {
     setCommentPopover(null);
@@ -1383,12 +1640,19 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
     );
   }
 
-  const tools = [
-    { id: 'select' as const, label: 'Auswählen', icon: '\u2B11' },
-    { id: 'highlight' as const, label: 'Markieren', icon: '\uD83D\uDD8D' },
-    { id: 'textbox' as const, label: 'Text', icon: 'T' },
-    { id: 'comment' as const, label: 'Kommentar', icon: '\uD83D\uDCAC' },
-    { id: 'freehand' as const, label: 'Freihand', icon: '\u270F\uFE0F' },
+  const tools: { id: typeof currentTool; label: string; icon: string }[] = [
+    { id: 'select', label: 'Auswählen', icon: '\u2B11' },
+    { id: 'highlight', label: 'Markieren', icon: '\uD83D\uDD8D' },
+    { id: 'textbox', label: 'Text', icon: 'T' },
+    { id: 'comment', label: 'Kommentar', icon: '\uD83D\uDCAC' },
+    { id: 'freehand', label: 'Freihand', icon: '\u270F\uFE0F' },
+  ];
+
+  const shapeTools: { id: typeof currentTool; label: string; icon: string }[] = [
+    { id: 'shape-rect', label: 'Rechteck', icon: '\u25A1' },
+    { id: 'shape-ellipse', label: 'Ellipse', icon: '\u25CB' },
+    { id: 'shape-line', label: 'Linie', icon: '\u2571' },
+    { id: 'shape-arrow', label: 'Pfeil', icon: '\u2192' },
   ];
 
   return (
@@ -1471,39 +1735,96 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
             <span className="pdf-tool-label">{t.label}</span>
           </button>
         ))}
-        {(currentTool === 'highlight' || currentTool === 'freehand' || currentTool === 'textbox' || currentTool === 'comment') && (
+        <span className="pdf-editor-separator" />
+        {/* Formen-Picker */}
+        <div className="pdf-tool-dropdown-wrap">
+          <button className={`pdf-editor-tool ${currentTool.startsWith('shape-') ? 'active' : ''}`}
+            onClick={() => setShowShapePicker(p => !p)} title="Formen">
+            <span className="pdf-tool-icon">{'\u25A1'}</span>
+            <span className="pdf-tool-label">Formen {'\u25BE'}</span>
+          </button>
+          {showShapePicker && (
+            <div className="pdf-tool-dropdown">
+              {shapeTools.map(st => (
+                <button key={st.id} className={`pdf-tool-dropdown-item ${currentTool === st.id ? 'active' : ''}`}
+                  onClick={() => { setCurrentTool(st.id); setShowShapePicker(false); }}>
+                  <span>{st.icon}</span> {st.label}
+                </button>
+              ))}
+              <span className="pdf-editor-separator" />
+              <button className={`pdf-tool-dropdown-item ${shapeFilled ? 'active' : ''}`}
+                onClick={() => setShapeFilled(f => !f)}>
+                {shapeFilled ? '\u25A0 Gefüllt' : '\u25A1 Nur Umriss'}
+              </button>
+            </div>
+          )}
+        </div>
+        {/* Stempel-Picker */}
+        <div className="pdf-tool-dropdown-wrap">
+          <button className={`pdf-editor-tool ${currentTool === 'stamp' ? 'active' : ''}`}
+            onClick={() => setShowStampPicker(p => !p)} title="Stempel">
+            <span className="pdf-tool-icon">{'\u2713'}</span>
+            <span className="pdf-tool-label">Stempel {'\u25BE'}</span>
+          </button>
+          {showStampPicker && (
+            <div className="pdf-tool-dropdown">
+              {STAMPS.map(st => (
+                <button key={st.id} className={`pdf-tool-dropdown-item ${activeStamp === st.id ? 'active' : ''}`}
+                  onClick={() => { setActiveStamp(st.id); setCurrentTool('stamp'); setShowStampPicker(false); }}>
+                  {st.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        {/* Signatur */}
+        <button className={`pdf-editor-tool ${currentTool === 'signature' ? 'active' : ''}`}
+          onClick={() => {
+            if (pendingSignature) { setCurrentTool('signature'); }
+            else { setShowSignaturePad(true); }
+          }} title="Unterschrift">
+          <span className="pdf-tool-icon">{'\u270D'}</span>
+          <span className="pdf-tool-label">Signatur</span>
+        </button>
+        {/* Wasserzeichen */}
+        <button className="pdf-editor-tool" onClick={() => setShowWatermarkDialog(true)} title="Wasserzeichen">
+          <span className="pdf-tool-icon">{'\uD83D\uDCA7'}</span>
+          <span className="pdf-tool-label">Wasserzeichen</span>
+        </button>
+        <span className="pdf-editor-separator" />
+        {/* Farbe — für alle Zeichenwerkzeuge */}
+        {(currentTool === 'highlight' || currentTool === 'freehand' || currentTool === 'textbox' || currentTool === 'comment' || currentTool.startsWith('shape-') || currentTool === 'stamp') && (
           <>
-            <span className="pdf-editor-separator" />
             {ANNO_COLORS.map(c => (
               <button key={c.hex} className={`pdf-color-swatch ${annoColor === c.hex ? 'active' : ''}`}
                 style={{ background: c.hex }} title={c.label}
                 onClick={() => setAnnoColor(c.hex)} />
             ))}
+            <span className="pdf-editor-separator" />
           </>
         )}
-        {currentTool === 'freehand' && (
+        {/* Strichstärke — Freihand + Formen */}
+        {(currentTool === 'freehand' || currentTool.startsWith('shape-')) && (
           <>
-            <span className="pdf-editor-separator" />
             {[1, 2, 4].map(w => (
               <button key={w} className={`pdf-stroke-btn ${strokeWidth === w ? 'active' : ''}`}
                 onClick={() => setStrokeWidth(w)} title={`${w}px`}>
                 <span className="pdf-stroke-preview" style={{ height: w }} />
               </button>
             ))}
+            <span className="pdf-editor-separator" />
           </>
         )}
         {selectedAnnoIdx !== null && (
           <>
+            <button className="pdf-editor-btn pdf-editor-btn-danger" onClick={deleteSelectedAnnotation} title="Ausgewählte Annotation löschen (Entf)">Löschen</button>
             <span className="pdf-editor-separator" />
-            <button className="pdf-editor-btn pdf-editor-btn-danger" onClick={deleteSelectedAnnotation} title="Ausgewählte Annotation löschen (Entf)">Annotation löschen</button>
           </>
         )}
-        <span className="pdf-editor-separator" />
         <button className="pdf-editor-btn" onClick={() => setScale(s => Math.max(s - 0.25, 0.25))} title="Verkleinern (-)">{'\u2212'}</button>
         <span className="pdf-editor-zoom-info">{Math.round(scale * 100)}%</span>
         <button className="pdf-editor-btn" onClick={() => setScale(s => Math.min(s + 0.25, 3.0))} title="Vergrößern (+)">+</button>
         <span className="pdf-editor-separator" />
-        {/* Seitenanzeige + Navigation */}
         <button className="pdf-editor-btn" onClick={() => scrollToPage(Math.max(currentPage - 1, 1))} disabled={currentPage <= 1} title="Vorherige Seite (Bild hoch)">{'\u25C0'}</button>
         {showGotoInput ? (
           <input type="text" className="pdf-editor-goto-input" value={gotoPageText} autoFocus
@@ -1588,13 +1909,21 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
           top: Math.min(commentPopover.y, window.innerHeight - (commentPopover.mode === 'textbox' ? 180 : 120)),
         }}>
           {commentPopover.mode === 'textbox' && (
-            <div className="pdf-popover-font-row">
-              <label className="pdf-popover-font-label">Schriftgröße:</label>
-              {[10, 12, 14, 18, 24, 32].map(fs => (
-                <button key={fs} className={`pdf-font-size-btn ${textFontSize === fs ? 'active' : ''}`}
-                  onClick={() => setTextFontSize(fs)}>{fs}</button>
-              ))}
-            </div>
+            <>
+              <div className="pdf-popover-font-row">
+                <label className="pdf-popover-font-label">Schrift:</label>
+                <select className="pdf-font-select" title="Schriftart" value={textFontFamily} onChange={e => setTextFontFamily(e.target.value)}>
+                  {FONTS.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
+                </select>
+              </div>
+              <div className="pdf-popover-font-row">
+                <label className="pdf-popover-font-label">Größe:</label>
+                {[10, 12, 14, 18, 24, 32].map(fs => (
+                  <button key={fs} type="button" className={`pdf-font-size-btn ${textFontSize === fs ? 'active' : ''}`}
+                    onClick={() => setTextFontSize(fs)}>{fs}</button>
+                ))}
+              </div>
+            </>
           )}
           <textarea
             className="pdf-comment-textarea"
@@ -1640,6 +1969,40 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
             </div>
           </div>
         </div>
+      )}
+
+      {/* Signatur-Pad Dialog */}
+      {showSignaturePad && (
+        <SignaturePadDialog
+          savedSignatures={savedSignatures}
+          onAccept={(paths) => {
+            setPendingSignature(paths);
+            // Signatur speichern (max 5)
+            const updated = [paths, ...savedSignatures].slice(0, 5);
+            setSavedSignatures(updated);
+            try { localStorage.setItem('pdf-signatures', JSON.stringify(updated)); } catch { /* voll */ }
+            setShowSignaturePad(false);
+            setCurrentTool('signature');
+            showToast('Klicke auf die Seite um die Signatur zu platzieren', 'info');
+          }}
+          onSelectSaved={(paths) => {
+            setPendingSignature(paths);
+            setShowSignaturePad(false);
+            setCurrentTool('signature');
+            showToast('Klicke auf die Seite um die Signatur zu platzieren', 'info');
+          }}
+          onClose={() => setShowSignaturePad(false)}
+        />
+      )}
+
+      {/* Wasserzeichen-Dialog */}
+      {showWatermarkDialog && (
+        <WatermarkDialog
+          current={watermark}
+          onApply={(wm) => { setWatermark(wm); setShowWatermarkDialog(false); }}
+          onRemove={() => { setWatermark(null); setShowWatermarkDialog(false); }}
+          onClose={() => setShowWatermarkDialog(false)}
+        />
       )}
     </div>
   );
@@ -1742,6 +2105,174 @@ function MergeDialog({ files, onAddFile, onMerge, onClose, onReorder, onRemoveFi
           <button className="pdf-editor-btn" onClick={onAddFile}>PDF hinzufügen...</button>
           <button className="pdf-editor-btn" disabled={files.length < 2} onClick={onMerge}>Zusammenfügen</button>
           <button className="pdf-editor-btn" onClick={onClose}>Abbrechen</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SignaturePadDialog({ savedSignatures, onAccept, onSelectSaved, onClose }: {
+  savedSignatures: Point[][][];
+  onAccept: (paths: Point[][]) => void;
+  onSelectSaved: (paths: Point[][]) => void;
+  onClose: () => void;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const pathsRef = useRef<Point[][]>([]);
+  const drawingRef = useRef(false);
+  const currentPathRef = useRef<Point[]>([]);
+
+  const redraw = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d')!;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.strokeStyle = '#000080';
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    for (const path of [...pathsRef.current, currentPathRef.current]) {
+      if (path.length < 2) continue;
+      ctx.beginPath();
+      ctx.moveTo(path[0].x, path[0].y);
+      for (let i = 1; i < path.length; i++) ctx.lineTo(path[i].x, path[i].y);
+      ctx.stroke();
+    }
+  }, []);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const getPoint = (e: MouseEvent) => {
+      const r = canvas.getBoundingClientRect();
+      return { x: e.clientX - r.left, y: e.clientY - r.top };
+    };
+    const onDown = (e: MouseEvent) => {
+      drawingRef.current = true;
+      currentPathRef.current = [getPoint(e)];
+    };
+    const onMove = (e: MouseEvent) => {
+      if (!drawingRef.current) return;
+      currentPathRef.current.push(getPoint(e));
+      redraw();
+    };
+    const onUp = () => {
+      if (!drawingRef.current) return;
+      drawingRef.current = false;
+      if (currentPathRef.current.length > 2) {
+        pathsRef.current = [...pathsRef.current, currentPathRef.current];
+      }
+      currentPathRef.current = [];
+    };
+    canvas.addEventListener('mousedown', onDown);
+    canvas.addEventListener('mousemove', onMove);
+    canvas.addEventListener('mouseup', onUp);
+    canvas.addEventListener('mouseleave', onUp);
+    return () => {
+      canvas.removeEventListener('mousedown', onDown);
+      canvas.removeEventListener('mousemove', onMove);
+      canvas.removeEventListener('mouseup', onUp);
+      canvas.removeEventListener('mouseleave', onUp);
+    };
+  }, [redraw]);
+
+  return (
+    <div className="pdf-editor-dialog-overlay">
+      <div className="pdf-editor-dialog pdf-signature-dialog">
+        <h3>Unterschrift erstellen</h3>
+        <p>Unterschreibe mit der Maus im Feld unten.</p>
+        <canvas ref={canvasRef} width={400} height={150} className="pdf-signature-canvas" />
+        <div className="pdf-editor-dialog-btns">
+          <button type="button" className="pdf-editor-btn" onClick={() => {
+            if (pathsRef.current.length === 0) return;
+            onAccept(pathsRef.current);
+          }}>Übernehmen</button>
+          <button type="button" className="pdf-editor-btn" onClick={() => {
+            pathsRef.current = [];
+            currentPathRef.current = [];
+            const ctx = canvasRef.current?.getContext('2d');
+            if (ctx && canvasRef.current) ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+          }}>Löschen</button>
+          <button type="button" className="pdf-editor-btn" onClick={onClose}>Abbrechen</button>
+        </div>
+        {savedSignatures.length > 0 && (
+          <div className="pdf-saved-signatures">
+            <p className="pdf-saved-sig-label">Gespeicherte Signaturen:</p>
+            <div className="pdf-saved-sig-list">
+              {savedSignatures.map((sig, i) => (
+                <button key={i} type="button" className="pdf-saved-sig-btn" onClick={() => onSelectSaved(sig)}
+                  title={`Signatur ${i + 1} verwenden`}>
+                  <SignaturePreview paths={sig} width={80} height={30} />
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SignaturePreview({ paths, width, height }: { paths: Point[][]; width: number; height: number }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || paths.length === 0) return;
+    const ctx = canvas.getContext('2d')!;
+    ctx.clearRect(0, 0, width, height);
+    // Bounds berechnen und skalieren
+    const allPts = paths.flat();
+    const bounds = pathBounds(allPts);
+    const bw = bounds.x2 - bounds.x1 || 1;
+    const bh = bounds.y2 - bounds.y1 || 1;
+    const sx = (width - 8) / bw;
+    const sy = (height - 4) / bh;
+    const s = Math.min(sx, sy);
+    ctx.strokeStyle = '#000080';
+    ctx.lineWidth = 1.5;
+    ctx.lineCap = 'round';
+    for (const path of paths) {
+      if (path.length < 2) continue;
+      ctx.beginPath();
+      ctx.moveTo(4 + (path[0].x - bounds.x1) * s, 2 + (path[0].y - bounds.y1) * s);
+      for (let i = 1; i < path.length; i++) {
+        ctx.lineTo(4 + (path[i].x - bounds.x1) * s, 2 + (path[i].y - bounds.y1) * s);
+      }
+      ctx.stroke();
+    }
+  }, [paths, width, height]);
+  return <canvas ref={canvasRef} width={width} height={height} className="pdf-sig-preview-canvas" />;
+}
+
+function WatermarkDialog({ current, onApply, onRemove, onClose }: {
+  current: { text: string; fontSize: number; color: string; opacity: number; rotation: number } | null;
+  onApply: (wm: { text: string; fontSize: number; color: string; opacity: number; rotation: number }) => void;
+  onRemove: () => void;
+  onClose: () => void;
+}) {
+  const [text, setText] = useState(current?.text || 'VERTRAULICH');
+  const [fontSize, setFontSize] = useState(current?.fontSize || 60);
+  const [color, setColor] = useState(current?.color || '#888888');
+  const [opacity, setOpacity] = useState(current?.opacity || 0.15);
+  const [rotation, setRotation] = useState(current?.rotation || -30);
+
+  return (
+    <div className="pdf-editor-dialog-overlay">
+      <div className="pdf-editor-dialog">
+        <h3>Wasserzeichen</h3>
+        <div className="pdf-watermark-form">
+          <label>Text: <input type="text" value={text} onChange={e => setText(e.target.value)} className="pdf-wm-input" /></label>
+          <label>Schriftgröße: <input type="number" value={fontSize} min={10} max={200} onChange={e => setFontSize(Number(e.target.value))} className="pdf-wm-num" /></label>
+          <label>Farbe: <input type="color" value={color} onChange={e => setColor(e.target.value)} /></label>
+          <label>Transparenz: <input type="range" min={0.05} max={0.5} step={0.05} value={opacity}
+            onChange={e => setOpacity(Number(e.target.value))} title={`${Math.round(opacity * 100)}%`} /> {Math.round(opacity * 100)}%</label>
+          <label>Drehung: <input type="range" min={-90} max={90} step={5} value={rotation}
+            onChange={e => setRotation(Number(e.target.value))} title={`${rotation}°`} /> {rotation}°</label>
+        </div>
+        <div className="pdf-editor-dialog-btns">
+          <button type="button" className="pdf-editor-btn" onClick={() => onApply({ text, fontSize, color, opacity, rotation })}>Anwenden</button>
+          {current && <button type="button" className="pdf-editor-btn" onClick={onRemove}>Entfernen</button>}
+          <button type="button" className="pdf-editor-btn" onClick={onClose}>Abbrechen</button>
         </div>
       </div>
     </div>
