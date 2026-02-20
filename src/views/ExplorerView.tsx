@@ -57,6 +57,7 @@ export default function ExplorerView() {
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; entry: FileEntry | null } | null>(null);
   const [newFolderName, setNewFolderName] = useState<string | null>(null);
   const [moveTarget, setMoveTarget] = useState<string | null>(null);
+  const [clipboard, setClipboard] = useState<{ paths: string[]; cut: boolean } | null>(null);
 
   const lastClickedRef = useRef<string | null>(null);
   const dirCacheRef = useRef<Map<string, { data: any; time: number }>>(new Map());
@@ -80,40 +81,6 @@ export default function ExplorerView() {
       navigateTo(defaultPath, false);
     })();
   }, []);
-
-  // Keyboard handler
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-      if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); goBack(); }
-      else if (e.altKey && e.key === 'ArrowRight') { e.preventDefault(); goForward(); }
-      else if (e.altKey && e.key === 'ArrowUp') { e.preventDefault(); goUp(); }
-      else if (e.key === 'F5') { e.preventDefault(); refresh(); }
-      else if (e.key === 'Backspace') { e.preventDefault(); goUp(); }
-      else if (e.key === 'a' && e.ctrlKey) { e.preventDefault(); selectAll(); }
-      else if (e.key === 'l' && e.ctrlKey) { e.preventDefault(); setAddressMode('input'); }
-      else if (e.key === 'f' && e.ctrlKey) { e.preventDefault(); setAddressMode('input'); }
-      else if (e.key === 'F2' && selectedPaths.size === 1) {
-        e.preventDefault();
-        const path = [...selectedPaths][0];
-        const entry = entries.find(en => en.path === path);
-        if (entry) { setRenamePath(path); setRenameValue(entry.name); }
-      }
-      else if (e.key === 'Delete' && selectedPaths.size > 0) {
-        e.preventDefault();
-        handleDelete(e.shiftKey);
-      }
-      else if (e.key === 'Enter' && selectedPaths.size > 0) {
-        e.preventDefault();
-        const path = [...selectedPaths][0];
-        const entry = entries.find(en => en.path === path);
-        if (entry?.isDirectory) navigateTo(path);
-        else if (entry) api.openFile(path);
-      }
-    };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [selectedPaths, entries, currentPath, historyBack, historyForward]);
 
   const navigateTo = useCallback(async (dirPath: string, addToHistory = true) => {
     if (addToHistory && currentPath) {
@@ -367,9 +334,10 @@ export default function ExplorerView() {
         break;
       case 'move-to': {
         const result = await api.showSaveDialog({ title: 'Zielordner wählen', directory: true });
-        if (result && typeof result === 'string') {
+        const moveDest = result?.path;
+        if (moveDest && !result.canceled) {
           try {
-            await api.move(paths, result);
+            await api.move(paths, moveDest);
             showToast(`${paths.length} Element(e) verschoben`, 'info');
             refresh();
           } catch (err: any) { showToast('Fehler: ' + err.message, 'error'); }
@@ -378,9 +346,10 @@ export default function ExplorerView() {
       }
       case 'copy-to': {
         const result = await api.showSaveDialog({ title: 'Zielordner wählen', directory: true });
-        if (result && typeof result === 'string') {
+        const copyDest = result?.path;
+        if (copyDest && !result.canceled) {
           try {
-            await api.copy(paths, result);
+            await api.copy(paths, copyDest);
             showToast(`${paths.length} Element(e) kopiert`, 'info');
           } catch (err: any) { showToast('Fehler: ' + err.message, 'error'); }
         }
@@ -433,8 +402,45 @@ export default function ExplorerView() {
           try { await api.removeFileTag(singlePath); refresh(); } catch {}
         }
         break;
+      case 'cut':
+        if (paths.length > 0) {
+          setClipboard({ paths, cut: true });
+          showToast(`${paths.length} Element(e) ausgeschnitten`, 'info');
+        }
+        break;
+      case 'copy-files':
+        if (paths.length > 0) {
+          setClipboard({ paths, cut: false });
+          showToast(`${paths.length} Element(e) kopiert`, 'info');
+        }
+        break;
+      case 'paste':
+        if (clipboard && clipboard.paths.length > 0) {
+          try {
+            if (clipboard.cut) {
+              await api.move(clipboard.paths, currentPath);
+              setClipboard(null);
+            } else {
+              await api.copy(clipboard.paths, currentPath);
+            }
+            showToast(`${clipboard.paths.length} Element(e) eingefügt`, 'info');
+            refresh();
+          } catch (err: any) { showToast('Fehler: ' + err.message, 'error'); }
+        }
+        break;
+      case 'new-textfile': {
+        const fileName = 'Neues Textdokument.txt';
+        try {
+          const fullPath = currentPath.replace(/[\\/]$/, '') + '\\' + fileName;
+          await api.writeFileContent(fullPath, '');
+          refresh();
+          setRenamePath(fullPath);
+          setRenameValue(fileName);
+        } catch (err: any) { showToast('Fehler: ' + err.message, 'error'); }
+        break;
+      }
     }
-  }, [ctxMenu, selectedPaths, currentPath, navigateTo, handleDelete, refresh, showToast]);
+  }, [ctxMenu, selectedPaths, currentPath, clipboard, navigateTo, handleDelete, refresh, showToast]);
 
   const handleNewFolder = useCallback(async () => {
     if (newFolderName === null) return;
@@ -553,6 +559,65 @@ export default function ExplorerView() {
     if (parts.length <= 3) return p;
     return parts[0] + '\\..\\' + parts.slice(-2).join('\\');
   };
+
+  // Keyboard handler
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); goBack(); }
+      else if (e.altKey && e.key === 'ArrowRight') { e.preventDefault(); goForward(); }
+      else if (e.altKey && e.key === 'ArrowUp') { e.preventDefault(); goUp(); }
+      else if (e.key === 'F5') { e.preventDefault(); refresh(); }
+      else if (e.key === 'Backspace') { e.preventDefault(); goUp(); }
+      else if (e.key === 'a' && e.ctrlKey) { e.preventDefault(); selectAll(); }
+      else if (e.key === 'l' && e.ctrlKey) { e.preventDefault(); setAddressMode('input'); }
+      else if (e.key === 'f' && e.ctrlKey) { e.preventDefault(); setAddressMode('input'); }
+      else if (e.key === 'F2' && selectedPaths.size === 1) {
+        e.preventDefault();
+        const path = [...selectedPaths][0];
+        const entry = entries.find(en => en.path === path);
+        if (entry) { setRenamePath(path); setRenameValue(entry.name); }
+      }
+      else if (e.key === 'x' && e.ctrlKey && selectedPaths.size > 0) {
+        e.preventDefault();
+        setClipboard({ paths: [...selectedPaths], cut: true });
+        showToast(`${selectedPaths.size} Element(e) ausgeschnitten`, 'info');
+      }
+      else if (e.key === 'c' && e.ctrlKey && selectedPaths.size > 0) {
+        e.preventDefault();
+        setClipboard({ paths: [...selectedPaths], cut: false });
+        showToast(`${selectedPaths.size} Element(e) kopiert`, 'info');
+      }
+      else if (e.key === 'v' && e.ctrlKey && clipboard && clipboard.paths.length > 0) {
+        e.preventDefault();
+        (async () => {
+          try {
+            if (clipboard.cut) {
+              await api.move(clipboard.paths, currentPath);
+              setClipboard(null);
+            } else {
+              await api.copy(clipboard.paths, currentPath);
+            }
+            showToast(`${clipboard.paths.length} Element(e) eingefügt`, 'info');
+            refresh();
+          } catch (err: any) { showToast('Fehler: ' + err.message, 'error'); }
+        })();
+      }
+      else if (e.key === 'Delete' && selectedPaths.size > 0) {
+        e.preventDefault();
+        handleDelete(e.shiftKey);
+      }
+      else if (e.key === 'Enter' && selectedPaths.size > 0) {
+        e.preventDefault();
+        const path = [...selectedPaths][0];
+        const entry = entries.find(en => en.path === path);
+        if (entry?.isDirectory) navigateTo(path);
+        else if (entry) api.openFile(path);
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [selectedPaths, entries, currentPath, clipboard, showToast, refresh, handleDelete, goBack, goForward, goUp, selectAll, navigateTo]);
 
   const sorted = getSortedEntries();
   const breadcrumbParts = (() => {
@@ -791,7 +856,8 @@ export default function ExplorerView() {
         const entry = ctxMenu.entry;
         const multi = selectedPaths.size > 1;
         const isDir = entry?.isDirectory;
-        const isArchive = entry && /\.(zip|7z|rar|tar|gz|bz2)$/i.test(entry.extension);
+        const isArchive = entry && entry.extension.toLowerCase() === '.zip';
+        const isExecutable = entry && ['.exe', '.msi', '.bat', '.cmd', '.ps1'].includes(entry.extension.toLowerCase());
         const hasTag = entry ? !!dirTags[entry.path] : false;
         return (
           <div className="explorer-ctx-menu" style={{ left: ctxMenu.x, top: ctxMenu.y }} onClick={e => e.stopPropagation()}>
@@ -801,12 +867,14 @@ export default function ExplorerView() {
                   {isDir ? 'Öffnen' : 'Öffnen'}
                 </button>
                 {!isDir && <button className="ctx-item" onClick={() => ctxAction('open-with')}>Öffnen mit...</button>}
-                {!isDir && entry.extension === '.exe' && (
+                {isExecutable && (
                   <button className="ctx-item" onClick={() => ctxAction('run-as-admin')}>Als Administrator ausführen</button>
                 )}
                 <button className="ctx-item" onClick={() => ctxAction('open-in-explorer')}>Im Explorer anzeigen</button>
                 <button className="ctx-item" onClick={() => ctxAction('open-terminal')}>Terminal hier öffnen</button>
                 <div className="ctx-separator" />
+                <button className="ctx-item" onClick={() => ctxAction('cut')}>Ausschneiden <span className="ctx-shortcut">Strg+X</span></button>
+                <button className="ctx-item" onClick={() => ctxAction('copy-files')}>Kopieren <span className="ctx-shortcut">Strg+C</span></button>
                 <button className="ctx-item" onClick={() => ctxAction('copy-path')}>Pfad kopieren</button>
                 {!multi && <button className="ctx-item" onClick={() => ctxAction('rename')}>Umbenennen <span className="ctx-shortcut">F2</span></button>}
                 <div className="ctx-separator" />
@@ -842,7 +910,11 @@ export default function ExplorerView() {
             ) : (
               <>
                 <button className="ctx-item" onClick={() => ctxAction('new-folder')}>Neuer Ordner</button>
+                <button className="ctx-item" onClick={() => ctxAction('new-textfile')}>Neues Textdokument</button>
                 <div className="ctx-separator" />
+                {clipboard && clipboard.paths.length > 0 && (
+                  <button className="ctx-item" onClick={() => ctxAction('paste')}>Einfügen <span className="ctx-shortcut">Strg+V</span></button>
+                )}
                 <button className="ctx-item" onClick={() => ctxAction('open-terminal')}>Terminal hier öffnen</button>
                 <button className="ctx-item" onClick={() => ctxAction('open-in-explorer')}>Im Explorer öffnen</button>
               </>
