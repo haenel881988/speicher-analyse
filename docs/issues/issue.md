@@ -10,11 +10,11 @@
 
 > Simons ursprüngliche Ideen — unverändert beibehalten. Claude ergänzt jeweils den aktuellen Status.
 
-### Sicherheitscheck / GPO-Scanner
+### ~~Sicherheitscheck / GPO-Scanner~~ — ENTFALLEN
 
- - Erweiterung vom Sicherheitscheck - oder unterregister mit einem GPO Scan. Dabei soll der Scan die GPOs scannen ob es potenziell problematische Einstellungen gibt, die zu Fehlern, bluescreens etc. führen, gerade kombiniert mit der Registry können so sehr subtile Probleme sichtbar gemacht werden, damit dann schritt für schritt das Problem behoben werden kann / evtl. auch welche übergeordnete GPO die Problematik verursacht.
+ - ~~Erweiterung vom Sicherheitscheck - oder unterregister mit einem GPO Scan. Dabei soll der Scan die GPOs scannen ob es potenziell problematische Einstellungen gibt, die zu Fehlern, bluescreens etc. führen, gerade kombiniert mit der Registry können so sehr subtile Probleme sichtbar gemacht werden, damit dann schritt für schritt das Problem behoben werden kann / evtl. auch welche übergeordnete GPO die Problematik verursacht.~~
 
-> **Claude:** Eingeplant als Stufe 2 Feature (§2.2 GPO-Scanner). Noch nicht implementiert — kommt nach Stufe 1.
+> **Claude:** Entfallen (20.02.2026) — Simons Entscheidung. GPO-Scanner und Erweiterter Sicherheitscheck werden nicht umgesetzt.
 
 ### Webbrowser-Integration
 
@@ -90,7 +90,7 @@ Weitere Funktionen fehlen bei entsprechenden Dateitypen, bei Bildern z.B.: die A
 - Stufe 2 "Netzwerk & Sicherheit" wird überarbeitet: Netzwerk-Scanner und Firewall-Verwaltung entfallen
 - Issue #11 (Paketaufzeichnung) wird gestrichen — selbes AV-Risiko
 - Issue #20 (Geräte falsch erkannt) wird obsolet
-- GPO-Scanner und Sicherheits-Check bleiben (betreffen nur den lokalen PC)
+- ~~GPO-Scanner und Sicherheits-Check~~ — ebenfalls entfallen (Simons Entscheidung, 20.02.2026)
 
 **Status:** Umgesetzt (19.02.2026) — Frontend-Code entfernt (470 Zeilen), verwaiste Scanner-CSS bereinigt (105 Zeilen). Backend/Bridge hatten keine Scanner-Commands (nie implementiert). oui.rs bleibt (wird vom Verbindungs-Monitor benötigt).
 
@@ -757,72 +757,9 @@ Die App hat bereits einen beeindruckenden Funktionsumfang. Jetzt geht es darum, 
 
 ---
 
-## Stufe 2 — Sicherheit & Systemanalyse
+## ~~Stufe 2 — Sicherheit & Systemanalyse~~ — ENTFALLEN
 
-> **Ziel:** Die App wird zum Sicherheits-Werkzeug. Den eigenen PC gründlich verstehen und schützen.
-> **Zielgruppe:** Admins, sicherheitsbewusste Power-User
->
-> **Hinweis (18.02.2026):** Netzwerk-Scanner und Firewall-Verwaltung wurden gestrichen (AV-Risiko). Paketaufzeichnung (Issue #11) ebenfalls entfallen. Fokus liegt auf lokaler Systemanalyse.
-
-### Was in dieser Stufe passiert
-
-~~Die Grundlagen sind da: Netzwerk-Monitor, Geräte-Scanner, Verbindungs-Verlauf. Stufe 2 vertieft diese Funktionen und macht sie professioneller.~~ Stufe 2 fokussiert sich auf lokale Sicherheitsanalyse: GPO-Scanner, erweiterter Sicherheits-Check, Systemhärtung — alles ohne Netzwerk-Scanning.
-
-### Geplante Verbesserungen (Stufe 2)
-
-#### ~~2.1 Netzwerk-Paketaufzeichnung — Issue #11~~ ENTFALLEN
-
-> Gestrichen am 18.02.2026 — AV-Software erkennt Paketaufzeichnung als verdächtige Aktivität. Siehe "Strategische Entscheidungen" oben.
-
----
-
-#### 2.2 GPO-Scanner — Simons Idee
-
-**Was es ist:** Ein Scan der Windows-Gruppenrichtlinien (GPOs), der potenziell problematische Einstellungen erkennt.
-
-**Was der Nutzer sieht:**
-- "Es gibt eine Richtlinie, die Windows-Updates verzögert — das kann zu Sicherheitslücken führen"
-- "Diese Einstellung blockiert den Windows Store — gewollt oder versehentlich?"
-- Kombiniert mit der Registry-Analyse: subtile Probleme sichtbar machen, die sonst Bluescreens oder Fehler verursachen
-- Schritt-für-Schritt-Hilfe: welche übergeordnete Richtlinie das Problem verursacht
-
-**Warum das wichtig ist:** GPO-Probleme sind eine der häufigsten Ursachen für schwer erklärbare Windows-Fehler. Kein bestehendes Consumer-Tool prüft GPOs — das wäre ein echtes Alleinstellungsmerkmal.
-
-→ *Aus Simons Ideen Salat (oben in dieser Datei)*
-
----
-
-#### 2.3 Erweiterter Sicherheits-Check
-
-**Was sich ändert:** Der bestehende Sicherheits-Check wird umfassender.
-
-**Was der Nutzer sieht:**
-- Prüfung auf bekannte Schwachstellen (fehlende Patches, unsichere Einstellungen)
-- Bewertung der Passwort-Richtlinien (Gastkonto ohne Passwort? Administrator-Konto aktiviert?)
-- Verschlüsselungsstatus aller Laufwerke
-- Netzwerk-Exposition: "Dein PC ist von 3 anderen Geräten im Netzwerk erreichbar auf Port 445 (Dateifreigabe)"
-- Alles als druckbarer PDF-Bericht
-
-**Warum das wichtig ist:** Die Recherche zeigt: Datenschutz und Sicherheit sind im DACH-Raum ein starkes Verkaufsargument. "100% Offline — Deine Daten gehören Dir" plus ein umfassender Sicherheits-Check ist ein Alleinstellungsmerkmal.
-
----
-
-#### ~~2.4 Firewall-Verwaltung~~ ENTFALLEN
-
-> Gestrichen am 18.02.2026 — Firewall-Manipulation löst höchste AV-Alarmstufe aus. Siehe "Strategische Entscheidungen" oben.
-
----
-
-### Stufe 2 — Zusammenfassung (aktualisiert 18.02.2026)
-
-| Was | Nutzen | Aufwand |
-|-----|--------|---------|
-| ~~Paketaufzeichnung (#11)~~ | ~~Sehen was Apps wirklich senden~~ | ~~Gross~~ ENTFALLEN |
-| GPO-Scanner | Versteckte Probleme finden die sonst niemand findet | Mittel |
-| Erweiterter Sicherheits-Check | Umfassender Schutz-Bericht | Mittel |
-| ~~Firewall-Verwaltung~~ | ~~Programme blockieren ohne Fachwissen~~ | ~~Klein~~ ENTFALLEN |
-
-**Ergebnis Stufe 2:** Die App wird zum "Sicherheits-Berater" — GPO-Scanner und Sicherheits-Check analysieren den lokalen PC gründlich, ohne Netzwerk-Aktivität die AV-Software alarmieren könnte.
+> **Entfallen (20.02.2026):** Simons Entscheidung — GPO-Scanner, Erweiterter Sicherheitscheck, Paketaufzeichnung und Firewall-Verwaltung werden nicht umgesetzt. Die App springt direkt von Stufe 1 zu Stufe 3 (IT-Dokumentation & Inventar).
 
 ---
 
@@ -1025,7 +962,7 @@ Bevor Stufe 4 angegangen wird, müssen diese Bedingungen erfüllt sein:
 | Stufe | Issues | Neue Features |
 |-------|--------|---------------|
 | **1** | #2, #3, #4, #5, #7, #8, #9, #10, #12, #13, #14, #15 | Diagnose-Knopf |
-| **2** | — | GPO-Scanner, Erweiterter Sicherheits-Check (Firewall/Paket entfallen) |
+| ~~**2**~~ | — | ~~ENTFALLEN~~ (GPO-Scanner, Sicherheits-Check gestrichen) |
 | **3** | #16 | Multi-Geräte-Inventar, IT-Berichte, Hardware-Lebenszyklus |
 | **4** | #17, #18, #19 | Fernwartung, Zentrales Dashboard, Monitoring, Automatisierung |
 
@@ -1035,14 +972,14 @@ Bevor Stufe 4 angegangen wird, müssen diese Bedingungen erfüllt sein:
 
 Die Recherche identifiziert 6 Nutzergruppen. So passen sie zu den Stufen:
 
-| Nutzergruppe | Stufe 1 | Stufe 2 | Stufe 3 | Stufe 4 |
-|--------------|---------|---------|---------|---------|
-| **Privatanwender** (PC aufräumen) | Kern | — | — | — |
-| **Power-User** (alles in einem Tool) | Kern | Kern | — | — |
-| **Freelancer** (kein IT-Support, wenig Zeit) | Kern | Nutzt mit | Nutzt mit | — |
-| **IT-Admins** (schnelle Diagnose, portabel) | Kern | Kern | Kern | Nutzt mit |
-| **MSPs** (viele Kunden-PCs, Kosten sparen) | Testet | Nutzt mit | Kern | Kern |
-| **Kleine Unternehmen** (kein IT-Wissen) | — | — | Indirekt (via MSP) | Indirekt (via MSP) |
+| Nutzergruppe | Stufe 1 | Stufe 3 | Stufe 4 |
+|--------------|---------|---------|---------|
+| **Privatanwender** (PC aufräumen) | Kern | — | — |
+| **Power-User** (alles in einem Tool) | Kern | — | — |
+| **Freelancer** (kein IT-Support, wenig Zeit) | Kern | Nutzt mit | — |
+| **IT-Admins** (schnelle Diagnose, portabel) | Kern | Kern | Nutzt mit |
+| **MSPs** (viele Kunden-PCs, Kosten sparen) | Testet | Kern | Kern |
+| **Kleine Unternehmen** (kein IT-Wissen) | — | Indirekt (via MSP) | Indirekt (via MSP) |
 
 ---
 
