@@ -22,13 +22,14 @@ const ANNO_COLORS = [
 interface Point { x: number; y: number; }
 interface Rect { x1: number; y1: number; x2: number; y2: number; }
 interface Annotation {
-  type: 'highlight' | 'text' | 'ink';
+  type: 'highlight' | 'text' | 'ink' | 'freetext';
   page: number;
   rect: Rect;
   color: string;
   text?: string;
   paths?: Point[][];
   width?: number;
+  fontSize?: number;
 }
 
 interface PageEntry {
@@ -61,7 +62,7 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
   const [error, setError] = useState('');
   const [totalPages, setTotalPages] = useState(0);
   const [scale, setScale] = useState(1.0);
-  const [currentTool, setCurrentTool] = useState<'select' | 'highlight' | 'comment' | 'freehand'>('select');
+  const [currentTool, setCurrentTool] = useState<'select' | 'highlight' | 'comment' | 'freehand' | 'textbox'>('select');
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [selectedAnnoIdx, setSelectedAnnoIdx] = useState<number | null>(null);
   const [unsavedChanges, setUnsavedChanges] = useState(false);
@@ -75,8 +76,9 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
   const [showGotoInput, setShowGotoInput] = useState(false);
   const [annoColor, setAnnoColor] = useState('#FFFF00');
   const [strokeWidth, setStrokeWidth] = useState(2);
-  const [commentPopover, setCommentPopover] = useState<{ x: number; y: number; svgX: number; svgY: number; page: number; editIdx?: number } | null>(null);
+  const [commentPopover, setCommentPopover] = useState<{ x: number; y: number; svgX: number; svgY: number; page: number; editIdx?: number; mode?: 'comment' | 'textbox' } | null>(null);
   const [commentText, setCommentText] = useState('');
+  const [textFontSize, setTextFontSize] = useState(14);
   const [passwordPrompt, setPasswordPrompt] = useState<{ data: Uint8Array } | null>(null);
   const [passwordText, setPasswordText] = useState('');
   const [showSearch, setShowSearch] = useState(false);
@@ -109,7 +111,7 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
   const currentPathRef = useRef<Point[]>([]);
   const annoColorRef = useRef('#FFFF00');
   const strokeWidthRef = useRef(2);
-  const setCommentPopoverRef = useRef((_v: { x: number; y: number; svgX: number; svgY: number; page: number; editIdx?: number } | null) => {});
+  const setCommentPopoverRef = useRef((_v: { x: number; y: number; svgX: number; svgY: number; page: number; editIdx?: number; mode?: 'comment' | 'textbox' } | null) => {});
   setCommentPopoverRef.current = setCommentPopover;
   const setCommentTextRef = useRef((_v: string) => {});
   setCommentTextRef.current = setCommentText;
@@ -589,6 +591,39 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
         title.textContent = anno.text || '';
         g.appendChild(title);
         svg.appendChild(g);
+      } else if (anno.type === 'freetext' && anno.text) {
+        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        g.classList.add('anno-render');
+        g.setAttribute('data-anno-idx', String(annoGlobalIdx));
+        g.style.cursor = 'pointer';
+        const fs = (anno.fontSize || 14) * s;
+        const lines = anno.text.split('\n');
+        const lineHeight = fs * 1.3;
+        const textWidth = Math.max(...lines.map(l => l.length)) * fs * 0.55 + 12 * s;
+        const textHeight = lines.length * lineHeight + 8 * s;
+        // Semi-transparent background
+        const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        bg.setAttribute('x', String(anno.rect.x1 * s));
+        bg.setAttribute('y', String(anno.rect.y1 * s));
+        bg.setAttribute('width', String(Math.max(textWidth, 50 * s)));
+        bg.setAttribute('height', String(Math.max(textHeight, fs + 8 * s)));
+        bg.setAttribute('fill', 'rgba(255,255,255,0.9)');
+        bg.setAttribute('stroke', (anno.color || '#333') + '80');
+        bg.setAttribute('stroke-width', '1');
+        bg.setAttribute('rx', String(3 * s));
+        g.appendChild(bg);
+        // Text lines
+        for (let li = 0; li < lines.length; li++) {
+          const textEl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          textEl.setAttribute('x', String((anno.rect.x1) * s + 6 * s));
+          textEl.setAttribute('y', String((anno.rect.y1) * s + fs + li * lineHeight + 2 * s));
+          textEl.setAttribute('font-size', String(fs));
+          textEl.setAttribute('font-family', 'system-ui, -apple-system, sans-serif');
+          textEl.setAttribute('fill', anno.color || '#333');
+          textEl.textContent = lines[li];
+          g.appendChild(textEl);
+        }
+        svg.appendChild(g);
       } else if (anno.type === 'ink' && anno.paths) {
         for (const path of anno.paths) {
           const polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
@@ -662,12 +697,12 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
       const idx = parseInt(annoEl.getAttribute('data-anno-idx') || '-1');
       if (idx < 0) return;
       const anno = annotationsRef.current[idx];
-      if (!anno || anno.type !== 'text') return;
+      if (!anno || (anno.type !== 'text' && anno.type !== 'freetext')) return;
       e.preventDefault();
       e.stopPropagation();
       // Kommentar-Popover im Bearbeitungsmodus öffnen + Text laden
       setCommentTextRef.current(anno.text || '');
-      setCommentPopoverRef.current({ x: e.clientX, y: e.clientY, svgX: anno.rect.x1, svgY: anno.rect.y1, page: pageNum, editIdx: idx });
+      setCommentPopoverRef.current({ x: e.clientX, y: e.clientY, svgX: anno.rect.x1, svgY: anno.rect.y1, page: pageNum, editIdx: idx, mode: anno.type === 'freetext' ? 'textbox' : 'comment' });
     });
 
     svg.addEventListener('mousedown', (e) => {
@@ -803,7 +838,14 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
         const s = scaleRef.current;
         const svgX = (e.clientX - svgRect.left) / s;
         const svgY = (e.clientY - svgRect.top) / s;
-        setCommentPopoverRef.current({ x: e.clientX, y: e.clientY, svgX, svgY, page: pageNum });
+        setCommentPopoverRef.current({ x: e.clientX, y: e.clientY, svgX, svgY, page: pageNum, mode: 'comment' });
+      } else if (currentToolRef.current === 'textbox') {
+        // Frei-Text: Popover mit Schriftgröße öffnen
+        const svgRect = svg.getBoundingClientRect();
+        const s = scaleRef.current;
+        const svgX = (e.clientX - svgRect.left) / s;
+        const svgY = (e.clientY - svgRect.top) / s;
+        setCommentPopoverRef.current({ x: e.clientX, y: e.clientY, svgX, svgY, page: pageNum, mode: 'textbox' });
       } else if (currentToolRef.current === 'freehand' && currentPathRef.current.length > 2) {
         const scaledPath = currentPathRef.current.map(p => ({ x: p.x / s, y: p.y / s }));
         const bounds = pathBounds(scaledPath);
@@ -1102,12 +1144,35 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
     if (commentPopover.editIdx !== undefined) {
       // Bestehende Annotation bearbeiten
       pushUndo(annotationsRef.current);
-      setAnnotations(prev => prev.map((a, i) =>
-        i === commentPopover.editIdx ? { ...a, text: commentText.trim() } : a
-      ));
+      setAnnotations(prev => prev.map((a, i) => {
+        if (i !== commentPopover.editIdx) return a;
+        if (a.type === 'freetext') {
+          // Freetext: Text, Schriftgröße und Rect aktualisieren
+          const lines = commentText.trim().split('\n');
+          const fs = textFontSize;
+          const textWidth = Math.max(...lines.map(l => l.length)) * fs * 0.55 + 12;
+          const textHeight = lines.length * fs * 1.3 + 8;
+          return { ...a, text: commentText.trim(), fontSize: fs, color: annoColor,
+            rect: { x1: a.rect.x1, y1: a.rect.y1, x2: a.rect.x1 + Math.max(textWidth, 50), y2: a.rect.y1 + Math.max(textHeight, fs + 8) } };
+        }
+        return { ...a, text: commentText.trim() };
+      }));
       setUnsavedChanges(true);
+    } else if (commentPopover.mode === 'textbox') {
+      // Frei-Text-Annotation erstellen (sichtbarer Text auf der Seite)
+      const x = commentPopover.svgX;
+      const y = commentPopover.svgY;
+      const lines = commentText.trim().split('\n');
+      const fs = textFontSize;
+      const textWidth = Math.max(...lines.map(l => l.length)) * fs * 0.55 + 12;
+      const textHeight = lines.length * fs * 1.3 + 8;
+      addAnnotation({
+        type: 'freetext', page: commentPopover.page - 1,
+        rect: { x1: x, y1: y, x2: x + Math.max(textWidth, 50), y2: y + Math.max(textHeight, fs + 8) },
+        text: commentText.trim(), color: annoColor, fontSize: fs,
+      });
     } else {
-      // Neue Annotation erstellen
+      // Kommentar-Annotation erstellen (Bubble mit Tooltip)
       const x = commentPopover.svgX;
       const y = commentPopover.svgY;
       addAnnotation({
@@ -1119,7 +1184,7 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
     setTimeout(() => renderAnnotationsForPage(commentPopover.page), 50);
     setCommentPopover(null);
     setCommentText('');
-  }, [commentPopover, commentText, annoColor, addAnnotation, pushUndo, renderAnnotationsForPage]);
+  }, [commentPopover, commentText, annoColor, textFontSize, addAnnotation, pushUndo, renderAnnotationsForPage]);
 
   const cancelComment = useCallback(() => {
     setCommentPopover(null);
@@ -1321,6 +1386,7 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
   const tools = [
     { id: 'select' as const, label: 'Auswählen', icon: '\u2B11' },
     { id: 'highlight' as const, label: 'Markieren', icon: '\uD83D\uDD8D' },
+    { id: 'textbox' as const, label: 'Text', icon: 'T' },
     { id: 'comment' as const, label: 'Kommentar', icon: '\uD83D\uDCAC' },
     { id: 'freehand' as const, label: 'Freihand', icon: '\u270F\uFE0F' },
   ];
@@ -1405,7 +1471,7 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
             <span className="pdf-tool-label">{t.label}</span>
           </button>
         ))}
-        {(currentTool === 'highlight' || currentTool === 'freehand') && (
+        {(currentTool === 'highlight' || currentTool === 'freehand' || currentTool === 'textbox' || currentTool === 'comment') && (
           <>
             <span className="pdf-editor-separator" />
             {ANNO_COLORS.map(c => (
@@ -1518,21 +1584,34 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
       {/* Comment Popover — Viewport-Clamping */}
       {commentPopover && (
         <div className="pdf-comment-popover" style={{
-          left: Math.min(commentPopover.x, window.innerWidth - 230),
-          top: Math.min(commentPopover.y, window.innerHeight - 120),
+          left: Math.min(commentPopover.x, window.innerWidth - 280),
+          top: Math.min(commentPopover.y, window.innerHeight - (commentPopover.mode === 'textbox' ? 180 : 120)),
         }}>
+          {commentPopover.mode === 'textbox' && (
+            <div className="pdf-popover-font-row">
+              <label className="pdf-popover-font-label">Schriftgröße:</label>
+              {[10, 12, 14, 18, 24, 32].map(fs => (
+                <button key={fs} className={`pdf-font-size-btn ${textFontSize === fs ? 'active' : ''}`}
+                  onClick={() => setTextFontSize(fs)}>{fs}</button>
+              ))}
+            </div>
+          )}
           <textarea
             className="pdf-comment-textarea"
             value={commentText}
             onChange={e => setCommentText(e.target.value)}
             autoFocus
-            placeholder="Kommentar eingeben..."
+            placeholder={commentPopover.mode === 'textbox' ? 'Text eingeben...' : 'Kommentar eingeben...'}
             onKeyDown={e => {
-              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitComment(); }
+              if (e.key === 'Enter' && !e.shiftKey && commentPopover.mode !== 'textbox') { e.preventDefault(); submitComment(); }
+              if (e.key === 'Enter' && e.ctrlKey) { e.preventDefault(); submitComment(); }
               if (e.key === 'Escape') cancelComment();
               e.stopPropagation();
             }}
           />
+          {commentPopover.mode === 'textbox' && (
+            <div className="pdf-popover-hint">Strg+Enter zum Bestätigen, Shift+Enter für neue Zeile</div>
+          )}
           <div className="pdf-comment-popover-btns">
             <button className="pdf-editor-btn" onClick={submitComment}>OK</button>
             <button className="pdf-editor-btn" onClick={cancelComment}>Abbrechen</button>

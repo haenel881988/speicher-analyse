@@ -4277,39 +4277,47 @@ textarea::placeholder {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 6px 12px;
+    padding: 7px 14px;
     background: var(--bg-secondary);
     border-top: 1px solid var(--border-color);
     flex-shrink: 0;
+    flex-wrap: wrap;
 }
 
 .pdf-editor-tool {
-    padding: 4px 10px;
+    padding: 5px 12px;
     border: 1px solid var(--border-color);
-    border-radius: 4px;
+    border-radius: 6px;
     background: var(--bg-primary);
     color: var(--text-primary);
     font-size: 12px;
     cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    transition: background 0.15s, border-color 0.15s;
 }
 
 .pdf-editor-tool.active {
     background: var(--accent);
     color: #fff;
     border-color: var(--accent);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
 }
 
 .pdf-editor-tool:hover:not(.active) {
     background: var(--bg-hover);
+    border-color: var(--text-secondary);
 }
 
 .pdf-tool-icon {
-    font-size: 14px;
-    margin-right: 4px;
+    font-size: 15px;
+    line-height: 1;
 }
 
 .pdf-tool-label {
     font-size: 11px;
+    font-weight: 500;
 }
 
 /* Farbauswahl */
@@ -4373,10 +4381,11 @@ textarea::placeholder {
     z-index: 10000;
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
-    border-radius: 6px;
-    padding: 8px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    min-width: 220px;
+    border-radius: 8px;
+    padding: 10px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+    min-width: 260px;
+    max-width: 400px;
 }
 
 .pdf-comment-textarea {
@@ -4387,10 +4396,11 @@ textarea::placeholder {
     border-radius: 4px;
     background: var(--bg-primary);
     color: var(--text-primary);
-    padding: 6px 8px;
-    font-size: 12px;
+    padding: 8px 10px;
+    font-size: 13px;
     font-family: inherit;
     box-sizing: border-box;
+    line-height: 1.4;
 }
 
 .pdf-comment-textarea:focus {
@@ -4403,6 +4413,51 @@ textarea::placeholder {
     gap: 6px;
     margin-top: 6px;
     justify-content: flex-end;
+}
+
+/* Schriftgröße-Auswahl im Textbox-Popover */
+.pdf-popover-font-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 6px;
+}
+
+.pdf-popover-font-label {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-right: 4px;
+    white-space: nowrap;
+}
+
+.pdf-font-size-btn {
+    min-width: 28px;
+    height: 24px;
+    padding: 0 4px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 11px;
+    cursor: pointer;
+    text-align: center;
+}
+
+.pdf-font-size-btn.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+}
+
+.pdf-font-size-btn:hover:not(.active) {
+    background: var(--bg-hover);
+}
+
+.pdf-popover-hint {
+    font-size: 10px;
+    color: var(--text-secondary);
+    margin-top: 4px;
+    opacity: 0.8;
 }
 
 .pdf-editor-separator {

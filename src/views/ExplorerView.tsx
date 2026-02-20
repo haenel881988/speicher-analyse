@@ -84,6 +84,7 @@ export default function ExplorerView() {
   const setClipboard = setFileClipboard;
 
   const lastClickedRef = useRef<string | null>(null);
+  const renamingRef = useRef(false);
   const deepSearchUnlistenRef = useRef<Array<() => void>>([]);
   const dirCacheRef = useRef<Map<string, { data: any; time: number }>>(new Map());
   const navGenerationRef = useRef(0);
@@ -430,9 +431,11 @@ export default function ExplorerView() {
   }, [selectedPaths, refresh, showToast]);
 
   const handleRename = useCallback(async () => {
+    if (renamingRef.current) return; // Guard against double-call (Enter + blur)
     if (!renamePath || !renameValue.trim()) { setRenamePath(null); return; }
     const entry = entries.find(e => e.path === renamePath);
     if (!entry || renameValue.trim() === entry.name) { setRenamePath(null); return; }
+    renamingRef.current = true;
     try {
       const result = await api.rename(renamePath, renameValue.trim());
       if (result.success) refresh();
@@ -441,6 +444,7 @@ export default function ExplorerView() {
       showToast('Fehler beim Umbenennen: ' + (err.message || 'Unbekannter Fehler'), 'error');
     }
     setRenamePath(null);
+    renamingRef.current = false;
   }, [renamePath, renameValue, entries, refresh, showToast]);
 
   // Close context menu on click anywhere or Escape
@@ -708,14 +712,21 @@ export default function ExplorerView() {
 
   const handleNewFolder = useCallback(async () => {
     if (newFolderName === null) return;
-    const name = newFolderName.trim();
+    let name = newFolderName.trim();
     if (!name) { setNewFolderName(null); return; }
+    // Kollisionserkennung: Wenn Ordner bereits existiert, Nummer anhängen
+    const existingNames = new Set(entries.map(e => e.name.toLowerCase()));
+    if (existingNames.has(name.toLowerCase())) {
+      let counter = 2;
+      while (existingNames.has(`${name} (${counter})`.toLowerCase()) && counter <= 99) counter++;
+      name = `${name} (${counter})`;
+    }
     try {
       await api.createFolder(currentPath, name);
       refresh();
     } catch (err: any) { showToast('Fehler: ' + err.message, 'error'); }
     setNewFolderName(null);
-  }, [newFolderName, currentPath, refresh, showToast]);
+  }, [newFolderName, currentPath, entries, refresh, showToast]);
 
   const calculateFolderSizes = useCallback(async () => {
     const dirs = entries.filter(e => e.isDirectory);
@@ -781,13 +792,15 @@ export default function ExplorerView() {
       } catch {}
     }
 
-    // Deep search — clean up previous listeners first
+    // Deep search — cancel previous search and clean up listeners
+    if (deepSearchUnlistenRef.current.length > 0) {
+      api.deepSearchCancel();
+      for (const unlisten of deepSearchUnlistenRef.current) unlisten();
+      deepSearchUnlistenRef.current = [];
+    }
     setDeepSearchRunning(true);
     const rootPath = currentPath.match(/^[A-Za-z]:\\/)?.[0] || currentPath;
     const collected: any[] = [];
-
-    for (const unlisten of deepSearchUnlistenRef.current) unlisten();
-    deepSearchUnlistenRef.current = [];
 
     const u1 = await api.onDeepSearchResult((data: any) => {
       collected.push(data);
@@ -872,18 +885,19 @@ export default function ExplorerView() {
     e.preventDefault();
     let sourcePaths: string[];
     try { sourcePaths = JSON.parse(e.dataTransfer.getData('text/plain')); } catch { return; }
-    // Filter: can't drop onto self or into a subdirectory of the dragged folder
+    // Filter: can't drop onto self, into a subdirectory of the dragged folder, or into the same directory
     const normalizedTarget = targetPath.toLowerCase().replace(/[\\/]+$/, '');
     sourcePaths = sourcePaths.filter(p => {
       const normalizedSrc = p.toLowerCase().replace(/[\\/]+$/, '');
       if (normalizedSrc === normalizedTarget) return false;
       if (normalizedTarget.startsWith(normalizedSrc + '\\')) return false;
+      // Skip files already in the target directory (no-op move)
+      const parentIdx = Math.max(normalizedSrc.lastIndexOf('\\'), normalizedSrc.lastIndexOf('/'));
+      const normalizedParent = parentIdx > 0 ? normalizedSrc.substring(0, parentIdx) : '';
+      if (normalizedParent === normalizedTarget) return false;
       return true;
     });
-    if (!sourcePaths.length) {
-      showToast('Ungültiges Ziel: Ordner kann nicht in sich selbst verschoben werden', 'warning');
-      return;
-    }
+    if (!sourcePaths.length) return; // Nothing to move (same directory or invalid target)
     try {
       if (e.ctrlKey) await api.copy(sourcePaths, targetPath);
       else await api.move(sourcePaths, targetPath);
@@ -1003,6 +1017,14 @@ export default function ExplorerView() {
           row?.scrollIntoView({ block: 'nearest' });
         }
       }
+      else if (e.key === 't' && e.ctrlKey && !e.shiftKey) {
+        e.preventDefault();
+        addNewTab();
+      }
+      else if (e.key === 'w' && e.ctrlKey && !e.shiftKey) {
+        e.preventDefault();
+        if (tabs.length > 1) closeTab(activeTabId);
+      }
       else if (e.key === 'N' && e.ctrlKey && e.shiftKey) {
         e.preventDefault();
         setNewFolderName('');
@@ -1026,7 +1048,7 @@ export default function ExplorerView() {
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [selectedPaths, entries, sortedEntries, currentPath, clipboard, showToast, refresh, handleDelete, handleDoubleClick, goBack, goForward, goUp, selectAll, navigateTo, setPropertiesPath]);
+  }, [selectedPaths, entries, sortedEntries, currentPath, clipboard, tabs, activeTabId, showToast, refresh, handleDelete, handleDoubleClick, goBack, goForward, goUp, selectAll, navigateTo, setPropertiesPath, addNewTab, closeTab]);
 
   const handleDualDoubleClick = useCallback((entry: FileEntry) => {
     if (entry.isDirectory) navigateDualTo(entry.path);
@@ -1246,8 +1268,8 @@ export default function ExplorerView() {
         {/* File List */}
         <div className="explorer-file-list" ref={fileListRef}
           onContextMenu={e => { if (!(e.target as HTMLElement).closest('tr[data-path]')) handleContextMenu(e, null); }}
-          onDragOver={e => { if (!(e.target as HTMLElement).closest('tr[data-path]')) { e.preventDefault(); e.dataTransfer.dropEffect = e.ctrlKey ? 'copy' : 'move'; } }}
-          onDrop={e => { if (!(e.target as HTMLElement).closest('tr[data-path]')) handleDrop(e, currentPath); }}>
+          onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = e.ctrlKey ? 'copy' : 'move'; }}
+          onDrop={e => { if (!(e.target as HTMLElement).closest('tr[data-is-dir="true"]')) handleDrop(e, currentPath); }}>
           {loading ? (
             <div className="explorer-loading"><div className="loading-spinner" /></div>
           ) : errorText ? (
@@ -1343,7 +1365,7 @@ export default function ExplorerView() {
             <div className="explorer-split-handle" />
             <div className="explorer-panel explorer-file-list"
               onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = e.ctrlKey ? 'copy' : 'move'; }}
-              onDrop={e => handleDrop(e, dualPath)}>
+              onDrop={e => { if (!(e.target as HTMLElement).closest('tr[data-is-dir="true"]')) handleDrop(e, dualPath); }}>
               <div className="explorer-dual-header">
                 <button type="button" className="explorer-nav-btn" title="Übergeordneter Ordner" onClick={dualGoUp}>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="18 15 12 9 6 15" /></svg>
