@@ -895,6 +895,32 @@ PDF-Editor hatte nach initialer Implementierung keine Grundfunktionen die JEDER 
 
 ---
 
+#### #109 — Event-Listener-Closures erfassen stale useCallback-Referenzen
+`2026-02-20`
+
+**Symptom:** Kontextmenü "Seite drehen" zeigte keinen Warndialog wenn Annotationen nach dem Seitenaufbau hinzugefügt wurden.
+
+**Ursache:** `renderAllPages` verdrahtet Event-Listener einmalig bei der Seitenerstellung. Diese Listener erfassen `showPageContextMenu` per Closure, das wiederum `rotatePage` und `deletePage` erfasst. Beide useCallbacks hatten `annotations` (React State) in ihren Dependencies. Wenn `annotations` sich änderte, bekamen die Callbacks neue Referenzen, aber die Event-Listener zeigten weiterhin auf die alten Referenzen mit `annotations.length === 0`.
+
+**Lösung:** `annotations` durch `annotationsRef.current` ersetzen. Refs sind immer aktuell, unabhängig von der Closure-Kette. Die `annotations`-Dependency konnte aus den useCallback-Deps entfernt werden, wodurch die Callbacks stabil bleiben.
+
+**Lehre:** Imperativ verdrahtete Event-Listener (z.B. in `renderAllPages`) können `useCallback`-Referenzen NICHT aktualisieren. Entweder (a) Refs statt State in den Callbacks verwenden, oder (b) Event-Listener bei jeder Callback-Änderung neu verdrahten. Option (a) ist deutlich einfacher.
+
+---
+
+#### #110 — Dateiwechsel mit gleicher Seitenanzahl: setLoaded(true) ist No-Op
+`2026-02-20`
+
+**Symptom:** Beim Öffnen einer zweiten PDF mit gleicher Seitenanzahl wurden die Seiten nicht neu gerendert. Die Canvas-Elemente zeigten weiterhin den Inhalt der vorherigen Datei.
+
+**Ursache:** Der PDF-Lade-Effect setzt `setTotalPages(n)` und `setLoaded(true)`. Wenn `totalPages` und `loaded` sich nicht ändern (gleiche Seitenanzahl, war schon geladen), erkennt React beide Setter als No-Ops. Der Render-Pages-Effect (deps: `[loaded, totalPages]`) läuft nicht erneut, und `renderAllPages()` wird nicht aufgerufen. `pdfDocRef.current` zeigt auf das neue Dokument, aber die alten Canvas-Elemente behalten ihren gerenderten Inhalt.
+
+**Lösung:** `setLoaded(false)` am Anfang des Lade-Effects setzen, bevor die async Ladung beginnt. Dies triggert den Render-Pages-Effect-Cleanup (IntersectionObserver disconnect, pageEntries leeren) und nach `setLoaded(true)` einen frischen Rendering-Zyklus.
+
+**Lehre:** React-State-Setter sind idempotent: `setState(currentValue)` ist ein No-Op. Wenn ein Effect auf State-Änderungen reagieren soll, MUSS der State tatsächlich geändert werden. Bei Datei-Wechseln: immer den "geladenen" Zustand kurzzeitig zurücksetzen, auch wenn der neue Wert identisch mit dem alten ist.
+
+---
+
 <br>
 
 ## Terminal

@@ -191,6 +191,9 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
     if (!filePath) return;
     let cancelled = false;
 
+    // Force re-render of pages when file changes (auch bei gleicher Seitenanzahl)
+    setLoaded(false);
+
     // Altes PDF-Dokument freigeben (Worker-Threads, Canvas-Daten)
     if (pdfDocRef.current) {
       pdfDocRef.current.destroy().catch(() => {});
@@ -805,7 +808,7 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
 
   const rotatePage = useCallback(async (pageNum: number, degrees: number) => {
     // Rotation ändert das Koordinatensystem — bestehende Annotations werden ungültig
-    if (annotations.length > 0) {
+    if (annotationsRef.current.length > 0) {
       const confirmed = await api.showConfirmDialog({
         type: 'warning', title: 'Seite drehen',
         message: 'Beim Drehen werden bestehende Annotationen verworfen, da sich das Koordinatensystem ändert. Fortfahren?',
@@ -826,11 +829,11 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
     } catch (err: any) {
       showToast('Drehen fehlgeschlagen: ' + err.message, 'error');
     }
-  }, [filePath, showToast, annotations.length]);
+  }, [filePath, showToast]);
 
   const deletePage = useCallback(async (pageNum: number) => {
     if (totalPages <= 1) { showToast('Die letzte Seite kann nicht gelöscht werden.', 'error'); return; }
-    const hasAnnotationsOnLaterPages = annotations.some(a => a.page >= pageNum - 1);
+    const hasAnnotationsOnLaterPages = annotationsRef.current.some(a => a.page >= pageNum - 1);
     const warnText = hasAnnotationsOnLaterPages
       ? `Seite ${pageNum} wirklich löschen? Bestehende Annotationen werden verworfen (Seitenreferenzen ändern sich). Dies kann nicht rückgängig gemacht werden.`
       : `Seite ${pageNum} wirklich löschen? Dies kann nicht rückgängig gemacht werden.`;
@@ -853,7 +856,7 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
     } catch (err: any) {
       showToast('Löschen fehlgeschlagen: ' + err.message, 'error');
     }
-  }, [filePath, totalPages, showToast, annotations]);
+  }, [filePath, totalPages, showToast]);
 
   const showPageContextMenu = useCallback((e: MouseEvent, pageNum: number) => {
     document.querySelectorAll('.pdf-page-context-menu').forEach(el => el.remove());
