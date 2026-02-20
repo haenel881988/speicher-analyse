@@ -325,6 +325,15 @@ export const getUndoLog = () => invoke<any[]>('get_undo_log');
 export const undoAction = (id: string) => invoke<any>('undo_action', { id });
 export const clearUndoLog = () => invoke<any>('clear_undo_log');
 
+// === Scan History (Delta-Scan) ===
+export const saveScanSnapshot = (scanId: string) => invoke<any>('save_scan_snapshot', { scanId });
+export const getScanHistory = () => invoke<any[]>('get_scan_history');
+export const compareScans = (olderId: string, newerId: string) => invoke<any>('compare_scans', { olderId, newerId });
+export const getStorageTrend = (rootPath: string) => invoke<any>('get_storage_trend', { rootPath });
+export const quickChangeCheck = () => invoke<any>('quick_change_check');
+export const deleteScanSnapshot = (snapshotId: string) => invoke<any>('delete_scan_snapshot', { snapshotId });
+export const clearScanHistory = () => invoke<any>('clear_scan_history');
+
 // === Frontend Logging ===
 export const logFrontend = (level: string, message: string, context?: string) =>
   invoke<void>('log_frontend', { level, message, context });

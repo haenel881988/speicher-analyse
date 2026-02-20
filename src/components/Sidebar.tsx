@@ -32,6 +32,7 @@ const NAV_GROUPS: NavGroup[] = [
       { tab: 'top100', label: 'Größte Dateien', icon: 'M8,6H21M8,12H21M8,18H21' },
       { tab: 'treemap', label: 'Treemap', icon: 'M3,3H10V12H3ZM14,3H21V8H14ZM14,12H21V21H14ZM3,16H10V21H3Z' },
       { tab: 'tree', label: 'Verzeichnisbaum', icon: 'M22,19a2,2,0,0,1-2,2H4a2,2,0,0,1-2-2V5a2,2,0,0,1,2-2h5l2,3h9a2,2,0,0,1,2,2z' },
+      { tab: 'scan-history', label: 'Scan-Verlauf', icon: 'M12,8V12L15,15M3,12a9,9,0,1,0,18,0a9,9,0,1,0-18,0M1,1L4,4M23,1L20,4' },
     ],
   },
   {

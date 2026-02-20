@@ -150,7 +150,7 @@ Weitere Funktionen fehlen bei entsprechenden Dateitypen, bei Bildern z.B.: die A
 | Prio | Issue | Thema | Status |
 |------|-------|-------|--------|
 | ~~1~~ | ~~#2 + #3~~ | ~~Scandaten überall speichern + wiederherstellen~~ | Bestätigt 19.02.2026 |
-| 2 | #7 | Intelligente Scandaten (Delta-Scan, Verlauf, Hintergrund) | Planung |
+| 2 | #7 | Intelligente Scandaten (Delta-Scan, Verlauf, Hintergrund) | Umgesetzt (Changelog #123) |
 | ~~3~~ | ~~#8~~ | ~~Intelligenter Bloatware-Scanner (5-Stufen-Bewertung)~~ | ENTFALLEN (Windows Defender) |
 | 4 | #9 | Apps-Kontrollzentrum (ersetzt "Updates"-Tab) | Umgesetzt (Changelog #122) |
 | 5 | #10 | System-Profil (Hardware, Seriennummer, Hersteller-Links) | Größtenteils umgesetzt |
@@ -343,7 +343,7 @@ Eine Art "Waage für die Festplatte":
 ### 7d. Scandaten übergreifend nutzen
 - Die Speichergrössen-Daten sollen auch vom Software-Audit und der Bereinigung verwendet werden
 
-**Status:** Planung (Umsetzung nach Issue #2/#3)
+**Status:** ~~Planung~~ → Umgesetzt (Changelog #123) — Automatische Scan-Snapshots, Delta-Vergleich, Trend-Analyse und Schnellprüfung. Neuer Sidebar-Tab "Scan-Verlauf" mit 4 Sub-Tabs.
 
 ---
 
@@ -714,6 +714,8 @@ Die App hat bereits einen beeindruckenden Funktionsumfang. Jetzt geht es darum, 
 **Warum das wichtig ist:** Andere Tools zeigen immer nur den aktuellen Zustand. Aber die spannende Frage ist: **Was hat sich verändert?** Das hilft Problemen vorzubeugen statt sie nur zu beheben.
 
 → *Details: siehe Issue #7 weiter oben*
+
+**Status:** Umgesetzt (Changelog #123)
 
 ---
 

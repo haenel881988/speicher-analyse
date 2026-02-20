@@ -118,6 +118,14 @@ pub async fn start_scan(app: tauri::AppHandle, path: String) -> Result<Value, St
             Err(e) => tracing::warn!(scan_id = %sid, error = %e, "Scan-Daten konnten nicht persistiert werden"),
         }
 
+        // Auto-save scan snapshot for history (Issue #7)
+        if let Some(snapshot) = crate::scan_history::create_snapshot(&sid) {
+            match crate::scan_history::save_snapshot(&data_dir, snapshot) {
+                Ok(_) => tracing::debug!(scan_id = %sid, "Scan-Snapshot für Verlauf gespeichert"),
+                Err(e) => tracing::debug!(scan_id = %sid, error = %e, "Scan-Snapshot nicht gespeichert (evtl. zu früh nach letztem)"),
+            }
+        }
+
         // Save scan metadata in session.json for frontend restore
         let mut session = read_json_file("session.json");
         if let Some(obj) = session.as_object_mut() {
@@ -635,5 +643,78 @@ pub async fn get_folder_sizes_bulk(scan_id: String, folder_paths: Vec<String>, p
         "folders": folders,
         "parent": { "size": parent_size }
     }))
+}
+
+// === Scan History (Issue #7) ===
+
+#[tauri::command]
+pub async fn save_scan_snapshot(scan_id: String) -> Result<Value, String> {
+    let snapshot = crate::scan_history::create_snapshot(&scan_id)
+        .ok_or("Keine Scan-Daten für Snapshot vorhanden")?;
+
+    let data_dir = get_data_dir();
+    crate::scan_history::save_snapshot(&data_dir, snapshot.clone())?;
+
+    tracing::info!(snapshot_id = %snapshot.id, total_size = snapshot.total_size, "Scan-Snapshot gespeichert");
+    Ok(serde_json::to_value(&snapshot).unwrap_or(json!({"success": true})))
+}
+
+#[tauri::command]
+pub async fn get_scan_history() -> Result<Value, String> {
+    let data_dir = get_data_dir();
+    let history = crate::scan_history::load_history(&data_dir);
+    Ok(serde_json::to_value(&history).unwrap_or(json!([])))
+}
+
+#[tauri::command]
+pub async fn compare_scans(older_id: String, newer_id: String) -> Result<Value, String> {
+    let data_dir = get_data_dir();
+    let history = crate::scan_history::load_history(&data_dir);
+
+    let older = history.iter().find(|s| s.id == older_id)
+        .ok_or("Älterer Snapshot nicht gefunden")?;
+    let newer = history.iter().find(|s| s.id == newer_id)
+        .ok_or("Neuerer Snapshot nicht gefunden")?;
+
+    let delta = crate::scan_history::compare_snapshots(older, newer);
+    Ok(serde_json::to_value(&delta).unwrap_or(json!({})))
+}
+
+#[tauri::command]
+pub async fn get_storage_trend(root_path: String) -> Result<Value, String> {
+    let data_dir = get_data_dir();
+    let history = crate::scan_history::load_history(&data_dir);
+    Ok(crate::scan_history::compute_trend(&history, &root_path))
+}
+
+#[tauri::command]
+pub async fn quick_change_check() -> Result<Value, String> {
+    let data_dir = get_data_dir();
+    Ok(crate::scan_history::quick_change_check(&data_dir))
+}
+
+#[tauri::command]
+pub async fn delete_scan_snapshot(snapshot_id: String) -> Result<Value, String> {
+    let data_dir = get_data_dir();
+    let mut history = crate::scan_history::load_history(&data_dir);
+    let before_len = history.len();
+    history.retain(|s| s.id != snapshot_id);
+    if history.len() == before_len {
+        return Err("Snapshot nicht gefunden".to_string());
+    }
+    let json = serde_json::to_string_pretty(&history).map_err(|e| e.to_string())?;
+    std::fs::write(data_dir.join("scan-history.json"), json)
+        .map_err(|e| format!("scan-history.json schreiben: {}", e))?;
+    Ok(json!({"deleted": true}))
+}
+
+#[tauri::command]
+pub async fn clear_scan_history() -> Result<Value, String> {
+    let data_dir = get_data_dir();
+    let path = data_dir.join("scan-history.json");
+    if path.exists() {
+        std::fs::write(&path, "[]").map_err(|e| e.to_string())?;
+    }
+    Ok(json!({"cleared": true}))
 }
 

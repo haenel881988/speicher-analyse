@@ -4258,6 +4258,70 @@ textarea::placeholder {
 .undo-log-badge-undone { font-size: 11px; color: var(--text-muted); font-style: italic; }
 .undo-log-badge-permanent { font-size: 11px; color: var(--accent-red, #e74c3c); opacity: 0.7; }
 
+/* ===== Scan-Verlauf View ===== */
+.scan-history-view { padding: 16px; }
+.scan-history-view .sub-tab-bar { display: flex; gap: 2px; margin-bottom: 16px; padding: 3px; background: var(--bg-secondary); border-radius: 8px; }
+.scan-history-view .sub-tab-bar button { flex: 1; padding: 8px 12px; border: none; background: transparent; color: var(--text-primary); border-radius: 6px; cursor: pointer; font-size: 13px; transition: background 0.15s; }
+.scan-history-view .sub-tab-bar button:hover { background: var(--bg-hover); }
+.scan-history-view .sub-tab-bar button.active { background: var(--accent-primary); color: #fff; }
+
+.scan-history-empty { text-align: center; padding: 48px 16px; color: var(--text-muted); }
+.scan-history-empty p { margin: 8px 0; }
+
+/* Timeline */
+.scan-history-timeline .timeline-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; font-size: 13px; color: var(--text-muted); }
+.timeline-list { display: flex; flex-direction: column; gap: 2px; }
+.timeline-entry { display: flex; align-items: flex-start; gap: 12px; padding: 10px 12px; background: var(--bg-card); border-radius: 6px; }
+.timeline-entry:hover { background: var(--bg-hover); }
+.timeline-dot { flex-shrink: 0; width: 10px; height: 10px; border-radius: 50%; background: var(--accent-primary); margin-top: 5px; }
+.timeline-content { flex: 1; min-width: 0; }
+.timeline-date { font-size: 13px; font-weight: 500; margin-bottom: 4px; }
+.timeline-stats { display: flex; gap: 16px; font-size: 12px; color: var(--text-muted); flex-wrap: wrap; }
+.timeline-categories { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.category-badge { font-size: 11px; padding: 2px 8px; border-radius: 4px; background: var(--bg-secondary); color: var(--text-muted); }
+.change-grow { color: var(--accent-red, #e74c3c); }
+.change-shrink { color: var(--accent-green, #27ae60); }
+
+/* Delta */
+.scan-history-delta .delta-selector { display: flex; gap: 12px; align-items: flex-end; margin-bottom: 16px; flex-wrap: wrap; }
+.delta-select-group { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 200px; }
+.delta-select-group label { font-size: 12px; color: var(--text-muted); }
+.delta-select-group select { padding: 8px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary); font-size: 13px; }
+.delta-summary { display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+.delta-metric { padding: 12px 16px; background: var(--bg-card); border-radius: 8px; flex: 1; min-width: 140px; }
+.delta-label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
+.delta-value { font-size: 18px; font-weight: 600; }
+.delta-section { margin-top: 16px; }
+.delta-section h4 { font-size: 14px; margin: 0 0 8px; }
+.delta-category-list, .delta-folder-list { display: flex; flex-direction: column; gap: 2px; }
+.delta-category-item, .delta-folder-item { display: flex; justify-content: space-between; align-items: center; padding: 6px 12px; background: var(--bg-card); border-radius: 4px; font-size: 13px; }
+.delta-cat-name, .delta-folder-path { flex: 1; }
+.delta-folder-sizes { color: var(--text-muted); font-size: 12px; margin: 0 12px; }
+
+/* Trend */
+.scan-history-trend .trend-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; font-size: 13px; color: var(--text-muted); }
+.trend-metrics { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+.trend-metric { padding: 12px 16px; background: var(--bg-card); border-radius: 8px; flex: 1; min-width: 120px; text-align: center; }
+.trend-label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
+.trend-value { font-size: 16px; font-weight: 600; }
+.trend-chart-placeholder h4 { font-size: 14px; margin: 0 0 8px; }
+.trend-data-list { display: flex; flex-direction: column; gap: 2px; }
+.trend-data-point { display: flex; justify-content: space-between; padding: 6px 12px; background: var(--bg-card); border-radius: 4px; font-size: 13px; }
+
+/* Quick Check */
+.scan-history-check .check-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; font-size: 13px; color: var(--text-muted); }
+.check-result { display: flex; align-items: center; gap: 16px; padding: 20px; border-radius: 8px; margin-bottom: 16px; }
+.check-result.check-no-changes { background: rgba(39, 174, 96, 0.1); border: 1px solid rgba(39, 174, 96, 0.3); }
+.check-result.check-changes { background: rgba(231, 76, 60, 0.1); border: 1px solid rgba(231, 76, 60, 0.3); }
+.check-icon { font-size: 28px; }
+.check-text { font-size: 14px; }
+.check-details { display: flex; flex-direction: column; gap: 6px; }
+.check-detail-item { display: flex; justify-content: space-between; padding: 8px 12px; background: var(--bg-card); border-radius: 4px; font-size: 13px; }
+.check-modified-folders { margin-top: 16px; }
+.check-modified-folders h4 { font-size: 14px; margin: 0 0 8px; }
+.check-modified-folders ul { list-style: none; padding: 0; margin: 0; }
+.check-modified-folders li { padding: 6px 12px; background: var(--bg-card); border-radius: 4px; font-size: 12px; margin-bottom: 2px; font-family: monospace; }
+
 /* ===== PDF-Editor Druck-Styles ===== */
 @media print {
     /* Nur PDF-Seiten drucken, alles andere ausblenden */

@@ -2,6 +2,7 @@ mod commands;
 mod oui;
 mod ps;
 mod scan;
+mod scan_history;
 mod undo;
 
 use tauri::{Emitter, Manager};
@@ -393,6 +394,14 @@ pub fn run() {
             commands::pdf_delete_pages,
             commands::pdf_merge,
             commands::open_pdf_window,
+            // Scan History (Delta-Scan)
+            commands::save_scan_snapshot,
+            commands::get_scan_history,
+            commands::compare_scans,
+            commands::get_storage_trend,
+            commands::quick_change_check,
+            commands::delete_scan_snapshot,
+            commands::clear_scan_history,
         ])
         .run(tauri::generate_context!())
         .expect("Fehler beim Starten der Anwendung");
