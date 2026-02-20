@@ -1,0 +1,1 @@
+vertiefende asynchrone und semantische analyse durchzuführen, inkl. sämtlichen Abhängigkeiten, iteriere solange bis du fertig bist.

@@ -16,21 +16,23 @@ interface FileEntry {
 interface KnownFolder { name: string; path: string; icon: string; }
 interface Drive { mountpoint: string; device: string; free: number; percent: number; }
 
+type SortCol = 'name' | 'size' | 'type' | 'modified';
+
 interface ExplorerTab {
   id: string;
   path: string;
   label: string;
   historyBack: string[];
   historyForward: string[];
+  sortCol: SortCol;
+  sortAsc: boolean;
 }
 
 let tabIdCounter = 0;
 function createTab(path: string): ExplorerTab {
   const label = path.split('\\').filter(Boolean).pop() || path;
-  return { id: 'tab-' + (++tabIdCounter), path, label, historyBack: [], historyForward: [] };
+  return { id: 'tab-' + (++tabIdCounter), path, label, historyBack: [], historyForward: [], sortCol: 'name', sortAsc: true };
 }
-
-type SortCol = 'name' | 'size' | 'type' | 'modified';
 
 const COLUMNS = [
   { id: 'icon' as const, label: '', width: 36, sortable: false, align: 'center' as const },
@@ -94,6 +96,8 @@ export default function ExplorerView() {
   const addressInputRef = useRef<HTMLInputElement>(null);
 
   const navigateToRef = useRef<(path: string, addToHistory?: boolean) => void>(() => {});
+  const activeTabIdRef = useRef(activeTabId);
+  activeTabIdRef.current = activeTabId;
 
   // Init: load known folders + drives + preferences, navigate to default
   useEffect(() => {
@@ -113,7 +117,18 @@ export default function ExplorerView() {
     })();
   }, []);
 
-  const navigateTo = useCallback(async (dirPath: string, addToHistory = true) => {
+  // Cleanup on unmount: deep search listeners + debounce timer
+  useEffect(() => {
+    return () => {
+      for (const unlisten of deepSearchUnlistenRef.current) unlisten();
+      deepSearchUnlistenRef.current = [];
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
+
+  const navigateTo = useCallback(async (rawDirPath: string, addToHistory = true) => {
+    // Normalize: strip trailing backslash (except for drive roots like C:\)
+    const dirPath = /^[A-Za-z]:\\$/i.test(rawDirPath) ? rawDirPath : rawDirPath.replace(/[\\/]+$/, '') || rawDirPath;
     if (addToHistory && currentPath) {
       setHistoryBack(prev => [...prev, currentPath]);
       setHistoryForward([]);
@@ -211,16 +226,29 @@ export default function ExplorerView() {
       }
     }
 
-    // Update active tab label
+    // Activate pending rename (from new-textfile action)
+    if (pendingRenameRef.current) {
+      const pr = pendingRenameRef.current;
+      pendingRenameRef.current = null;
+      const match = newEntries.find(e => e.path === pr.path);
+      if (match) {
+        setSelectedPaths(new Set([match.path]));
+        setRenamePath(pr.path);
+        setRenameValue(pr.name);
+      }
+    }
+
+    // Update active tab label (use ref to always get the CURRENT activeTabId, not stale closure)
     const dirLabel = dirPath.split('\\').filter(Boolean).pop() || dirPath;
-    setTabs(prev => prev.map(t => t.id === activeTabId ? { ...t, path: dirPath, label: dirLabel } : t));
+    const currentTabId = activeTabIdRef.current;
+    setTabs(prev => prev.map(t => t.id === currentTabId ? { ...t, path: dirPath, label: dirLabel } : t));
 
     // Status
     const dirs = newEntries.filter(e => e.isDirectory).length;
     const files = newEntries.filter(e => !e.isDirectory).length;
     const totalSize = newEntries.filter(e => !e.isDirectory).reduce((s, e) => s + e.size, 0);
     setStatusText(`${dirs} Ordner, ${files} Dateien — ${formatBytes(pSize > 0 ? pSize : totalSize)}`);
-  }, [currentPath, currentScanId, activeTabId]);
+  }, [currentPath, currentScanId]);
 
   // Keep ref in sync for use in init effect and tab functions
   navigateToRef.current = navigateTo;
@@ -229,18 +257,21 @@ export default function ExplorerView() {
   const saveCurrentTabState = useCallback(() => {
     if (!activeTabId) return;
     setTabs(prev => prev.map(t => t.id === activeTabId
-      ? { ...t, path: currentPath, label: currentPath.split('\\').filter(Boolean).pop() || currentPath, historyBack, historyForward }
+      ? { ...t, path: currentPath, label: currentPath.split('\\').filter(Boolean).pop() || currentPath, historyBack, historyForward, sortCol, sortAsc }
       : t
     ));
-  }, [activeTabId, currentPath, historyBack, historyForward]);
+  }, [activeTabId, currentPath, historyBack, historyForward, sortCol, sortAsc]);
 
   const switchToTab = useCallback((tabId: string) => {
     saveCurrentTabState();
     const tab = tabs.find(t => t.id === tabId);
     if (!tab || tab.id === activeTabId) return;
     setActiveTabId(tab.id);
+    activeTabIdRef.current = tab.id; // Update ref BEFORE navigateTo so it updates the correct tab
     setHistoryBack(tab.historyBack);
     setHistoryForward(tab.historyForward);
+    setSortCol(tab.sortCol);
+    setSortAsc(tab.sortAsc);
     dirCacheRef.current.delete(tab.path);
     navigateTo(tab.path, false);
   }, [tabs, activeTabId, saveCurrentTabState, navigateTo]);
@@ -251,8 +282,11 @@ export default function ExplorerView() {
     const tab = createTab(newPath);
     setTabs(prev => [...prev, tab]);
     setActiveTabId(tab.id);
+    activeTabIdRef.current = tab.id;
     setHistoryBack([]);
     setHistoryForward([]);
+    setSortCol('name');
+    setSortAsc(true);
     navigateTo(newPath, false);
   }, [currentPath, saveCurrentTabState, navigateTo]);
 
@@ -265,8 +299,11 @@ export default function ExplorerView() {
         const newIdx = Math.min(idx, next.length - 1);
         const newTab = next[newIdx];
         setActiveTabId(newTab.id);
+        activeTabIdRef.current = newTab.id;
         setHistoryBack(newTab.historyBack);
         setHistoryForward(newTab.historyForward);
+        setSortCol(newTab.sortCol);
+        setSortAsc(newTab.sortAsc);
         dirCacheRef.current.delete(newTab.path);
         navigateTo(newTab.path, false);
       }
@@ -291,10 +328,12 @@ export default function ExplorerView() {
   }, [historyForward, currentPath, navigateTo]);
 
   const goUp = useCallback(() => {
-    if (/^[A-Z]:\\$/i.test(currentPath)) return;
-    const parent = currentPath.substring(0, Math.max(currentPath.lastIndexOf('\\'), currentPath.lastIndexOf('/')));
+    // Strip trailing separator before computing parent
+    const cleaned = currentPath.replace(/[\\/]+$/, '');
+    if (/^[A-Z]:$/i.test(cleaned)) return; // Already at drive root
+    const parent = cleaned.substring(0, Math.max(cleaned.lastIndexOf('\\'), cleaned.lastIndexOf('/')));
     const normalized = /^[A-Z]:$/i.test(parent) ? parent + '\\' : parent;
-    if (normalized && normalized !== currentPath) navigateTo(normalized);
+    if (normalized && normalized !== cleaned) navigateTo(normalized);
   }, [currentPath, navigateTo]);
 
   const refresh = useCallback(() => {
@@ -411,6 +450,8 @@ export default function ExplorerView() {
     return () => { document.removeEventListener('click', close); document.removeEventListener('keydown', onKey); };
   }, [ctxMenu]);
 
+  const ctxMenuRef = useRef<HTMLDivElement>(null);
+
   const handleContextMenu = useCallback((e: React.MouseEvent, entry: FileEntry | null) => {
     e.preventDefault();
     e.stopPropagation();
@@ -418,12 +459,23 @@ export default function ExplorerView() {
     if (entry && !selectedPaths.has(entry.path)) {
       setSelectedPaths(new Set([entry.path]));
     }
-    // Viewport-Overflow: Menü darf nicht über den Bildschirmrand hinausragen
-    const menuW = 280, menuH = 500;
-    const x = Math.min(e.clientX, window.innerWidth - menuW);
-    const y = Math.min(e.clientY, window.innerHeight - menuH);
-    setCtxMenu({ x: Math.max(0, x), y: Math.max(0, y), entry });
+    // Set initial position at click, then adjust after render to prevent viewport overflow
+    setCtxMenu({ x: e.clientX, y: e.clientY, entry });
   }, [selectedPaths]);
+
+  // Adjust context menu position after render to prevent viewport overflow
+  useEffect(() => {
+    if (!ctxMenu || !ctxMenuRef.current) return;
+    const menu = ctxMenuRef.current;
+    const rect = menu.getBoundingClientRect();
+    let { x, y } = ctxMenu;
+    if (x + rect.width > window.innerWidth) x = Math.max(0, window.innerWidth - rect.width);
+    if (y + rect.height > window.innerHeight) y = Math.max(0, window.innerHeight - rect.height);
+    if (x !== ctxMenu.x || y !== ctxMenu.y) {
+      menu.style.left = x + 'px';
+      menu.style.top = y + 'px';
+    }
+  }, [ctxMenu]);
 
   const ctxAction = useCallback(async (action: string) => {
     setCtxMenu(null);
@@ -477,6 +529,7 @@ export default function ExplorerView() {
         if (moveDest && !result.canceled) {
           try {
             await api.move(paths, moveDest);
+            dirCacheRef.current.delete(moveDest);
             showToast(`${paths.length} Element(e) verschoben`, 'info');
             refresh();
           } catch (err: any) { showToast('Fehler: ' + err.message, 'error'); }
@@ -489,6 +542,7 @@ export default function ExplorerView() {
         if (copyDest && !result.canceled) {
           try {
             await api.copy(paths, copyDest);
+            dirCacheRef.current.delete(copyDest);
             showToast(`${paths.length} Element(e) kopiert`, 'info');
           } catch (err: any) { showToast('Fehler: ' + err.message, 'error'); }
         }
@@ -619,9 +673,9 @@ export default function ExplorerView() {
         }
         try {
           await api.writeFileContent(fullPath, '');
+          // Use pending rename ref — rename activates AFTER refresh completes and new entries are loaded
+          pendingRenameRef.current = { path: fullPath, name: fileName };
           refresh();
-          setRenamePath(fullPath);
-          setRenameValue(fileName);
         } catch (err: any) { showToast('Fehler: ' + err.message, 'error'); }
         break;
       }
@@ -634,6 +688,7 @@ export default function ExplorerView() {
             } else {
               await api.copy(clipboard.paths, entry.path);
             }
+            dirCacheRef.current.delete(entry.path);
             showToast(`${clipboard.paths.length} Element(e) in "${entry.name}" eingefügt`, 'info');
             refresh();
           } catch (err: any) { showToast('Fehler: ' + err.message, 'error'); }
@@ -765,6 +820,7 @@ export default function ExplorerView() {
   }, [navigateTo, handleOmnibarSearch]);
 
   const pendingSelectRef = useRef<string | null>(null);
+  const pendingRenameRef = useRef<{ path: string; name: string } | null>(null);
 
   const handleOmniResultClick = useCallback((result: any) => {
     setOmnibarSearching(false);
@@ -780,6 +836,18 @@ export default function ExplorerView() {
     }
     navigateTo(dirPath);
   }, [navigateTo]);
+
+  // Dual panel navigation (must be before handleDrop which references it)
+  const navigateDualTo = useCallback(async (dirPath: string) => {
+    setDualPath(dirPath);
+    setDualLoading(true);
+    try {
+      const result = await api.listDirectory(dirPath);
+      if (result.error) { setDualEntries([]); }
+      else { setDualEntries((result.entries as FileEntry[]).map(e => ({ ...e }))); }
+    } catch { setDualEntries([]); }
+    setDualLoading(false);
+  }, []);
 
   // Drag handlers
   const handleDragStart = useCallback((e: React.DragEvent, path: string) => {
@@ -816,11 +884,15 @@ export default function ExplorerView() {
     try {
       if (e.ctrlKey) await api.copy(sourcePaths, targetPath);
       else await api.move(sourcePaths, targetPath);
+      // Invalidate cache for target path
+      dirCacheRef.current.delete(targetPath);
       refresh();
+      // Refresh dual panel if active
+      if (dualMode && dualPath) navigateDualTo(dualPath);
     } catch (err: any) {
       showToast('Fehler: ' + (err.message || 'Verschieben/Kopieren fehlgeschlagen'), 'error');
     }
-  }, [refresh, showToast]);
+  }, [refresh, showToast, dualMode, dualPath, navigateDualTo]);
 
   const formatDateTime = (ms: number) => {
     if (!ms) return '-';
@@ -883,7 +955,7 @@ export default function ExplorerView() {
         const currentIdx = selectedPaths.size === 1
           ? sortedEntries.findIndex(en => selectedPaths.has(en.path))
           : -1;
-        const nextIdx = currentIdx < sortedEntries.length - 1 ? currentIdx + 1 : 0;
+        const nextIdx = currentIdx < sortedEntries.length - 1 ? currentIdx + 1 : (currentIdx === -1 ? 0 : currentIdx);
         const nextEntry = sortedEntries[nextIdx];
         if (nextEntry) {
           setSelectedPaths(new Set([nextEntry.path]));
@@ -899,7 +971,7 @@ export default function ExplorerView() {
         const currentIdx = selectedPaths.size === 1
           ? sortedEntries.findIndex(en => selectedPaths.has(en.path))
           : sortedEntries.length;
-        const prevIdx = currentIdx > 0 ? currentIdx - 1 : sortedEntries.length - 1;
+        const prevIdx = currentIdx > 0 ? currentIdx - 1 : (currentIdx === -1 ? sortedEntries.length - 1 : 0);
         const prevEntry = sortedEntries[prevIdx];
         if (prevEntry) {
           setSelectedPaths(new Set([prevEntry.path]));
@@ -952,18 +1024,6 @@ export default function ExplorerView() {
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
   }, [selectedPaths, entries, sortedEntries, currentPath, clipboard, showToast, refresh, handleDelete, handleDoubleClick, goBack, goForward, goUp, selectAll, navigateTo, setPropertiesPath]);
-
-  // Dual panel navigation
-  const navigateDualTo = useCallback(async (dirPath: string) => {
-    setDualPath(dirPath);
-    setDualLoading(true);
-    try {
-      const result = await api.listDirectory(dirPath);
-      if (result.error) { setDualEntries([]); }
-      else { setDualEntries((result.entries as FileEntry[]).map(e => ({ ...e }))); }
-    } catch { setDualEntries([]); }
-    setDualLoading(false);
-  }, []);
 
   const handleDualDoubleClick = useCallback((entry: FileEntry) => {
     if (entry.isDirectory) navigateDualTo(entry.path);
@@ -1189,7 +1249,7 @@ export default function ExplorerView() {
                       onClick={() => col.sortable && handleSort(col.id as SortCol)}>
                       {col.label}{col.sortable && sortCol === col.id ? (sortAsc ? ' \u25B2' : ' \u25BC') : ''}
                       {col.id !== 'icon' && (
-                        <div className="explorer-col-resize" onMouseDown={e => handleColResizeStart(e, col.id)} />
+                        <div className="explorer-col-resize" onMouseDown={e => handleColResizeStart(e, col.id)} onClick={e => e.stopPropagation()} />
                       )}
                     </th>
                   ))}
@@ -1352,7 +1412,7 @@ export default function ExplorerView() {
           ? [...selectedPaths].some(p => !!dirTags[p])
           : (entry ? !!dirTags[entry.path] : false);
         return (
-          <div className="explorer-ctx-menu" style={{ left: ctxMenu.x, top: ctxMenu.y }} onClick={e => e.stopPropagation()}>
+          <div ref={ctxMenuRef} className="explorer-ctx-menu" style={{ left: ctxMenu.x, top: ctxMenu.y }} onClick={e => e.stopPropagation()}>
             {entry ? (
               <>
                 <button className="ctx-item ctx-item-bold" onClick={() => ctxAction('open')}>Öffnen</button>

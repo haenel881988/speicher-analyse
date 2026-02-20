@@ -81,6 +81,8 @@ pub async fn file_rename(old_path: String, new_name: String) -> Result<Value, St
     let src = Path::new(&old_path);
     let old_name = src.file_name().unwrap_or_default().to_string_lossy().to_string();
     let dest = src.parent().unwrap_or(Path::new(".")).join(&new_name);
+    tokio::fs::rename(&src, &dest).await.map_err(|e| e.to_string())?;
+    // Log undo action AFTER successful rename (not before — failed renames should not appear in undo log)
     let desc = format!("\"{}\" umbenannt zu \"{}\"", old_name, new_name);
     crate::undo::log_action("file_rename", &desc, json!({
         "old_path": old_path,
@@ -88,7 +90,6 @@ pub async fn file_rename(old_path: String, new_name: String) -> Result<Value, St
         "old_name": old_name,
         "new_name": new_name
     }), true);
-    tokio::fs::rename(&src, &dest).await.map_err(|e| e.to_string())?;
     Ok(json!({ "success": true, "newPath": dest.to_string_lossy() }))
 }
 
