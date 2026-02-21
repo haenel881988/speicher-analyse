@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import * as api from '../api/tauri-api';
 import { useAppContext } from '../context/AppContext';
 import type { Point, Rect, Annotation, PageEntry, ShapeType, StampType } from './pdf/types';
@@ -6,6 +7,7 @@ import { ANNO_COLORS, STAMPS, FONTS } from './pdf/constants';
 import { normalizeRect, pathBounds, getStampLabel, loadPdfjs } from './pdf/utils';
 import { OcrDialog, MergeDialog, SignaturePadDialog, WatermarkDialog } from './pdf/PdfDialogs';
 import { BookmarkTree, ThumbCanvas } from './pdf/PdfThumbnails';
+import { PdfAnnotationLayer } from './pdf/PdfAnnotationLayer';
 
 export default function PdfEditorView({ filePath: propFilePath = '', onClose }: { filePath?: string; onClose?: () => void } = {}) {
   const { showToast, setActiveTab, pendingPdfPath, setPendingPdfPath } = useAppContext();
@@ -66,6 +68,9 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
   const [thumbDragIdx, setThumbDragIdx] = useState<number | null>(null);
   const [thumbDropIdx, setThumbDropIdx] = useState<number | null>(null);
   const [pageContextMenu, setPageContextMenu] = useState<{ x: number; y: number; pageNum: number } | null>(null);
+  // Viewport-Dimensionen pro Seite (für React-Annotation-Layer)
+  const [pageViewports, setPageViewports] = useState<Record<number, { w: number; h: number }>>({});
+  const [pagesReady, setPagesReady] = useState(0);
 
   // Undo/Redo stacks
   const undoStackRef = useRef<Annotation[][]>([]);
@@ -87,7 +92,6 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
   const shapeFilledRef = useRef(false);
   const pendingSignatureRef = useRef<Point[][] | null>(null);
   const activeStampRef = useRef<StampType>('approved');
-  const watermarkRef = useRef<{ text: string; fontSize: number; color: string; opacity: number; rotation: number } | null>(null);
   const setCommentPopoverRef = useRef((_v: { x: number; y: number; svgX: number; svgY: number; page: number; editIdx?: number } | null) => {});
   const setInlineEditorRef = useRef((_v: { page: number; svgX: number; svgY: number; editIdx?: number } | null) => {});
   setInlineEditorRef.current = setInlineEditor;
@@ -116,8 +120,6 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
   useEffect(() => { textFontFamilyRef.current = textFontFamily; }, [textFontFamily]);
   useEffect(() => { pendingSignatureRef.current = pendingSignature; }, [pendingSignature]);
   useEffect(() => { activeStampRef.current = activeStamp; }, [activeStamp]);
-  useEffect(() => { watermarkRef.current = watermark; }, [watermark]);
-
   // Scroll-Listener: Inline-Editor-Position bei Scroll aktualisieren
   useEffect(() => {
     if (!inlineEditor || !pagesContainerRef.current) return;
@@ -126,13 +128,6 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
     el.addEventListener('scroll', handler);
     return () => el.removeEventListener('scroll', handler);
   }, [inlineEditor]);
-
-  // Wasserzeichen-Änderung auf alle Seiten propagieren
-  useEffect(() => {
-    for (let i = 0; i < pageEntriesRef.current.length; i++) {
-      if (pageEntriesRef.current[i].rendered) renderAnnotationsForPage(i + 1);
-    }
-  }, [watermark]);
 
   // Consume pending PDF path from context — warnt bei ungespeicherten Änderungen
   useEffect(() => {
@@ -173,12 +168,6 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
     setAnnotations(prev);
     setSelectedAnnoIdx(null);
     setUnsavedChanges(true); // Konservativ: Undo ändert immer den Zustand gegenüber letztem Speichern
-    // Re-render all pages that have annotations
-    setTimeout(() => {
-      for (let i = 0; i < pageEntriesRef.current.length; i++) {
-        renderAnnotationsForPage(i + 1);
-      }
-    }, 30);
   }, []);
 
   const redo = useCallback(() => {
@@ -189,11 +178,6 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
     setAnnotations(next);
     setSelectedAnnoIdx(null);
     setUnsavedChanges(true); // Konservativ: Redo ändert immer den Zustand gegenüber letztem Speichern
-    setTimeout(() => {
-      for (let i = 0; i < pageEntriesRef.current.length; i++) {
-        renderAnnotationsForPage(i + 1);
-      }
-    }, 30);
   }, []);
 
   const addAnnotation = useCallback((anno: Annotation) => {
@@ -208,11 +192,6 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
     setAnnotations(prev => prev.filter((_, i) => i !== selectedAnnoIdx));
     setSelectedAnnoIdx(null);
     setUnsavedChanges(true);
-    setTimeout(() => {
-      for (let i = 0; i < pageEntriesRef.current.length; i++) {
-        renderAnnotationsForPage(i + 1);
-      }
-    }, 30);
   }, [selectedAnnoIdx, pushUndo]);
 
   // Load PDF when filePath changes
@@ -322,7 +301,9 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
   // Render pages after loading
   useEffect(() => {
     if (!loaded || totalPages === 0 || !pagesContainerRef.current) return;
+    setPageViewports({});
     renderAllPages();
+    setPagesReady(p => p + 1); // Trigger re-render für Portal-basierte Annotation-Layer
     return () => {
       intersectionObRef.current?.disconnect();
       pageEntriesRef.current = [];
@@ -543,227 +524,10 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
       // Text-Layer fehlgeschlagen — kein Problem, PDF bleibt nutzbar
     }
 
-    renderAnnotationsForPage(pageNum);
+    // Viewport-Dimensionen speichern (für React-Annotation-Layer via Portal)
+    setPageViewports(prev => ({ ...prev, [pageNum]: { w: viewport.width, h: viewport.height } }));
   }, []);
 
-  const renderAnnotationsForPage = useCallback((pageNum: number) => {
-    const entry = pageEntriesRef.current[pageNum - 1];
-    if (!entry) return;
-    const { svg } = entry;
-    const s = scaleRef.current;
-
-    svg.querySelectorAll('.anno-render').forEach(el => el.remove());
-
-    const pageAnnos = annotationsRef.current.filter(a => a.page === pageNum - 1);
-    for (const anno of pageAnnos) {
-      const annoGlobalIdx = annotationsRef.current.indexOf(anno);
-      if (anno.type === 'highlight' && anno.rect) {
-        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        rect.classList.add('anno-render');
-        rect.setAttribute('x', String(anno.rect.x1 * s));
-        rect.setAttribute('y', String(anno.rect.y1 * s));
-        rect.setAttribute('width', String((anno.rect.x2 - anno.rect.x1) * s));
-        rect.setAttribute('height', String((anno.rect.y2 - anno.rect.y1) * s));
-        rect.setAttribute('fill', (anno.color || '#FFFF00') + '40');
-        rect.setAttribute('stroke', 'none');
-        rect.setAttribute('data-anno-idx', String(annoGlobalIdx));
-        rect.style.cursor = 'pointer';
-        svg.appendChild(rect);
-      } else if (anno.type === 'text' && anno.rect) {
-        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-        g.classList.add('anno-render');
-        g.setAttribute('data-anno-idx', String(annoGlobalIdx));
-        g.style.cursor = 'pointer';
-        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        circle.setAttribute('cx', String(anno.rect.x1 * s + 12));
-        circle.setAttribute('cy', String(anno.rect.y1 * s + 12));
-        circle.setAttribute('r', '10');
-        circle.setAttribute('fill', anno.color || '#FFD700');
-        circle.setAttribute('stroke', '#333');
-        circle.setAttribute('stroke-width', '1');
-        g.appendChild(circle);
-        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        text.setAttribute('x', String(anno.rect.x1 * s + 12));
-        text.setAttribute('y', String(anno.rect.y1 * s + 17));
-        text.setAttribute('text-anchor', 'middle');
-        text.setAttribute('font-size', '14');
-        text.setAttribute('font-weight', 'bold');
-        text.setAttribute('fill', '#333');
-        text.textContent = 'i';
-        g.appendChild(text);
-        const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
-        title.textContent = anno.text || '';
-        g.appendChild(title);
-        svg.appendChild(g);
-      } else if (anno.type === 'freetext' && anno.text) {
-        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-        g.classList.add('anno-render');
-        g.setAttribute('data-anno-idx', String(annoGlobalIdx));
-        g.style.cursor = 'pointer';
-        const fs = (anno.fontSize || 14) * s;
-        const lines = anno.text.split('\n');
-        const lineHeight = fs * 1.3;
-        const textWidth = Math.max(...lines.map(l => l.length)) * fs * 0.55 + 12 * s;
-        const textHeight = lines.length * lineHeight + 8 * s;
-        // Semi-transparent background
-        const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        bg.setAttribute('x', String(anno.rect.x1 * s));
-        bg.setAttribute('y', String(anno.rect.y1 * s));
-        bg.setAttribute('width', String(Math.max(textWidth, 50 * s)));
-        bg.setAttribute('height', String(Math.max(textHeight, fs + 8 * s)));
-        bg.setAttribute('fill', 'rgba(255,255,255,0.9)');
-        bg.setAttribute('stroke', (anno.color || '#333') + '80');
-        bg.setAttribute('stroke-width', '1');
-        bg.setAttribute('rx', String(3 * s));
-        g.appendChild(bg);
-        // Text lines
-        for (let li = 0; li < lines.length; li++) {
-          const textEl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-          textEl.setAttribute('x', String((anno.rect.x1) * s + 6 * s));
-          textEl.setAttribute('y', String((anno.rect.y1) * s + fs + li * lineHeight + 2 * s));
-          textEl.setAttribute('font-size', String(fs));
-          textEl.setAttribute('font-family', anno.fontFamily || 'system-ui, -apple-system, sans-serif');
-          textEl.setAttribute('fill', anno.color || '#333');
-          textEl.textContent = lines[li];
-          g.appendChild(textEl);
-        }
-        svg.appendChild(g);
-      } else if (anno.type === 'ink' && anno.paths) {
-        for (const path of anno.paths) {
-          const polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
-          polyline.classList.add('anno-render');
-          polyline.setAttribute('points', path.map(p => `${p.x * s},${p.y * s}`).join(' '));
-          polyline.setAttribute('fill', 'none');
-          polyline.setAttribute('stroke', anno.color || '#FF0000');
-          polyline.setAttribute('stroke-width', String(anno.width || 2));
-          polyline.setAttribute('stroke-linecap', 'round');
-          polyline.setAttribute('stroke-linejoin', 'round');
-          polyline.setAttribute('data-anno-idx', String(annoGlobalIdx));
-          polyline.style.cursor = 'pointer';
-          // Breiterer Klickbereich für dünne Linien
-          polyline.setAttribute('stroke-opacity', '1');
-          svg.appendChild(polyline);
-        }
-      } else if (anno.type === 'shape' && anno.shapeType && anno.rect) {
-        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-        g.classList.add('anno-render');
-        g.setAttribute('data-anno-idx', String(annoGlobalIdx));
-        g.style.cursor = 'pointer';
-        const x1 = anno.rect.x1 * s, y1 = anno.rect.y1 * s;
-        const x2 = anno.rect.x2 * s, y2 = anno.rect.y2 * s;
-        const w = x2 - x1, h = y2 - y1;
-        const color = anno.color || '#FF0000';
-        const sw = String(anno.width || 2);
-        if (anno.shapeType === 'rect') {
-          const r = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-          r.setAttribute('x', String(x1)); r.setAttribute('y', String(y1));
-          r.setAttribute('width', String(w)); r.setAttribute('height', String(h));
-          r.setAttribute('fill', anno.filled ? color + '40' : 'none');
-          r.setAttribute('stroke', color); r.setAttribute('stroke-width', sw);
-          g.appendChild(r);
-        } else if (anno.shapeType === 'ellipse') {
-          const el = document.createElementNS('http://www.w3.org/2000/svg', 'ellipse');
-          el.setAttribute('cx', String(x1 + w / 2)); el.setAttribute('cy', String(y1 + h / 2));
-          el.setAttribute('rx', String(w / 2)); el.setAttribute('ry', String(h / 2));
-          el.setAttribute('fill', anno.filled ? color + '40' : 'none');
-          el.setAttribute('stroke', color); el.setAttribute('stroke-width', sw);
-          g.appendChild(el);
-        } else if (anno.shapeType === 'line') {
-          const ln = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-          ln.setAttribute('x1', String(x1)); ln.setAttribute('y1', String(y1));
-          ln.setAttribute('x2', String(x2)); ln.setAttribute('y2', String(y2));
-          ln.setAttribute('stroke', color); ln.setAttribute('stroke-width', sw);
-          ln.setAttribute('stroke-linecap', 'round');
-          g.appendChild(ln);
-        } else if (anno.shapeType === 'arrow') {
-          // Pfeil: Linie + Pfeilspitze
-          const ln = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-          ln.setAttribute('x1', String(x1)); ln.setAttribute('y1', String(y1));
-          ln.setAttribute('x2', String(x2)); ln.setAttribute('y2', String(y2));
-          ln.setAttribute('stroke', color); ln.setAttribute('stroke-width', sw);
-          ln.setAttribute('stroke-linecap', 'round');
-          g.appendChild(ln);
-          // Pfeilspitze berechnen
-          const angle = Math.atan2(y2 - y1, x2 - x1);
-          const headLen = 12 * s;
-          const p1x = x2 - headLen * Math.cos(angle - Math.PI / 6);
-          const p1y = y2 - headLen * Math.sin(angle - Math.PI / 6);
-          const p2x = x2 - headLen * Math.cos(angle + Math.PI / 6);
-          const p2y = y2 - headLen * Math.sin(angle + Math.PI / 6);
-          const head = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-          head.setAttribute('points', `${x2},${y2} ${p1x},${p1y} ${p2x},${p2y}`);
-          head.setAttribute('fill', color);
-          g.appendChild(head);
-        }
-        svg.appendChild(g);
-      } else if (anno.type === 'stamp' && anno.stampType && anno.rect) {
-        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-        g.classList.add('anno-render');
-        g.setAttribute('data-anno-idx', String(annoGlobalIdx));
-        g.style.cursor = 'pointer';
-        const cx = (anno.rect.x1 + anno.rect.x2) / 2 * s;
-        const cy = (anno.rect.y1 + anno.rect.y2) / 2 * s;
-        const rot = anno.rotation || -15;
-        g.setAttribute('transform', `rotate(${rot} ${cx} ${cy})`);
-        const x1 = anno.rect.x1 * s, y1 = anno.rect.y1 * s;
-        const w = (anno.rect.x2 - anno.rect.x1) * s, h = (anno.rect.y2 - anno.rect.y1) * s;
-        const color = anno.color || '#FF0000';
-        const border = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        border.setAttribute('x', String(x1)); border.setAttribute('y', String(y1));
-        border.setAttribute('width', String(w)); border.setAttribute('height', String(h));
-        border.setAttribute('fill', 'none'); border.setAttribute('stroke', color);
-        border.setAttribute('stroke-width', '3'); border.setAttribute('rx', '4');
-        g.appendChild(border);
-        const stampLabel = anno.stampType ? getStampLabel(anno.stampType) : 'STAMP';
-        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        text.setAttribute('x', String(x1 + w / 2)); text.setAttribute('y', String(y1 + h / 2 + 8 * s));
-        text.setAttribute('text-anchor', 'middle'); text.setAttribute('font-size', String(20 * s));
-        text.setAttribute('font-weight', 'bold'); text.setAttribute('fill', color);
-        text.setAttribute('font-family', 'system-ui, sans-serif');
-        text.textContent = stampLabel;
-        g.appendChild(text);
-        svg.appendChild(g);
-      } else if (anno.type === 'signature' && anno.paths) {
-        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-        g.classList.add('anno-render');
-        g.setAttribute('data-anno-idx', String(annoGlobalIdx));
-        g.style.cursor = 'pointer';
-        for (const path of anno.paths) {
-          const polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
-          polyline.setAttribute('points', path.map(p => `${p.x * s},${p.y * s}`).join(' '));
-          polyline.setAttribute('fill', 'none');
-          polyline.setAttribute('stroke', anno.color || '#000080');
-          polyline.setAttribute('stroke-width', String((anno.width || 2) * s));
-          polyline.setAttribute('stroke-linecap', 'round');
-          polyline.setAttribute('stroke-linejoin', 'round');
-          g.appendChild(polyline);
-        }
-        svg.appendChild(g);
-      }
-    }
-
-    // Wasserzeichen auf jeder Seite rendern (halbtransparent, zentriert, rotiert)
-    if (watermarkRef.current && watermarkRef.current.text) {
-      const wm = watermarkRef.current;
-      const wmText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      wmText.classList.add('anno-render');
-      const vw = parseFloat(svg.getAttribute('viewBox')?.split(' ')[2] || '800');
-      const vh = parseFloat(svg.getAttribute('viewBox')?.split(' ')[3] || '600');
-      wmText.setAttribute('x', String(vw / 2));
-      wmText.setAttribute('y', String(vh / 2));
-      wmText.setAttribute('text-anchor', 'middle');
-      wmText.setAttribute('dominant-baseline', 'middle');
-      wmText.setAttribute('font-size', String(wm.fontSize * s));
-      wmText.setAttribute('font-family', 'system-ui, sans-serif');
-      wmText.setAttribute('font-weight', 'bold');
-      wmText.setAttribute('fill', wm.color);
-      wmText.setAttribute('fill-opacity', String(wm.opacity));
-      wmText.setAttribute('transform', `rotate(${wm.rotation} ${vw / 2} ${vh / 2})`);
-      wmText.setAttribute('pointer-events', 'none');
-      wmText.textContent = wm.text;
-      svg.appendChild(wmText);
-    }
-  }, []);
 
   // --- Drucken: Alle Seiten rendern bevor window.print() aufgerufen wird ---
   const handlePrint = useCallback(async (pageSet?: Set<number>) => {
@@ -894,7 +658,7 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
             x2: orig.x2 + dx, y2: orig.y2 + dy,
           }};
           annotationsRef.current = updated;
-          renderAnnotationsForPage(anno.page + 1);
+          setAnnotations(updated); // React rendert Annotations via PdfAnnotationLayer
         }
         return;
       }
@@ -1072,30 +836,18 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
       }
 
       svg.querySelectorAll('.temp-draw').forEach(el => el.remove());
-      setTimeout(() => renderAnnotationsForPage(pageNum), 50);
       currentPathRef.current = [];
     });
-  }, [renderAnnotationsForPage, addAnnotation]);
+  }, [addAnnotation]);
 
-  // SVG pointer-events: nur aktiv wenn Annotations-Werkzeug gewählt
-  // Im Select-Modus: SVG nur für Annotation-Klicks, TextLayer für Textauswahl
+  // SVG + TextLayer pointer-events: je nach Werkzeug
+  // Annotations-pointer-events werden von PdfAnnotationLayer per Props gesteuert
   useEffect(() => {
     for (const entry of pageEntriesRef.current) {
-      if (currentTool === 'select') {
-        // SVG nur für Klicks auf bestehende Annotationen sichtbar
-        // TextLayer liegt darunter und erlaubt Textauswahl
-        entry.svg.style.pointerEvents = 'none';
-        entry.svg.querySelectorAll('.anno-render').forEach(el => {
-          (el as HTMLElement).style.pointerEvents = 'auto';
-        });
-        entry.textLayerDiv.style.pointerEvents = 'auto';
-      } else {
-        // Annotations-Werkzeug aktiv: SVG fängt alle Events
-        entry.svg.style.pointerEvents = 'auto';
-        entry.textLayerDiv.style.pointerEvents = 'none';
-      }
+      entry.svg.style.pointerEvents = currentTool === 'select' ? 'none' : 'auto';
+      entry.textLayerDiv.style.pointerEvents = currentTool === 'select' ? 'auto' : 'none';
     }
-  }, [currentTool, annotations]);
+  }, [currentTool, pagesReady]);
 
   const save = useCallback(async () => {
     if (!filePath) return;
@@ -1365,10 +1117,9 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
         text: inlineText.trim(), color: annoColor, fontSize: fs, fontFamily: ff,
       });
     }
-    setTimeout(() => renderAnnotationsForPage(page), 50);
     setInlineEditor(null);
     setInlineText('');
-  }, [inlineEditor, inlineText, textFontSize, textFontFamily, annoColor, addAnnotation, pushUndo, renderAnnotationsForPage]);
+  }, [inlineEditor, inlineText, textFontSize, textFontFamily, annoColor, addAnnotation, pushUndo]);
 
   const submitComment = useCallback(() => {
     if (!commentPopover || !commentText.trim()) { setCommentPopover(null); setCommentText(''); return; }
@@ -1390,10 +1141,9 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
         text: commentText.trim(), color: annoColor,
       });
     }
-    setTimeout(() => renderAnnotationsForPage(commentPopover.page), 50);
     setCommentPopover(null);
     setCommentText('');
-  }, [commentPopover, commentText, annoColor, addAnnotation, pushUndo, renderAnnotationsForPage]);
+  }, [commentPopover, commentText, annoColor, addAnnotation, pushUndo]);
 
   const cancelComment = useCallback(() => {
     setCommentPopover(null);
@@ -1677,6 +1427,27 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
           {error && <div className="preview-error">Fehler beim Laden: {error}</div>}
         </div>
       </div>
+
+      {/* React-Annotation-Layer: Portals in die imperativen SVG-Elemente jeder Seite */}
+      {pagesReady > 0 && pageEntriesRef.current.map(entry => {
+        const vp = pageViewports[entry.pageNum];
+        if (!vp || !entry.svg) return null;
+        return createPortal(
+          <PdfAnnotationLayer
+            key={entry.pageNum}
+            annotations={annotations}
+            pageIndex={entry.pageNum - 1}
+            scale={scale}
+            selectedAnnoIdx={selectedAnnoIdx}
+            watermark={watermark}
+            viewportWidth={vp.w}
+            viewportHeight={vp.h}
+            currentTool={currentTool}
+          />,
+          entry.svg,
+          `anno-layer-${entry.pageNum}`
+        );
+      })}
 
       <div className="pdf-editor-anno-toolbar">
         {tools.map(t => (

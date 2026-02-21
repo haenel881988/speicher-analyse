@@ -16,6 +16,34 @@
 
 > **Claude:** Entfallen (20.02.2026) — Simons Entscheidung. GPO-Scanner und Erweiterter Sicherheitscheck werden nicht umgesetzt.
 
+Logikfehler (kritisch)
+#	Datei	Problem
+A1	TreeView.tsx:224	Klick auf eine Zeile führt IMMER gleichzeitig Selektion UND Expand/Collapse aus. Man kann nichts auswählen ohne den Ordner zu öffnen/schließen.
+A2	DuplicatesView.tsx	maxSize-Filter wird ans Backend gesendet, aber cmd_scan.rs ignoriert ihn komplett (nur minSize wird ausgewertet).
+A3	DuplicatesView.tsx	Progress-Felder stimmen nicht überein: Frontend erwartet filesHashed/totalToHash, Backend sendet processed/totalCandidates.
+A4	DuplicatesView.tsx	"Neueste behalten"-Logik nutzt mtime, aber das Backend liefert kein Änderungsdatum in den Duplikat-Ergebnissen.
+A5	ChartsView.tsx	Chart-Farben (Text, Borders) werden einmalig beim Rendern gesetzt. Theme-Wechsel (Dark/Light) aktualisiert die Charts nicht.
+A6	ExplorerView.tsx:926-1051	Globale Keyboard-Shortcuts auf document registriert. Durch TabRouter Keep-Alive laufen diese auch wenn der Explorer-Tab nicht aktiv ist.
+A7	App.tsx:229-232	handleExportPdf ist ein No-Op. Prüft nur ob ein Scan existiert, führt aber keinen Export durch.
+A8	App.tsx	navigator.getBattery() ist eine veraltete API und möglicherweise im Tauri-WebView nicht verfügbar.
+A9	cmd_files.rs vs tauri-api.ts	readFileContent gibt { content: string } zurück (Rust), aber TypeScript typisiert es als string.
+B: Potentielle Probleme
+#	Datei	Problem
+B1	TabRouter.tsx	Alle besuchten Tabs bleiben permanent im DOM. Kein Mechanismus zum Entladen — Memory wächst stetig.
+B2	NetworkView.tsx	Polling-Intervalle (3s + 5s) laufen weiter wenn der Tab nicht sichtbar ist (wegen Keep-Alive).
+B3	ExplorerView.tsx	Stale-Closure-Risiko in navigateTo durch komplexe Dependency-Ketten in useCallback.
+B4	AppContext.tsx	Jeder Setter erstellt ein komplett neues State-Objekt → unnötige Re-Renders aller Konsumenten.
+C: UX-Probleme
+#	Datei	Problem
+C1	DashboardView.tsx	Erste Karte "Speicherbelegung" ist nicht klickbar (kein onClick), alle anderen schon.
+C2	OldFilesView.tsx	Kein Auto-Load wenn Scan vorhanden — User muss manuell "Suchen" klicken obwohl Daten bereitstehen.
+C3	TreeView.tsx	Kein Lade-Indikator beim Expandieren von Ordnern (Netzwerk-Request ohne Feedback).
+C4	CleanupView.tsx	Warnung sagt "Nicht rückgängig" — unklar ob Undo-Log trotzdem greift.
+D: Security-Hinweise
+#	Datei	Problem
+D1	cmd_files.rs	show_in_explorer escaped Pfade korrekt mit replace("'", "''").
+D2	cmd_files.rs	open_file hat keine Pfad-Validierung — beliebige Dateien können geöffnet werden.
+
 ### Webbrowser-Integration
 
 - Integration eines Webbrowser, damit z.B.: im netzwerk direkt das jeweilige Netzwerkgerät über die IP Adresse aufgerufen werden kann.
