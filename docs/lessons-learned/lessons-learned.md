@@ -921,6 +921,45 @@ PDF-Editor hatte nach initialer Implementierung keine Grundfunktionen die JEDER 
 
 ---
 
+#### #112 — PDF Text-Tool: offsetTop ohne Scroll-Korrektur = falsche Textarea-Position
+`2026-02-21`
+
+**Symptom:** Das Text-Tool platzierte die Textarea an einer falschen Position auf der PDF-Seite — oft hunderte Pixel daneben, besonders bei gescrollten Dokumenten.
+
+**Ursache:** Die Positionsberechnung nutzte `wrapper.offsetTop/offsetLeft`, was relativ zum `offsetParent` ist (dem nächsten positionierten Vorfahren). Die Textarea saß in `.pdf-inline-editor-overlay` (position: absolute, inset: 0), das relativ zu einem entfernten Vorfahren positioniert war. Die Scroll-Position von `.pdf-editor-pages` wurde NICHT berücksichtigt. Zusätzlich hatte `.pdf-editor` kein `position: relative`, sodass der Containing Block des Overlays unklar war.
+
+**Lösung:** (1) `position: relative` auf `.pdf-editor` in CSS. (2) `getBoundingClientRect()` für beide Elemente (wrapper und .pdf-editor) — Subtraktion ergibt pixelgenaue Koordinaten unabhängig von Scroll, Layout und offsetParent-Kette. (3) Scroll-Listener auf `pagesContainerRef` triggert Re-Render bei Scroll, damit Position aktuell bleibt.
+
+**Lehre:** `offsetTop/offsetLeft` ist unzuverlässig wenn der `offsetParent` unklar ist oder Scroll-Container dazwischen liegen. `getBoundingClientRect()` liefert immer korrekte Viewport-relative Koordinaten — für relative Positionierung zweier Elemente zueinander ist die Differenz ihrer Rects der robusteste Ansatz.
+
+---
+
+#### #113 — Direct State Mutation über Refs: anno.rect = {...}
+`2026-02-21`
+
+**Symptom:** Während Annotation-Drag aktualisierte React den State nicht zuverlässig.
+
+**Ursache:** `annotationsRef.current[idx].rect = { ... }` mutierte das Annotation-Objekt direkt. Da dasselbe Objekt sowohl im Ref-Array als auch im React-State-Array lebte, änderte die Mutation den State "hinter Reacts Rücken". Beim anschließenden `setAnnotations([...annotationsRef.current])` erkannte React teils keine Änderung, weil die Objekt-Referenzen identisch waren.
+
+**Lösung:** Immutables Update: `const updated = [...annotationsRef.current]; updated[idx] = { ...anno, rect: { ... } }; annotationsRef.current = updated;`. Neues Array mit neuem Objekt — React erkennt die Änderung zuverlässig.
+
+**Lehre:** NIEMALS Objekte im State/Ref direkt mutieren, auch nicht wenn die visuelle Aktualisierung imperativ erfolgt (z.B. durch `renderAnnotationsForPage`). Die Mutation betrifft ALLE Referenzen auf dasselbe Objekt — inkl. Undo-Snapshots und React-State.
+
+---
+
+#### #114 — DOM-Kontextmenü in React: document.createElement statt JSX
+`2026-02-21`
+
+**Symptom:** Kontextmenü-Code war inkonsistent mit dem Rest der App. DOM-Elemente konnten bei Unmount als verwaiste Nodes im `document.body` zurückbleiben.
+
+**Ursache:** `showPageContextMenu()` erstellte das Menü per `document.createElement`, `document.body.appendChild` und manueller Event-Registrierung. In React ist das ein Anti-Pattern: React weiß nichts von diesen Nodes und räumt sie bei Component-Unmount nicht auf.
+
+**Lösung:** React-State + JSX (wie alle anderen Views): `const [pageContextMenu, setPageContextMenu] = useState(null)` + bedingtes Rendern im JSX + `useEffect` Click-Outside-Handler. Imperativer `contextmenu`-Event-Handler setzt nur State über Ref (`setPageContextMenuRef.current`).
+
+**Lehre:** In React NIEMALS `document.createElement` + `document.body.appendChild` für UI-Elemente verwenden. React-State + bedingtes JSX-Rendering ist die korrekte Methode. Cleanup ist automatisch durch Reacts Component-Lifecycle. Wenn imperative Event-Handler (z.B. aus `addEventListener`) React-State setzen müssen: Ref-Pattern verwenden (`setterRef.current = setter`).
+
+---
+
 <br>
 
 ## Terminal
