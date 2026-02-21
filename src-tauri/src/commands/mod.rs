@@ -88,6 +88,10 @@ pub(crate) fn validate_ip(ip: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Validiert Pfade für DESTRUKTIVE Operationen (Löschen, Verschieben, Umbenennen).
+/// Blockiert Systemverzeichnisse und Laufwerkswurzeln.
+/// NICHT für Lese-Operationen verwenden — Lesen darf auch in Systempfaden möglich sein
+/// (z.B. Properties, Preview, Scan).
 pub(crate) fn validate_path(p: &str) -> Result<(), String> {
     // Canonicalize to resolve symlinks/junctions that could bypass the blocklist
     let canonical = std::fs::canonicalize(p)

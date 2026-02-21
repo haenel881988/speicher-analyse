@@ -1,8 +1,17 @@
 use serde_json::{json, Value};
 use std::path::Path;
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::OnceLock;
 use tauri::Emitter;
 use super::{get_data_dir, read_json_file, write_json_file};
+
+// === Scan Cancellation ===
+
+fn scan_cancelled() -> &'static AtomicBool {
+    static FLAG: OnceLock<AtomicBool> = OnceLock::new();
+    FLAG.get_or_init(|| AtomicBool::new(false))
+}
 
 // === Drive & Scan ===
 
@@ -11,6 +20,13 @@ pub async fn get_drives() -> Result<Value, String> {
     crate::ps::run_ps_json_array(
         "Get-CimInstance Win32_LogicalDisk | Where-Object {$_.Size -gt 0} | ForEach-Object { $total = [long]$_.Size; $free = [long]$_.FreeSpace; $used = $total - $free; $pct = [math]::Round(($used / $total) * 1000) / 10; [PSCustomObject]@{ device = $_.DeviceID + '\\'; mountpoint = $_.DeviceID + '\\'; fstype = $_.FileSystem; total = $total; used = $used; free = $free; percent = $pct } } | ConvertTo-Json -Compress"
     ).await
+}
+
+#[tauri::command]
+pub async fn cancel_scan() -> Result<Value, String> {
+    scan_cancelled().store(true, Ordering::SeqCst);
+    tracing::info!("Scan-Abbruch angefordert");
+    Ok(json!({ "cancelled": true }))
 }
 
 #[tauri::command]
@@ -30,6 +46,9 @@ pub async fn start_scan(app: tauri::AppHandle, path: String) -> Result<Value, St
     let sid = scan_id.clone();
     let scan_id_ret = scan_id.clone();
 
+    // Reset cancellation flag before starting
+    scan_cancelled().store(false, Ordering::SeqCst);
+
     // Use spawn_blocking for walkdir (blocking I/O)
     tokio::task::spawn_blocking(move || {
         tracing::debug!(scan_id = %sid, "Scan-Thread gestartet");
@@ -41,11 +60,19 @@ pub async fn start_scan(app: tauri::AppHandle, path: String) -> Result<Value, St
         let mut errors_count: u64 = 0;
         let mut last_progress = std::time::Instant::now();
         let mut current_path;
+        let mut was_cancelled = false;
 
         for entry in walkdir::WalkDir::new(&path)
             .follow_links(false)
             .into_iter()
         {
+            // Check cancellation flag
+            if scan_cancelled().load(Ordering::Relaxed) {
+                was_cancelled = true;
+                tracing::info!(scan_id = %sid, files = files_found, dirs = dirs_scanned, "Scan abgebrochen");
+                break;
+            }
+
             match entry {
                 Ok(e) => {
                     current_path = e.path().to_string_lossy().to_string();
@@ -95,6 +122,15 @@ pub async fn start_scan(app: tauri::AppHandle, path: String) -> Result<Value, St
                     errors_count += 1;
                 }
             }
+        }
+
+        if was_cancelled {
+            let _ = app.emit("scan-error", json!({
+                "error": "Scan abgebrochen",
+                "scan_id": &sid,
+                "cancelled": true
+            }));
+            return;
         }
 
         let elapsed = start.elapsed().as_secs_f64();

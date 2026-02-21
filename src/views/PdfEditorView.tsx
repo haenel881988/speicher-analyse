@@ -1,83 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import * as api from '../api/tauri-api';
 import { useAppContext } from '../context/AppContext';
-
-const OCR_LANGUAGES = [
-  { id: 'de', label: 'Deutsch' }, { id: 'en', label: 'Englisch' },
-  { id: 'fr', label: 'Französisch' }, { id: 'es', label: 'Spanisch' },
-  { id: 'it', label: 'Italienisch' }, { id: 'pt', label: 'Portugiesisch' },
-  { id: 'nl', label: 'Niederländisch' }, { id: 'pl', label: 'Polnisch' },
-  { id: 'ru', label: 'Russisch' },
-];
-
-const ANNO_COLORS = [
-  { hex: '#FFFF00', label: 'Gelb' },
-  { hex: '#00FF00', label: 'Grün' },
-  { hex: '#00BFFF', label: 'Blau' },
-  { hex: '#FF0000', label: 'Rot' },
-  { hex: '#FF8C00', label: 'Orange' },
-  { hex: '#FF69B4', label: 'Pink' },
-];
-
-interface Point { x: number; y: number; }
-interface Rect { x1: number; y1: number; x2: number; y2: number; }
-type ShapeType = 'rect' | 'ellipse' | 'line' | 'arrow';
-type StampType = 'approved' | 'confidential' | 'draft' | 'copy' | 'date';
-
-interface Annotation {
-  type: 'highlight' | 'text' | 'ink' | 'freetext' | 'shape' | 'stamp' | 'signature';
-  page: number;
-  rect: Rect;
-  color: string;
-  text?: string;
-  paths?: Point[][];
-  width?: number;
-  fontSize?: number;
-  fontFamily?: string;
-  shapeType?: ShapeType;
-  filled?: boolean;
-  stampType?: StampType;
-  rotation?: number;
-}
-
-const STAMPS: { id: StampType; label: string }[] = [
-  { id: 'approved', label: 'GENEHMIGT' },
-  { id: 'confidential', label: 'VERTRAULICH' },
-  { id: 'draft', label: 'ENTWURF' },
-  { id: 'copy', label: 'KOPIE' },
-  { id: 'date', label: new Date().toLocaleDateString('de-DE') },
-];
-
-const FONTS = [
-  { id: 'system-ui, sans-serif', label: 'Sans-Serif' },
-  { id: 'Georgia, serif', label: 'Serif' },
-  { id: 'Consolas, monospace', label: 'Monospace' },
-  { id: 'Segoe Script, cursive', label: 'Handschrift' },
-  { id: 'Arial, sans-serif', label: 'Arial' },
-  { id: 'Times New Roman, serif', label: 'Times' },
-  { id: 'Verdana, sans-serif', label: 'Verdana' },
-  { id: 'Courier New, monospace', label: 'Courier' },
-];
-
-interface PageEntry {
-  canvas: HTMLCanvasElement;
-  textLayerDiv: HTMLDivElement;
-  svg: SVGSVGElement;
-  wrapper: HTMLDivElement;
-  pageNum: number;
-  rendered: boolean;
-  textLayerObj?: any; // TextLayer instance for cleanup
-}
-
-// Lazy pdf.js loader — Worker aus public/ (statisch, ohne Vite-Transformation)
-let _pdfjsLib: any = null;
-async function loadPdfjs(): Promise<any> {
-  if (_pdfjsLib) return _pdfjsLib;
-  _pdfjsLib = await import('pdfjs-dist');
-  // Worker liegt in src/public/pdf.worker.min.mjs — wird von Vite unverändert ausgeliefert
-  _pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
-  return _pdfjsLib;
-}
+import type { Point, Rect, Annotation, PageEntry, ShapeType, StampType } from './pdf/types';
+import { ANNO_COLORS, STAMPS, FONTS } from './pdf/constants';
+import { normalizeRect, pathBounds, getStampLabel, loadPdfjs } from './pdf/utils';
+import { OcrDialog, MergeDialog, SignaturePadDialog, WatermarkDialog } from './pdf/PdfDialogs';
+import { BookmarkTree, ThumbCanvas } from './pdf/PdfThumbnails';
 
 export default function PdfEditorView({ filePath: propFilePath = '', onClose }: { filePath?: string; onClose?: () => void } = {}) {
   const { showToast, setActiveTab, pendingPdfPath, setPendingPdfPath } = useAppContext();
@@ -110,6 +38,7 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
   // Inline-Editor: Textarea direkt auf der PDF-Seite (kein Popup!)
   const [inlineEditor, setInlineEditor] = useState<{ page: number; svgX: number; svgY: number; editIdx?: number } | null>(null);
   const [inlineText, setInlineText] = useState('');
+  const [, setScrollTick] = useState(0); // Erzwingt Re-Render bei Scroll während Inline-Editor aktiv
   const [shapeFilled, setShapeFilled] = useState(false);
   const [activeStamp, setActiveStamp] = useState<StampType>('approved');
   const [showSignaturePad, setShowSignaturePad] = useState(false);
@@ -136,6 +65,7 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
   const [printRange, setPrintRange] = useState('');
   const [thumbDragIdx, setThumbDragIdx] = useState<number | null>(null);
   const [thumbDropIdx, setThumbDropIdx] = useState<number | null>(null);
+  const [pageContextMenu, setPageContextMenu] = useState<{ x: number; y: number; pageNum: number } | null>(null);
 
   // Undo/Redo stacks
   const undoStackRef = useRef<Annotation[][]>([]);
@@ -171,6 +101,8 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
   const handlePrintRef = useRef<() => void>(() => {});
   const showImageInsertRef = useRef(false);
   const placeImageOnPageRef = useRef((_pageNum: number, _x: number, _y: number) => {});
+  const setPageContextMenuRef = useRef((_v: { x: number; y: number; pageNum: number } | null) => {});
+  setPageContextMenuRef.current = setPageContextMenu;
 
   // Keep refs in sync
   useEffect(() => { annotationsRef.current = annotations; }, [annotations]);
@@ -185,6 +117,15 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
   useEffect(() => { pendingSignatureRef.current = pendingSignature; }, [pendingSignature]);
   useEffect(() => { activeStampRef.current = activeStamp; }, [activeStamp]);
   useEffect(() => { watermarkRef.current = watermark; }, [watermark]);
+
+  // Scroll-Listener: Inline-Editor-Position bei Scroll aktualisieren
+  useEffect(() => {
+    if (!inlineEditor || !pagesContainerRef.current) return;
+    const el = pagesContainerRef.current;
+    const handler = () => setScrollTick(t => t + 1);
+    el.addEventListener('scroll', handler);
+    return () => el.removeEventListener('scroll', handler);
+  }, [inlineEditor]);
 
   // Wasserzeichen-Änderung auf alle Seiten propagieren
   useEffect(() => {
@@ -292,10 +233,9 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
       try {
         const pdfjsLib = await loadPdfjs();
         const result = await api.readFileBinary(filePath);
-        if ((result as any).error) throw new Error((result as any).error);
         if (cancelled) return;
 
-        const binaryStr = atob((result as any).data);
+        const binaryStr = atob(result.data);
         const data = new Uint8Array(binaryStr.length);
         for (let i = 0; i < binaryStr.length; i++) data[i] = binaryStr.charCodeAt(i);
 
@@ -386,8 +326,6 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
     return () => {
       intersectionObRef.current?.disconnect();
       pageEntriesRef.current = [];
-      // Context-Menu DOM-Cleanup bei Unmount
-      document.querySelectorAll('.pdf-page-context-menu').forEach(el => el.remove());
     };
   }, [loaded, totalPages]);
 
@@ -549,7 +487,7 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
 
       wrapper.addEventListener('contextmenu', (e) => {
         e.preventDefault();
-        showPageContextMenu(e, i);
+        setPageContextMenuRef.current({ x: e.clientX, y: e.clientY, pageNum: i });
       });
 
       wireAnnotationEvents(svg, canvas, i);
@@ -776,7 +714,7 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
         border.setAttribute('fill', 'none'); border.setAttribute('stroke', color);
         border.setAttribute('stroke-width', '3'); border.setAttribute('rx', '4');
         g.appendChild(border);
-        const stampLabel = STAMPS.find(st => st.id === anno.stampType)?.label || anno.stampType.toUpperCase();
+        const stampLabel = anno.stampType ? getStampLabel(anno.stampType) : 'STAMP';
         const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         text.setAttribute('x', String(x1 + w / 2)); text.setAttribute('y', String(y1 + h / 2 + 8 * s));
         text.setAttribute('text-anchor', 'middle'); text.setAttribute('font-size', String(20 * s));
@@ -949,11 +887,13 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
         const idx = draggingAnnoRef.current.idx;
         const anno = annotationsRef.current[idx];
         if (anno) {
-          anno.rect = {
+          // Immutable update: neue Objekte statt direkter Mutation
+          const updated = [...annotationsRef.current];
+          updated[idx] = { ...anno, rect: {
             x1: orig.x1 + dx, y1: orig.y1 + dy,
             x2: orig.x2 + dx, y2: orig.y2 + dy,
-          };
-          // Ink-Pfade ebenfalls verschieben — werden beim endgültigen Setzen berechnet
+          }};
+          annotationsRef.current = updated;
           renderAnnotationsForPage(anno.page + 1);
         }
         return;
@@ -1378,29 +1318,13 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
     }
   }, [filePath, showToast]);
 
-  const showPageContextMenu = useCallback((e: MouseEvent, pageNum: number) => {
-    document.querySelectorAll('.pdf-page-context-menu').forEach(el => el.remove());
-    const menu = document.createElement('div');
-    menu.className = 'pdf-page-context-menu';
-    menu.innerHTML = `
-      <button data-action="rotate-cw">Seite drehen (90\u00B0)</button>
-      <button data-action="rotate-ccw">Seite drehen (-90\u00B0)</button>
-      <button data-action="extract">Seite extrahieren</button>
-      <button data-action="insert-blank">Leere Seite einfügen (danach)</button>
-      <button data-action="delete">Seite löschen</button>
-    `;
-    menu.style.left = Math.min(e.clientX, window.innerWidth - 200) + 'px';
-    menu.style.top = Math.min(e.clientY, window.innerHeight - 100) + 'px';
-    document.body.appendChild(menu);
-
-    const cleanup = () => menu.remove();
-    document.addEventListener('click', cleanup, { once: true });
-    menu.querySelector('[data-action="rotate-cw"]')!.addEventListener('click', () => { cleanup(); rotatePage(pageNum, 90); });
-    menu.querySelector('[data-action="rotate-ccw"]')!.addEventListener('click', () => { cleanup(); rotatePage(pageNum, 270); });
-    menu.querySelector('[data-action="extract"]')!.addEventListener('click', () => { cleanup(); extractPages(pageNum); });
-    menu.querySelector('[data-action="insert-blank"]')!.addEventListener('click', () => { cleanup(); insertBlankPage(pageNum); });
-    menu.querySelector('[data-action="delete"]')!.addEventListener('click', () => { cleanup(); deletePage(pageNum); });
-  }, [rotatePage, deletePage, extractPages, insertBlankPage]);
+  // Close page context menu on click
+  useEffect(() => {
+    if (!pageContextMenu) return;
+    const handler = () => setPageContextMenu(null);
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, [pageContextMenu]);
 
   const getVisiblePage = useCallback((): number => {
     const container = pagesContainerRef.current;
@@ -1600,8 +1524,7 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
       if (!result || result.canceled || !result.path) return;
       // Bild als Base64 lesen
       const binResult = await api.readFileBinary(result.path);
-      if ((binResult as any).error) throw new Error((binResult as any).error);
-      const base64 = `data:image/png;base64,${(binResult as any).data}`;
+      const base64 = `data:image/png;base64,${binResult.data}`;
       setImageInsertData({ base64, name: result.path.split(/[\\/]/).pop() || 'Bild' });
       setShowImageInsert(true);
       showToast('Klicke auf die Seite um das Bild zu platzieren', 'info');
@@ -1795,7 +1718,7 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
               {STAMPS.map(st => (
                 <button key={st.id} className={`pdf-tool-dropdown-item ${currentTool === 'stamp' && activeStamp === st.id ? 'active' : ''}`}
                   onClick={() => { setActiveStamp(st.id); setCurrentTool('stamp'); setShowInsertMenu(false); }}>
-                  {st.label}
+                  {getStampLabel(st.id)}
                 </button>
               ))}
               <span className="pdf-editor-separator" />
@@ -1995,16 +1918,28 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
             onChange={e => setInlineText(e.target.value)}
             autoFocus
             placeholder="Text eingeben..."
-            style={{
-              position: 'absolute',
-              left: inlineEditor.svgX * scale + (pageEntriesRef.current[inlineEditor.page - 1]?.wrapper.offsetLeft || 0),
-              top: inlineEditor.svgY * scale + (pageEntriesRef.current[inlineEditor.page - 1]?.wrapper.offsetTop || 0),
-              fontSize: textFontSize * scale,
-              fontFamily: textFontFamily,
-              color: annoColor,
-              minWidth: 120 * scale,
-              minHeight: (textFontSize * 1.5 + 8) * scale,
-            }}
+            style={(() => {
+              // Pixelgenaue Positionierung via getBoundingClientRect
+              // — unabhängig von Scroll-Position und offsetParent-Kette
+              const wrapper = pageEntriesRef.current[inlineEditor.page - 1]?.wrapper;
+              const editorEl = pagesContainerRef.current?.closest('.pdf-editor');
+              let left = 0, top = 0;
+              if (wrapper && editorEl) {
+                const wr = wrapper.getBoundingClientRect();
+                const er = editorEl.getBoundingClientRect();
+                left = wr.left - er.left + inlineEditor.svgX * scale;
+                top = wr.top - er.top + inlineEditor.svgY * scale;
+              }
+              return {
+                position: 'absolute' as const,
+                left, top,
+                fontSize: textFontSize * scale,
+                fontFamily: textFontFamily,
+                color: annoColor,
+                minWidth: 120 * scale,
+                minHeight: (textFontSize * 1.5 + 8) * scale,
+              };
+            })()}
             onKeyDown={e => {
               if (e.key === 'Enter' && e.ctrlKey) { e.preventDefault(); finalizeInlineEditor(); }
               if (e.key === 'Escape') { setInlineEditor(null); setInlineText(''); }
@@ -2070,287 +2005,20 @@ export default function PdfEditorView({ filePath: propFilePath = '', onClose }: 
           onClose={() => setShowWatermarkDialog(false)}
         />
       )}
+
+      {/* Seiten-Kontextmenü (React statt DOM) */}
+      {pageContextMenu && (
+        <div className="context-menu" style={{ position: 'fixed', left: pageContextMenu.x, top: pageContextMenu.y, zIndex: 9999 }}>
+          <button type="button" className="context-menu-item" onClick={() => { rotatePage(pageContextMenu.pageNum, 90); setPageContextMenu(null); }}>Seite drehen (90°)</button>
+          <button type="button" className="context-menu-item" onClick={() => { rotatePage(pageContextMenu.pageNum, 270); setPageContextMenu(null); }}>Seite drehen (-90°)</button>
+          <div className="context-menu-separator" />
+          <button type="button" className="context-menu-item" onClick={() => { extractPages(pageContextMenu.pageNum); setPageContextMenu(null); }}>Seite extrahieren</button>
+          <button type="button" className="context-menu-item" onClick={() => { insertBlankPage(pageContextMenu.pageNum); setPageContextMenu(null); }}>Leere Seite einfügen (danach)</button>
+          <div className="context-menu-separator" />
+          <button type="button" className="context-menu-item context-menu-danger" onClick={() => { deletePage(pageContextMenu.pageNum); setPageContextMenu(null); }}>Seite löschen</button>
+        </div>
+      )}
     </div>
   );
 }
 
-function BookmarkTree({ bookmarks, onNavigate }: { bookmarks: any[]; onNavigate: (page: number | null) => void }) {
-  return (
-    <ul className="pdf-bookmark-list">
-      {bookmarks.map((bm, i) => (
-        <li key={i}>
-          <button className="pdf-bookmark-item" onClick={() => onNavigate(bm.page)} title={bm.page !== null ? `Seite ${bm.page + 1}` : ''}>
-            {bm.title || '(Ohne Titel)'}
-          </button>
-          {bm.children && bm.children.length > 0 && (
-            <BookmarkTree bookmarks={bm.children} onNavigate={onNavigate} />
-          )}
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function ThumbCanvas({ pdfDoc, pageNum }: { pdfDoc: any; pageNum: number }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  useEffect(() => {
-    if (!pdfDoc || !canvasRef.current) return;
-    let cancelled = false;
-    (async () => {
-      const page = await pdfDoc.getPage(pageNum);
-      if (cancelled) return;
-      const vp = page.getViewport({ scale: 0.2 });
-      const canvas = canvasRef.current!;
-      canvas.width = vp.width;
-      canvas.height = vp.height;
-      const ctx = canvas.getContext('2d')!;
-      await page.render({ canvasContext: ctx, viewport: vp }).promise;
-    })();
-    return () => { cancelled = true; };
-  }, [pdfDoc, pageNum]);
-  return <canvas ref={canvasRef} className="pdf-thumb-canvas" />;
-}
-
-function OcrDialog({ onClose, onRun, progress }: {
-  onClose: () => void;
-  onRun: (lang: string, allPages: boolean) => void;
-  progress: { running: boolean; text: string; percent: number };
-}) {
-  const [lang, setLang] = useState('de');
-  return (
-    <div className="pdf-editor-dialog-overlay">
-      <div className="pdf-editor-dialog">
-        <h3>OCR-Texterkennung</h3>
-        <p>Erkennt Text in gescannten PDF-Seiten und macht die PDF durchsuchbar.</p>
-        <label>Sprache: <select value={lang} onChange={e => setLang(e.target.value)}>
-          {OCR_LANGUAGES.map(l => <option key={l.id} value={l.id}>{l.label}</option>)}
-        </select></label>
-        <div className="pdf-editor-dialog-btns">
-          <button className="pdf-editor-btn" disabled={progress.running} onClick={() => onRun(lang, false)}>Aktuelle Seite</button>
-          <button className="pdf-editor-btn" disabled={progress.running} onClick={() => onRun(lang, true)}>Alle Seiten</button>
-          <button className="pdf-editor-btn" onClick={onClose}>Abbrechen</button>
-        </div>
-        {(progress.running || progress.text) && (
-          <div className="ocr-progress">
-            <div className="ocr-progress-bar"><div className="ocr-progress-fill" style={{ width: progress.percent + '%' }} /></div>
-            <span className="ocr-progress-text">{progress.text}</span>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function MergeDialog({ files, onAddFile, onMerge, onClose, onReorder, onRemoveFile }: {
-  files: string[];
-  onAddFile: () => void;
-  onMerge: () => void;
-  onClose: () => void;
-  onReorder: (from: number, to: number) => void;
-  onRemoveFile: (index: number) => void;
-}) {
-  return (
-    <div className="pdf-editor-dialog-overlay">
-      <div className="pdf-editor-dialog">
-        <h3>PDFs zusammenfügen</h3>
-        <p>Reihenfolge festlegen und zusammenfügen. Das erste Dokument ist die aktuelle PDF.</p>
-        <div className="merge-file-list">
-          {files.map((f, i) => (
-            <div key={i} className="merge-file-item">
-              <span className="merge-file-num">{i + 1}.</span>
-              <span className="merge-file-name" title={f}>{f.split(/[\\/]/).pop()}</span>
-              <span className="merge-file-actions">
-                <button className="merge-file-btn" disabled={i === 0} onClick={() => onReorder(i, i - 1)} title="Nach oben">{'\u25B2'}</button>
-                <button className="merge-file-btn" disabled={i === files.length - 1} onClick={() => onReorder(i, i + 1)} title="Nach unten">{'\u25BC'}</button>
-                <button className="merge-file-btn merge-file-btn-remove" onClick={() => onRemoveFile(i)} title="Entfernen">{'\u2715'}</button>
-              </span>
-            </div>
-          ))}
-        </div>
-        <div className="pdf-editor-dialog-btns">
-          <button className="pdf-editor-btn" onClick={onAddFile}>PDF hinzufügen...</button>
-          <button className="pdf-editor-btn" disabled={files.length < 2} onClick={onMerge}>Zusammenfügen</button>
-          <button className="pdf-editor-btn" onClick={onClose}>Abbrechen</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function SignaturePadDialog({ savedSignatures, onAccept, onSelectSaved, onClose }: {
-  savedSignatures: Point[][][];
-  onAccept: (paths: Point[][]) => void;
-  onSelectSaved: (paths: Point[][]) => void;
-  onClose: () => void;
-}) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const pathsRef = useRef<Point[][]>([]);
-  const drawingRef = useRef(false);
-  const currentPathRef = useRef<Point[]>([]);
-
-  const redraw = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d')!;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.strokeStyle = '#000080';
-    ctx.lineWidth = 2;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    for (const path of [...pathsRef.current, currentPathRef.current]) {
-      if (path.length < 2) continue;
-      ctx.beginPath();
-      ctx.moveTo(path[0].x, path[0].y);
-      for (let i = 1; i < path.length; i++) ctx.lineTo(path[i].x, path[i].y);
-      ctx.stroke();
-    }
-  }, []);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const getPoint = (e: MouseEvent) => {
-      const r = canvas.getBoundingClientRect();
-      return { x: e.clientX - r.left, y: e.clientY - r.top };
-    };
-    const onDown = (e: MouseEvent) => {
-      drawingRef.current = true;
-      currentPathRef.current = [getPoint(e)];
-    };
-    const onMove = (e: MouseEvent) => {
-      if (!drawingRef.current) return;
-      currentPathRef.current.push(getPoint(e));
-      redraw();
-    };
-    const onUp = () => {
-      if (!drawingRef.current) return;
-      drawingRef.current = false;
-      if (currentPathRef.current.length > 2) {
-        pathsRef.current = [...pathsRef.current, currentPathRef.current];
-      }
-      currentPathRef.current = [];
-    };
-    canvas.addEventListener('mousedown', onDown);
-    canvas.addEventListener('mousemove', onMove);
-    canvas.addEventListener('mouseup', onUp);
-    canvas.addEventListener('mouseleave', onUp);
-    return () => {
-      canvas.removeEventListener('mousedown', onDown);
-      canvas.removeEventListener('mousemove', onMove);
-      canvas.removeEventListener('mouseup', onUp);
-      canvas.removeEventListener('mouseleave', onUp);
-    };
-  }, [redraw]);
-
-  return (
-    <div className="pdf-editor-dialog-overlay">
-      <div className="pdf-editor-dialog pdf-signature-dialog">
-        <h3>Unterschrift erstellen</h3>
-        <p>Unterschreibe mit der Maus im Feld unten.</p>
-        <canvas ref={canvasRef} width={400} height={150} className="pdf-signature-canvas" />
-        <div className="pdf-editor-dialog-btns">
-          <button type="button" className="pdf-editor-btn" onClick={() => {
-            if (pathsRef.current.length === 0) return;
-            onAccept(pathsRef.current);
-          }}>Übernehmen</button>
-          <button type="button" className="pdf-editor-btn" onClick={() => {
-            pathsRef.current = [];
-            currentPathRef.current = [];
-            const ctx = canvasRef.current?.getContext('2d');
-            if (ctx && canvasRef.current) ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-          }}>Löschen</button>
-          <button type="button" className="pdf-editor-btn" onClick={onClose}>Abbrechen</button>
-        </div>
-        {savedSignatures.length > 0 && (
-          <div className="pdf-saved-signatures">
-            <p className="pdf-saved-sig-label">Gespeicherte Signaturen:</p>
-            <div className="pdf-saved-sig-list">
-              {savedSignatures.map((sig, i) => (
-                <button key={i} type="button" className="pdf-saved-sig-btn" onClick={() => onSelectSaved(sig)}
-                  title={`Signatur ${i + 1} verwenden`}>
-                  <SignaturePreview paths={sig} width={80} height={30} />
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function SignaturePreview({ paths, width, height }: { paths: Point[][]; width: number; height: number }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || paths.length === 0) return;
-    const ctx = canvas.getContext('2d')!;
-    ctx.clearRect(0, 0, width, height);
-    // Bounds berechnen und skalieren
-    const allPts = paths.flat();
-    const bounds = pathBounds(allPts);
-    const bw = bounds.x2 - bounds.x1 || 1;
-    const bh = bounds.y2 - bounds.y1 || 1;
-    const sx = (width - 8) / bw;
-    const sy = (height - 4) / bh;
-    const s = Math.min(sx, sy);
-    ctx.strokeStyle = '#000080';
-    ctx.lineWidth = 1.5;
-    ctx.lineCap = 'round';
-    for (const path of paths) {
-      if (path.length < 2) continue;
-      ctx.beginPath();
-      ctx.moveTo(4 + (path[0].x - bounds.x1) * s, 2 + (path[0].y - bounds.y1) * s);
-      for (let i = 1; i < path.length; i++) {
-        ctx.lineTo(4 + (path[i].x - bounds.x1) * s, 2 + (path[i].y - bounds.y1) * s);
-      }
-      ctx.stroke();
-    }
-  }, [paths, width, height]);
-  return <canvas ref={canvasRef} width={width} height={height} className="pdf-sig-preview-canvas" />;
-}
-
-function WatermarkDialog({ current, onApply, onRemove, onClose }: {
-  current: { text: string; fontSize: number; color: string; opacity: number; rotation: number } | null;
-  onApply: (wm: { text: string; fontSize: number; color: string; opacity: number; rotation: number }) => void;
-  onRemove: () => void;
-  onClose: () => void;
-}) {
-  const [text, setText] = useState(current?.text || 'VERTRAULICH');
-  const [fontSize, setFontSize] = useState(current?.fontSize || 60);
-  const [color, setColor] = useState(current?.color || '#888888');
-  const [opacity, setOpacity] = useState(current?.opacity || 0.15);
-  const [rotation, setRotation] = useState(current?.rotation || -30);
-
-  return (
-    <div className="pdf-editor-dialog-overlay">
-      <div className="pdf-editor-dialog">
-        <h3>Wasserzeichen</h3>
-        <div className="pdf-watermark-form">
-          <label>Text: <input type="text" value={text} onChange={e => setText(e.target.value)} className="pdf-wm-input" /></label>
-          <label>Schriftgröße: <input type="number" value={fontSize} min={10} max={200} onChange={e => setFontSize(Number(e.target.value))} className="pdf-wm-num" /></label>
-          <label>Farbe: <input type="color" value={color} onChange={e => setColor(e.target.value)} /></label>
-          <label>Transparenz: <input type="range" min={0.05} max={0.5} step={0.05} value={opacity}
-            onChange={e => setOpacity(Number(e.target.value))} title={`${Math.round(opacity * 100)}%`} /> {Math.round(opacity * 100)}%</label>
-          <label>Drehung: <input type="range" min={-90} max={90} step={5} value={rotation}
-            onChange={e => setRotation(Number(e.target.value))} title={`${rotation}°`} /> {rotation}°</label>
-        </div>
-        <div className="pdf-editor-dialog-btns">
-          <button type="button" className="pdf-editor-btn" onClick={() => onApply({ text, fontSize, color, opacity, rotation })}>Anwenden</button>
-          {current && <button type="button" className="pdf-editor-btn" onClick={onRemove}>Entfernen</button>}
-          <button type="button" className="pdf-editor-btn" onClick={onClose}>Abbrechen</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function normalizeRect(p1: Point, p2: Point): Rect {
-  return { x1: Math.min(p1.x, p2.x), y1: Math.min(p1.y, p2.y), x2: Math.max(p1.x, p2.x), y2: Math.max(p1.y, p2.y) };
-}
-
-function pathBounds(path: Point[]): Rect {
-  let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
-  for (const p of path) { if (p.x < x1) x1 = p.x; if (p.y < y1) y1 = p.y; if (p.x > x2) x2 = p.x; if (p.y > y2) y2 = p.y; }
-  return { x1, y1, x2, y2 };
-}

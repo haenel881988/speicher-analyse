@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import * as api from '../api/tauri-api';
 import { useAppContext } from '../context/AppContext';
+import { formatBytes } from '../utils/format';
 
 type SubTab = 'overview' | 'updates' | 'forgotten' | 'cleanup' | 'tools';
 
@@ -32,13 +33,6 @@ function formatSize(kb: number): string {
   return `${(kb / (1024 * 1024)).toFixed(1)} GB`;
 }
 
-function formatBytes(bytes: number): string {
-  if (bytes <= 0) return '–';
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
-}
 
 const SUB_TABS: { id: SubTab; label: string }[] = [
   { id: 'overview', label: 'Alle Apps' },

@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useState, useEffect } from 'react';
 
 // Lazy-load all views for code splitting
 const DashboardView = lazy(() => import('../views/DashboardView'));
@@ -50,15 +50,35 @@ const TAB_MAP: Record<string, React.LazyExoticComponent<any>> = {
 };
 
 export function TabRouter({ activeTab }: TabRouterProps) {
-  const ViewComponent = TAB_MAP[activeTab] || DashboardView;
+  // Track which tabs have been visited to keep them alive
+  const [visitedTabs, setVisitedTabs] = useState<Set<string>>(new Set([activeTab]));
+
+  useEffect(() => {
+    setVisitedTabs(prev => {
+      if (prev.has(activeTab)) return prev;
+      const next = new Set(prev);
+      next.add(activeTab);
+      return next;
+    });
+  }, [activeTab]);
 
   return (
     <div id="tab-content">
-      <Suspense fallback={<Loading />}>
-        <div className="tab-view active">
-          <ViewComponent />
-        </div>
-      </Suspense>
+      {Array.from(visitedTabs).map(tabId => {
+        const ViewComponent = TAB_MAP[tabId];
+        if (!ViewComponent) return null;
+        const isActive = tabId === activeTab;
+        return (
+          <div
+            key={tabId}
+            className={`tab-view ${isActive ? 'active' : ''}`}
+          >
+            <Suspense fallback={<Loading />}>
+              <ViewComponent />
+            </Suspense>
+          </div>
+        );
+      })}
     </div>
   );
 }

@@ -46,7 +46,9 @@ pub fn save(data: ScanData) {
 
     build_dir_index(&data.files);
     let mut s = store().lock().unwrap_or_else(|e| e.into_inner());
-    s.clear();
+    // Vorherige Scans desselben Root-Pfads entfernen (statt s.clear())
+    let root = data.root_path.clone();
+    s.retain(|_, v| v.root_path != root);
     s.insert(data.scan_id.clone(), data);
 }
 

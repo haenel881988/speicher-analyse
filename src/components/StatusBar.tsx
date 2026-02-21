@@ -11,9 +11,10 @@ interface ProgressBarProps {
   scanProgress: any | null;
   scanComplete: any | null;
   scanError: any | null;
+  onCancelScan?: () => void;
 }
 
-export function ProgressBar({ scanProgress, scanComplete, scanError }: ProgressBarProps) {
+export function ProgressBar({ scanProgress, scanComplete, scanError, onCancelScan }: ProgressBarProps) {
   const [progressText, setProgressText] = useState('');
   const [progressPath, setProgressPath] = useState('');
   const [active, setActive] = useState(false);
@@ -59,7 +60,14 @@ export function ProgressBar({ scanProgress, scanComplete, scanError }: ProgressB
 
   return (
     <footer id="scan-progress" className={active ? 'active' : ''}>
-      <div className="progress-text" id="progress-stats">{progressText}</div>
+      <div className="progress-text" id="progress-stats">
+        {progressText}
+        {animating && onCancelScan && (
+          <button type="button" className="btn-cancel-scan" onClick={onCancelScan} title="Scan abbrechen">
+            Abbrechen
+          </button>
+        )}
+      </div>
       <div className="progress-bar-wrap">
         <div
           className={`progress-bar-fill ${animating ? 'animating' : ''}`}

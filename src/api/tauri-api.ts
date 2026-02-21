@@ -5,10 +5,77 @@
  */
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { getVersion as tauriGetVersion } from '@tauri-apps/api/app';
+
+// === Shared Types ===
+export interface DriveInfo {
+  device: string;
+  mountpoint: string;
+  fstype: string;
+  total: number;
+  used: number;
+  free: number;
+  percent: number;
+}
+
+export interface FileEntry {
+  path: string;
+  name: string;
+  size: number;
+  modified_ms: number;
+  extension: string;
+  [key: string]: any;
+}
+
+export interface TreeNode {
+  name: string;
+  path: string;
+  size: number;
+  children?: TreeNode[];
+  file_count?: number;
+  dir_count?: number;
+  error?: string;
+  [key: string]: any;
+}
+
+export interface SystemCapabilities {
+  isAdmin: boolean;
+  hasBattery: boolean;
+  wingetAvailable: boolean;
+  platform: string;
+}
+
+export interface BatteryStatus {
+  hasBattery: boolean;
+  onBattery: boolean;
+  percent?: number;
+  charging?: boolean;
+}
+
+export interface ConfirmDialogResult {
+  response: number;
+}
+
+export interface DirectoryEntry {
+  name: string;
+  path: string;
+  isDir: boolean;
+  size: number;
+  modified: number;
+  extension: string;
+  [key: string]: any;
+}
+
+export interface OperationResult {
+  success: boolean;
+  message?: string;
+  error?: string;
+}
 
 // === Drive & Scan ===
-export const getDrives = () => invoke<any[]>('get_drives');
+export const getDrives = () => invoke<DriveInfo[]>('get_drives');
 export const startScan = (path: string) => invoke<{ scan_id: string }>('start_scan', { path });
+export const cancelScan = () => invoke<{ cancelled: boolean }>('cancel_scan');
 
 // === Tree Data ===
 export const getTreeNode = (scanId: string, path: string, depth?: number) =>
@@ -33,16 +100,16 @@ export const exportCSV = (scanId: string) => invoke<string>('export_csv', { scan
 export const showSaveDialog = (options: any) => invoke<any>('show_save_dialog', { options });
 
 // === File Management ===
-export const deleteToTrash = (paths: string[]) => invoke<any>('delete_to_trash', { paths });
-export const deletePermanent = (paths: string[]) => invoke<any>('delete_permanent', { paths });
+export const deleteToTrash = (paths: string[]) => invoke<OperationResult>('delete_to_trash', { paths });
+export const deletePermanent = (paths: string[]) => invoke<OperationResult>('delete_permanent', { paths });
 export const createFolder = (parentPath: string, name: string) =>
-  invoke<any>('create_folder', { parentPath, name });
+  invoke<OperationResult>('create_folder', { parentPath, name });
 export const fileRename = (oldPath: string, newName: string) =>
-  invoke<any>('file_rename', { oldPath, newName });
+  invoke<OperationResult>('file_rename', { oldPath, newName });
 export const fileMove = (sourcePaths: string[], destDir: string) =>
-  invoke<any>('file_move', { sourcePaths, destDir });
+  invoke<OperationResult>('file_move', { sourcePaths, destDir });
 export const fileCopy = (sourcePaths: string[], destDir: string) =>
-  invoke<any>('file_copy', { sourcePaths, destDir });
+  invoke<OperationResult>('file_copy', { sourcePaths, destDir });
 export const fileProperties = (filePath: string) =>
   invoke<any>('file_properties', { filePath });
 export const filePropertiesGeneral = (filePath: string) =>
@@ -75,7 +142,7 @@ export const showContextMenu = (menuType: string, context: any) =>
 
 // === Dialog ===
 export const showConfirmDialog = (options: any) =>
-  invoke<any>('show_confirm_dialog', { options });
+  invoke<ConfirmDialogResult>('show_confirm_dialog', { options });
 
 // === Old Files ===
 export const getOldFiles = (scanId: string, thresholdDays: number, minSize: number) =>
@@ -111,7 +178,7 @@ export const readFileContent = (filePath: string) =>
 export const writeFileContent = (filePath: string, content: string) =>
   invoke<void>('write_file_content', { filePath, content });
 export const readFileBinary = (filePath: string) =>
-  invoke<number[]>('read_file_binary', { filePath });
+  invoke<{ data: string; size: number }>('read_file_binary', { filePath });
 
 // === Autostart ===
 export const getAutoStartEntries = () => invoke<any[]>('get_autostart_entries');
@@ -155,12 +222,13 @@ export const restartAsAdmin = () => invoke<void>('restart_as_admin');
 export const getRestoredSession = () => invoke<any>('get_restored_session');
 
 // === System ===
-export const getSystemCapabilities = () => invoke<any>('get_system_capabilities');
-export const getBatteryStatus = () => invoke<any>('get_battery_status');
+export const getSystemCapabilities = () => invoke<SystemCapabilities>('get_system_capabilities');
+export const getBatteryStatus = () => invoke<BatteryStatus>('get_battery_status');
 
 // === Platform ===
 export const getPlatform = () => invoke<string>('get_platform');
 export const openExternal = (url: string) => invoke<void>('open_external', { url });
+export const getAppVersion = () => tauriGetVersion();
 
 // === File Tags ===
 export const getTagColors = () => invoke<any[]>('get_tag_colors');

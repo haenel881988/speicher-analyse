@@ -1115,6 +1115,19 @@ Lokale `escapeHtml()` escaped nur `&<>"` aber NICHT `'`. In Attribut-Kontexten X
 
 ---
 
+#### #111 — CSP unsafe-inline: bewusste Designentscheidung
+`2026-02-21`
+
+`tauri.conf.json` CSP enthält `script-src 'self' 'unsafe-inline'` und `style-src 'self' 'unsafe-inline' blob:`. Das klingt unsicher, ist aber bei Tauri v2 Desktop-Apps akzeptabel:
+
+1. **script-src 'unsafe-inline':** Tauri v2 injiziert eigene Inline-Scripts für IPC. Ohne `unsafe-inline` funktioniert die IPC-Bridge nicht.
+2. **style-src 'unsafe-inline':** PDF.js und Chart.js setzen Inline-Styles programmatisch (Canvas-Dimensionen, Positionierung). Ohne `unsafe-inline` brechen diese Libraries.
+3. **Risikobewertung:** Desktop-App, kein öffentlicher Web-Traffic, kein User-Content von Dritten. XSS-Vektoren sind auf lokale Dateien beschränkt.
+
+**Lehre:** CSP `unsafe-inline` bei Tauri-Desktop-Apps ist ein bewusster Trade-off. Dokumentieren statt blind entfernen.
+
+---
+
 <br>
 
 ## Performance

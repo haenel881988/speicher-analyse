@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import * as api from '../api/tauri-api';
 import { useAppContext } from '../context/AppContext';
 import { formatBytes } from '../utils/format';
@@ -36,12 +36,12 @@ export default function SystemProfilView() {
     }
   }, [showToast]);
 
-  // Auto-load on first render
-  if (!loaded && !loading) {
-    load();
-    return <div className="loading-state">System-Informationen werden gesammelt...</div>;
-  }
-  if (loading) return <div className="loading-spinner" />;
+  // Auto-load on mount
+  useEffect(() => {
+    if (!loaded && !loading) load();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (loading || !profile) return <div className="loading-state">System-Informationen werden gesammelt...</div>;
 
   const val = (v: any, fallback = '—') => (v === null || v === undefined || v === '') ? fallback : String(v);
 

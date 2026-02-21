@@ -29,6 +29,7 @@ zstd = "0.13"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 portable-pty = "0.9"
+tauri-plugin-mcp = { path = "../tools/tauri-plugin-mcp" }
 pdfium-render = "0.8"
 image = { version = "0.25", default-features = false, features = ["png"] }
 

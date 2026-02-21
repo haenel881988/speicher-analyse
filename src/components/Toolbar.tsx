@@ -6,14 +6,14 @@ interface ToolbarProps {
   onExportCsv: () => void;
   onExportPdf: () => void;
   onToggleTheme: () => void;
-  onTogglePreview: () => void;
   onDriveChange: (path: string) => void;
   selectedDrive: string;
+  appVersion?: string;
 }
 
 export function Toolbar({
-  onScan, onExportCsv, onExportPdf, onToggleTheme, onTogglePreview,
-  onDriveChange, selectedDrive,
+  onScan, onExportCsv, onExportPdf, onToggleTheme,
+  onDriveChange, selectedDrive, appVersion,
 }: ToolbarProps) {
   const { drives, scanning } = useAppContext();
 
@@ -21,7 +21,7 @@ export function Toolbar({
     <header id="toolbar">
       <div className="toolbar-left">
         <span className="toolbar-brand">Speicher Analyse</span>
-        <span className="toolbar-version">v7.2.1</span>
+        <span className="toolbar-version">{appVersion ? `v${appVersion}` : ''}</span>
       </div>
       <div className="toolbar-center">
         <div className="toolbar-scan-group">
@@ -74,11 +74,6 @@ export function Toolbar({
         <button className="toolbar-icon-btn" onClick={onToggleTheme} title="Theme wechseln" aria-label="Theme wechseln">
           <svg id="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
-          </svg>
-        </button>
-        <button className="toolbar-icon-btn" onClick={onTogglePreview} title="Vorschau-Panel (Ctrl+P)" aria-label="Vorschau-Panel umschalten">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <rect x="2" y="3" width="20" height="18" rx="2" /><line x1="15" y1="3" x2="15" y2="21" />
           </svg>
         </button>
       </div>

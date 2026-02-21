@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "tauri-mcp": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["tools/tauri-plugin-mcp/mcp-server-ts/build/index.js"],
+      "env": {
+        "TAURI_MCP_CONNECTION_TYPE": "tcp",
+        "TAURI_MCP_TCP_HOST": "127.0.0.1",
+        "TAURI_MCP_TCP_PORT": "9876"
+      }
+    }
+  }
+}

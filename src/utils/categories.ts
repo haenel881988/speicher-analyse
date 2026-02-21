@@ -1,30 +1,41 @@
-export const CATEGORY_COLORS: Record<string, string> = {
-  // German labels (UI)
-  'Video': '#e94560',
-  'Audio': '#a855f7',
-  'Bild': '#4ecca3',
-  'Dokument': '#00b4d8',
-  'Archiv': '#ffc107',
-  'Code': '#6c5ce7',
-  'Datenbank': '#f97316',
-  'Programm': '#ec4899',
-  'Disk-Image': '#14b8a6',
-  'Backup': '#8b5cf6',
-  'Sonstige': '#64748b',
-  // English keys (backend scan.rs returns these)
+// Kanonische Farben (englische Backend-Keys)
+const BASE_COLORS: Record<string, string> = {
   'video': '#e94560',
   'audio': '#a855f7',
   'images': '#4ecca3',
   'documents': '#00b4d8',
   'archives': '#ffc107',
   'code': '#6c5ce7',
+  'databases': '#f97316',
   'executables': '#ec4899',
   'system': '#14b8a6',
+  'backup': '#8b5cf6',
   'other': '#64748b',
 };
 
+// Deutsche UI-Labels → englische Keys
+const GERMAN_TO_KEY: Record<string, string> = {
+  'Video': 'video',
+  'Audio': 'audio',
+  'Bild': 'images',
+  'Dokument': 'documents',
+  'Archiv': 'archives',
+  'Code': 'code',
+  'Datenbank': 'databases',
+  'Programm': 'executables',
+  'Disk-Image': 'system',
+  'Backup': 'backup',
+  'Sonstige': 'other',
+};
+
+// Flaches Lookup (deutsch + englisch → Farbe)
+export const CATEGORY_COLORS: Record<string, string> = {
+  ...BASE_COLORS,
+  ...Object.fromEntries(Object.entries(GERMAN_TO_KEY).map(([de, en]) => [de, BASE_COLORS[en]])),
+};
+
 export function getCategoryColor(category: string): string {
-  return CATEGORY_COLORS[category] || CATEGORY_COLORS[category.toLowerCase()] || CATEGORY_COLORS['Sonstige'];
+  return CATEGORY_COLORS[category] || CATEGORY_COLORS[category.toLowerCase()] || BASE_COLORS['other'];
 }
 
 export function getCategoryClass(category: string): string {

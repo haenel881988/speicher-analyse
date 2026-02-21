@@ -81,11 +81,24 @@ fn init_logging() {
 pub fn run() {
     init_logging();
 
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
-        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build());
+
+    // MCP Plugin nur im Debug-Modus (für Claude Code Zugriff)
+    #[cfg(debug_assertions)]
+    {
+        tracing::info!("MCP Plugin wird aktiviert (Debug-Modus)");
+        builder = builder.plugin(tauri_plugin_mcp::init_with_config(
+            tauri_plugin_mcp::PluginConfig::new("speicher-analyse".to_string())
+                .tcp("127.0.0.1".to_string(), 9876)
+                .start_socket_server(true),
+        ));
+    }
+
+    builder
         .setup(|app| {
             use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 
@@ -196,6 +209,7 @@ pub fn run() {
             // Drive & Scan
             commands::get_drives,
             commands::start_scan,
+            commands::cancel_scan,
             // Tree Data
             commands::get_tree_node,
             commands::get_treemap_data,

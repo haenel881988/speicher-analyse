@@ -17,6 +17,7 @@ const TerminalPanel = lazy(() => import('./views/TerminalView'));
 function AppInner() {
   const ctx = useAppContext();
   const [selectedDrive, setSelectedDrive] = useState('');
+  const [appVersion, setAppVersion] = useState('');
   const [statusText, setStatusText] = useState('Bereit');
   const [statusLoading, setStatusLoading] = useState(false);
   const [scanProgressData, setScanProgressData] = useState<any>(null);
@@ -47,11 +48,12 @@ function AppInner() {
   // Load drives, capabilities, battery, session — all in parallel for faster startup
   useEffect(() => {
     (async () => {
-      const [drivesResult, capsResult, batteryResult, sessionResult] = await Promise.allSettled([
+      const [drivesResult, capsResult, batteryResult, sessionResult, versionResult] = await Promise.allSettled([
         api.getDrives(),
         api.getSystemCapabilities(),
         api.getBatteryStatus(),
         api.getRestoredSession(),
+        api.getAppVersion(),
       ]);
 
       // Drives
@@ -99,6 +101,11 @@ function AppInner() {
         }
       } else {
         console.error('[Session] Restore FEHLER:', sessionResult.reason);
+      }
+
+      // App version
+      if (versionResult.status === 'fulfilled') {
+        setAppVersion(versionResult.value);
       }
     })();
 
@@ -150,8 +157,13 @@ function AppInner() {
     ctx.setScanning(false);
     setScanErrorData(error);
     setScanProgressData(null);
-    setStatusText('Scan-Fehler');
     setStatusLoading(false);
+    if (error?.cancelled) {
+      setStatusText('Scan abgebrochen');
+      ctx.showToast('Scan wurde abgebrochen', 'info');
+    } else {
+      setStatusText('Scan-Fehler');
+    }
   });
 
   // Menu actions
@@ -159,7 +171,7 @@ function AppInner() {
     if (data.action === 'about') {
       api.showConfirmDialog({
         title: 'Über Speicher Analyse',
-        message: 'Speicher Analyse v7.2.1\nDisk Space Analyzer & System Tools\n\nTauri v2 + Rust Backend',
+        message: `Speicher Analyse v${appVersion || '?'}\nDisk Space Analyzer & System Tools\n\nTauri v2 + Rust Backend`,
         okLabel: 'OK',
       });
     }
@@ -199,6 +211,15 @@ function AppInner() {
       setStatusLoading(false);
     }
   }, [ctx.scanning, ctx.batteryInfo, ctx.showToast, ctx.setScanning, ctx.setCurrentPath, ctx.setScanId, selectedDrive]);
+
+  const handleCancelScan = useCallback(async () => {
+    try {
+      await api.cancelScan();
+      ctx.showToast('Scan wird abgebrochen...', 'info');
+    } catch (e: any) {
+      console.error('Cancel scan error:', e);
+    }
+  }, [ctx.showToast]);
 
   const handleExportCsv = useCallback(() => {
     if (ctx.currentScanId) api.exportCSV(ctx.currentScanId);
@@ -245,9 +266,9 @@ function AppInner() {
         onExportCsv={handleExportCsv}
         onExportPdf={handleExportPdf}
         onToggleTheme={handleToggleTheme}
-        onTogglePreview={() => {/* TODO */}}
         onDriveChange={setSelectedDrive}
         selectedDrive={selectedDrive}
+        appVersion={appVersion}
       />
       <div id="app-layout">
         <Sidebar activeTab={ctx.activeTab} onTabChange={handleTabChange} />
@@ -258,16 +279,12 @@ function AppInner() {
           </Suspense>
         </main>
       </div>
-      <ProgressBar scanProgress={scanProgressData} scanComplete={scanCompleteData} scanError={scanErrorData} />
+      <ProgressBar scanProgress={scanProgressData} scanComplete={scanCompleteData} scanError={scanErrorData} onCancelScan={handleCancelScan} />
       <StatusBar statusText={statusText} statusLoading={statusLoading} />
       <ToastContainer />
       {ctx.propertiesPath && (
         <PropertiesDialog filePath={ctx.propertiesPath} onClose={() => ctx.setPropertiesPath(null)} />
       )}
-      <div id="treemap-tooltip" className="treemap-tooltip" style={{ display: 'none' }}>
-        <div className="treemap-tooltip-name" id="tooltip-name" />
-        <div className="treemap-tooltip-detail" id="tooltip-detail" />
-      </div>
     </div>
   );
 }

@@ -1129,6 +1129,25 @@ textarea::placeholder {
     color: var(--text-secondary);
     white-space: nowrap;
     font-family: var(--font-mono);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-cancel-scan {
+    font-size: 11px;
+    padding: 1px 8px;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-family: var(--font-sans);
+}
+.btn-cancel-scan:hover {
+    background: var(--danger);
+    color: #fff;
+    border-color: var(--danger);
 }
 
 .progress-path {
@@ -4086,6 +4105,7 @@ textarea::placeholder {
     flex-direction: column;
     height: 100%;
     overflow: hidden;
+    position: relative;
 }
 
 .pdf-editor-toolbar {
